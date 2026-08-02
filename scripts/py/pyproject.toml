@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "SEO, AEO, GEO and SMM growth engine"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Moshiur Rahman", email = "moshiur@publicpulse.com.bd" }]
+authors = [{ name = "S M Moshiur Rahman", email = "moshiur@publicpulse.com.bd" }]
 dependencies = [
   "httpx>=0.27",
   "beautifulsoup4>=4.12",

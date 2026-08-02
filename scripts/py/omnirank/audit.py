@@ -26,6 +26,7 @@ def audit_site(config: Config, client: httpx.Client | None = None,
     client = client or make_client()
     try:
         report = Report(site=config.site_url, kind="audit")
+        report.layers_run.update({"seo", "aeo", "geo"})
         targets = urls if urls is not None else _discover(client, config)
 
         for url in targets:

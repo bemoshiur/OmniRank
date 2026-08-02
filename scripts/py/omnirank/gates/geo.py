@@ -47,6 +47,20 @@ def _artifact(client: httpx.Client, site_url: str, path: str, gate: str,
         f"Generate {path} at build time and serve it as a static file.")], None
 
 
+_TOTAL_DISALLOW = re.compile(r"^disallow:\s*/\s*(#.*)?$", re.IGNORECASE | re.MULTILINE)
+
+
+def _find_block(text: str, agent: str) -> str | None:
+    match = re.search(
+        rf"^user-agent:\s*{re.escape(agent)}\s*$(.*?)(?=^user-agent:|\Z)",
+        text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    return match.group(1) if match else None
+
+
+def _blocks_everything(block_body: str) -> bool:
+    return bool(_TOTAL_DISALLOW.search(block_body))
+
+
 def _robots(client: httpx.Client, site_url: str) -> list[Finding]:
     url = f"{site_url}/robots.txt"
     result = fetch(client, url)
@@ -55,13 +69,16 @@ def _robots(client: httpx.Client, site_url: str) -> list[Finding]:
                    f"HTTP {result.status} at /robots.txt", "HTTP 200",
                    "Publish a robots.txt that explicitly allows AI crawlers.")]
 
+    wildcard_block = _find_block(result.text, "*")
+    wildcard_blocks_everyone = wildcard_block is not None and _blocks_everything(wildcard_block)
+
     blocked: list[str] = []
     for agent in AI_CRAWLERS:
-        block = re.search(
-            rf"^user-agent:\s*{re.escape(agent)}\s*$(.*?)(?=^user-agent:|\Z)",
-            result.text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-        if block and re.search(r"^disallow:\s*/\s*$", block.group(1),
-                               re.IGNORECASE | re.MULTILINE):
+        own_block = _find_block(result.text, agent)
+        if own_block is not None:
+            if _blocks_everything(own_block):
+                blocked.append(agent)
+        elif wildcard_blocks_everyone:
             blocked.append(agent)
 
     if blocked:

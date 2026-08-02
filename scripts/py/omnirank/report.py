@@ -47,6 +47,7 @@ class Report:
     kind: str
     urls_checked: int = 0
     findings: list[Finding] = field(default_factory=list)
+    layers_run: set[str] = field(default_factory=set)
 
     def add(self, finding: Finding) -> None:
         self.findings.append(finding)
@@ -55,13 +56,13 @@ class Report:
         self.findings.extend(findings)
 
     def score(self) -> dict[str, int]:
-        layers: dict[str, int] = {}
+        costs: dict[str, int] = {layer: 0 for layer in self.layers_run}
         for f in self.findings:
             cost = ERROR_COST if f.severity == "error" else (
                 WARNING_COST if f.severity == "warning" else 0
             )
-            layers[f.layer] = layers.get(f.layer, 0) + cost
-        scores = {layer: max(0, 100 - cost) for layer, cost in layers.items()}
+            costs[f.layer] = costs.get(f.layer, 0) + cost
+        scores = {layer: max(0, 100 - cost) for layer, cost in costs.items()}
         overall = sum(scores.values()) // len(scores) if scores else 100
         return {**scores, "overall": overall}
 

@@ -89,4 +89,4 @@ never stores a literal secret in configuration. These are enforced in code, not 
 - [Discussions](https://github.com/bemoshiur/OmniRank/discussions) — questions and results
 - [Issues](https://github.com/bemoshiur/OmniRank/issues/new/choose) — bugs and feature requests
 - Contact: [S M Moshiur Rahman](https://publicpulse.com.bd), moshiur@publicpulse.com.bd,
-  [WhatsApp](https://wa.me/88017714676)
+  [WhatsApp](https://wa.me/8801717714676)

@@ -27,6 +27,21 @@ User-agent: *
 Allow: /
 """
 
+ROBOTS_WILDCARD_TOTAL_BLOCK = """User-agent: *
+Disallow: /
+"""
+
+ROBOTS_WILDCARD_BLOCK_WITH_COMMENT = """User-agent: *
+Disallow: / # everything
+"""
+
+ROBOTS_WILDCARD_BLOCK_BUT_ALLOWS_GPTBOT = """User-agent: *
+Disallow: /
+
+User-agent: GPTBot
+Allow: /
+"""
+
 LLMS_OK = """# X Example
 
 > Bangladesh digital agency.
@@ -103,3 +118,28 @@ def test_missing_citation_licence_is_a_warning():
 def test_licence_check_skipped_when_llms_txt_absent():
     mock_all(llms=404)
     assert "geo.citation-licence.missing" not in ids(geo.run(make_client(), SITE))
+
+
+@respx.mock
+def test_wildcard_total_block_is_flagged():
+    mock_all(robots_body=ROBOTS_WILDCARD_TOTAL_BLOCK)
+    found = [f for f in geo.run(make_client(), SITE) if f.id == "geo.ai-allowlist.blocked"]
+    assert found, "User-agent: * / Disallow: / must block every AI crawler, not just named ones"
+    assert "GPTBot" in found[0].observed
+
+
+@respx.mock
+def test_wildcard_block_with_trailing_comment_is_flagged():
+    mock_all(robots_body=ROBOTS_WILDCARD_BLOCK_WITH_COMMENT)
+    found = [f for f in geo.run(make_client(), SITE) if f.id == "geo.ai-allowlist.blocked"]
+    assert found, "a trailing comment on Disallow: / must not evade detection"
+    assert "GPTBot" in found[0].observed
+
+
+@respx.mock
+def test_wildcard_block_with_explicit_allow_is_not_flagged_for_that_agent():
+    mock_all(robots_body=ROBOTS_WILDCARD_BLOCK_BUT_ALLOWS_GPTBOT)
+    found = [f for f in geo.run(make_client(), SITE) if f.id == "geo.ai-allowlist.blocked"]
+    assert found, "other AI crawlers are still blocked by the wildcard"
+    assert "GPTBot" not in found[0].observed, (
+        "GPTBot has its own Allow: / block and must not be flagged")

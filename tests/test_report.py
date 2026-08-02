@@ -101,3 +101,36 @@ def test_auto_fixable_serialises_to_camel_case():
     r = Report(site="https://x.example", kind="audit")
     r.add(f(auto_fixable=True))
     assert r.to_dict()["findings"][0]["autoFixable"] is True
+
+
+def test_clean_layer_that_ran_scores_100():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.update({"seo", "aeo", "geo"})
+    r.add(f())                       # one seo error
+    s = r.score()
+    assert s["seo"] == 90
+    assert s["aeo"] == 100, "a layer that ran with no findings scored 100"
+    assert s["geo"] == 100
+
+
+def test_adding_a_problem_never_raises_overall():
+    base = Report(site="https://x.example", kind="audit")
+    base.layers_run.update({"seo", "aeo", "geo"})
+    for i in range(15):
+        base.add(f(url=f"https://x.example/{i}"))
+    before = base.score()["overall"]
+
+    worse = Report(site="https://x.example", kind="audit")
+    worse.layers_run.update({"seo", "aeo", "geo"})
+    for i in range(15):
+        worse.add(f(url=f"https://x.example/{i}"))
+    worse.add(f(layer="aeo", id="aeo.faq.too-few", gate="faq", severity="warning"))
+
+    assert worse.score()["overall"] <= before, (
+        "adding a finding must never improve the overall score")
+
+
+def test_layer_that_did_not_run_is_absent():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.update({"seo"})
+    assert "geo" not in r.score()

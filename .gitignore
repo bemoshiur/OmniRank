@@ -11,6 +11,7 @@
 # Session/tooling state
 .remember/
 .claude/settings.local.json
+.superpowers/
 
 # Node
 node_modules/

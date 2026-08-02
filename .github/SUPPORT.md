@@ -26,4 +26,4 @@ adapters and CI recipes.
 
 OmniRank is built at [Public Pulse Agency](https://publicpulse.com.bd), Dhaka. For
 engagements, contact moshiur@publicpulse.com.bd or WhatsApp
-[+880 1771 4676](https://wa.me/88017714676).
+[+880 1717 714676](https://wa.me/8801717714676).

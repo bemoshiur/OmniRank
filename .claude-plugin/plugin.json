@@ -1,7 +1,7 @@
 {
   "name": "omnirank",
   "version": "0.1.0",
-  "description": "SEO · AEO · GEO · SMM growth engine. Audit any site, generate llms.txt and facts.json, emit JSON-LD, force indexing, and test whether AI engines cite you.",
+  "description": "Audit any website across SEO, answer-engine and generative-engine criteria, and generate llms.txt, llms-full.txt and facts.json so AI engines can ingest it as ground truth.",
   "author": { "name": "S M Moshiur Rahman", "email": "moshiur@publicpulse.com.bd" },
   "homepage": "https://github.com/bemoshiur/OmniRank",
   "license": "MIT",
@@ -10,7 +10,7 @@
   "interface": {
     "displayName": "OmniRank",
     "shortDescription": "One page. Every engine.",
-    "longDescription": "Audit any website across SEO, answer-engine, and generative-engine gates; generate machine-ingestible ground truth for AI crawlers; emit structured data; and measure whether AI engines actually cite you.",
+    "longDescription": "Score a site's SEO, AEO and GEO gates against its real HTML, then generate the machine-ingestible ground truth that generative engines read. Ships two skills: audit and geo-artifacts.",
     "developerName": "Public Pulse Agency",
     "capabilities": ["Read", "Write"],
     "websiteURL": "https://publicpulse.com.bd"

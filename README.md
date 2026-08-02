@@ -60,7 +60,7 @@ Prefer not to clone? Grab the packaged skill:
 
 **[⬇ Download OmniRank skill (.zip)](https://github.com/bemoshiur/OmniRank/releases/latest/download/omnirank-skill.zip)**
 
-Unzip it into your Claude Code plugins directory, or into any project as `.claude/`:
+Unzip it into your Claude Code plugins directory:
 
 ```bash
 unzip omnirank-skill.zip -d ~/.claude/plugins/
@@ -148,7 +148,7 @@ publicpulse.com.bd, tenderpulse.com.bd and pulsetoday.com.bd.
 
 | | |
 |---|---|
-| 💬 **WhatsApp** | **[+880 1771 4676](https://wa.me/88017714676)** — fastest for project discussion |
+| 💬 **WhatsApp** | **[+880 1717 714676](https://wa.me/8801717714676)** — fastest for project discussion |
 | ✉️ Email | [moshiur@publicpulse.com.bd](mailto:moshiur@publicpulse.com.bd) |
 | 🌐 Web | [publicpulse.com.bd](https://publicpulse.com.bd) |
 | 💻 GitHub | [@bemoshiur](https://github.com/bemoshiur) |

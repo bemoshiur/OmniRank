@@ -48,7 +48,7 @@ def test_readme_has_contact_section():
     assert "## Contact" in body
     assert "S M Moshiur Rahman" in body
     assert "moshiur@publicpulse.com.bd" in body
-    assert "https://wa.me/88017714676" in body
+    assert "https://wa.me/8801717714676" in body
 
 
 def test_citation_names_the_full_author_name():
@@ -69,3 +69,32 @@ def test_readme_links_the_skill_zip_download():
     assert "## Download" in body
     assert "releases/latest/download/omnirank-skill.zip" in body
     assert "build-skill-zip.sh" in body
+
+
+UNSHIPPED_CLAIMS = ["force indexing", "forced indexing", "measure who cites",
+                    "measures whether", "emit JSON-LD", "emits JSON-LD"]
+
+
+def test_plugin_manifest_claims_only_shipped_capabilities():
+    import json
+    body = json.dumps(json.loads(
+        (ROOT / ".claude-plugin" / "plugin.json").read_text())).lower()
+    for claim in UNSHIPPED_CLAIMS:
+        assert claim not in body, f"plugin.json advertises unshipped capability: {claim}"
+
+
+def test_citation_claims_only_shipped_capabilities():
+    body = (ROOT / "CITATION.cff").read_text().lower()
+    for claim in UNSHIPPED_CLAIMS:
+        assert claim not in body, f"CITATION.cff advertises unshipped capability: {claim}"
+
+
+def test_og_template_claims_only_shipped_capabilities():
+    body = (ROOT / ".github" / "assets" / "og-template.svg").read_text().lower()
+    for claim in UNSHIPPED_CLAIMS:
+        assert claim not in body, f"og-template.svg advertises unshipped capability: {claim}"
+
+
+def test_pyproject_author_matches_canonical_name():
+    body = (ROOT / "scripts" / "py" / "pyproject.toml").read_text()
+    assert "S M Moshiur Rahman" in body

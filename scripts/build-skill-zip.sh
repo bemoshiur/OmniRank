@@ -46,6 +46,8 @@ ITEMS=(
   "templates"
   "README.md"
   "LICENSE"
+  "LICENSE-CONTENT"
+  "Makefile"
 )
 
 for item in "${ITEMS[@]}"; do
@@ -61,7 +63,8 @@ done
 
 # Strip build/cache artifacts that must never ship in the release zip.
 find "${STAGE}" -depth -type d \
-  \( -name "__pycache__" -o -name ".pytest_cache" -o -name "*.egg-info" -o -name ".venv" \) \
+  \( -name "__pycache__" -o -name ".pytest_cache" -o -name "*.egg-info" -o -name ".venv" \
+     -o -name ".ruff_cache" \) \
   -exec rm -rf {} +
 find "${STAGE}" -type f -name "*.pyc" -delete
 

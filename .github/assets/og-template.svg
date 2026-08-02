@@ -33,7 +33,7 @@
 
   <text x="88" y="352" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="500" fill="url(#accent)">One page. Every engine.</text>
 
-  <text x="88" y="410" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#94A3B8">Audit any site. Feed the answer engines. Measure who cites you.</text>
+  <text x="88" y="410" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#94A3B8">Audit any site. Feed the answer engines.</text>
 
   <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" font-weight="600" text-anchor="middle">
     <rect x="88" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#38BDF8" stroke-width="2"/>

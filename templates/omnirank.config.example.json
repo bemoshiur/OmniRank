@@ -39,7 +39,7 @@
   },
   "audit": {
     "sampleSize": 200,
-    "failOn": ["h1", "canonical", "schema", "crawl-hygiene"]
+    "failOn": ["h1", "canonical", "schema"]
   },
   "competitors": ["prothomalo.com", "thedailystar.net", "bdnews24.com"],
   "secrets": {
