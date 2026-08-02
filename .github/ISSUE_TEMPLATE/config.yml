@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/bemoshiur/OmniRank/discussions
+    about: Ask how to configure or run OmniRank.
+  - name: Security vulnerability
+    url: https://github.com/bemoshiur/OmniRank/security/policy
+    about: Report privately. Do not open a public issue.

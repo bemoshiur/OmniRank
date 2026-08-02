@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Which skill would own this?
+      options: ["audit", "geo-artifacts", "aeo-onpage (planned)", "indexing (planned)",
+                "offsite-entity (planned)", "smm-content (planned)", "smm-publish (planned)",
+                "measure (planned)", "new skill", "unsure"]
+    validations:
+      required: true
+  - type: checkboxes
+    id: evidence
+    attributes:
+      label: Evidence
+      options:
+        - label: "This is backed by a documented standard, published research, or a reproducible observation — not a guess about ranking factors."

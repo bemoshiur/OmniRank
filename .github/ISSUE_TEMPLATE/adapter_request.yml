@@ -1,0 +1,29 @@
+name: Adapter request
+description: Request support for a site framework or CMS
+labels: ["adapter"]
+body:
+  - type: input
+    id: stack
+    attributes:
+      label: Framework or CMS
+      placeholder: "Astro 5, WordPress 6.6, Hugo…"
+    validations:
+      required: true
+  - type: textarea
+    id: rendering
+    attributes:
+      label: How does it render pages?
+      description: Static export, SSR, hybrid? Where does built HTML land on disk?
+    validations:
+      required: true
+  - type: textarea
+    id: content
+    attributes:
+      label: Where does content live?
+      description: Markdown files, a database, an API? Can a build script import it?
+    validations:
+      required: true
+  - type: input
+    id: example
+    attributes:
+      label: A public site on this stack we can test against

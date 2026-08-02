@@ -1,0 +1,41 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Please redact secrets and private URLs before posting."
+  - type: input
+    id: version
+    attributes:
+      label: OmniRank version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Include the relevant findings from the JSON report.
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer
+      options: ["seo", "aeo", "geo", "crawl-hygiene", "schema", "CLI or config", "unsure"]
+    validations:
+      required: true
