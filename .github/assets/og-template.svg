@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="OmniRank — One page. Every engine.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B1120"/>
+      <stop offset="55%" stop-color="#111C33"/>
+      <stop offset="100%" stop-color="#0A0F1C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="50%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#F472B6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="1030" cy="150" r="330" fill="url(#glow)"/>
+
+  <g stroke="#1E293B" stroke-width="1" opacity="0.55">
+    <path d="M0 160H1280M0 320H1280M0 480H1280"/>
+    <path d="M320 0V640M640 0V640M960 0V640"/>
+  </g>
+
+  <g transform="translate(88, 150)">
+    <rect x="0" y="0" width="60" height="60" rx="14" fill="url(#accent)"/>
+    <path d="M16 42V26M30 42V16M44 42V32" stroke="#0B1120" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <text x="88" y="292" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#F8FAFC" letter-spacing="-2">OmniRank</text>
+
+  <text x="88" y="352" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="500" fill="url(#accent)">One page. Every engine.</text>
+
+  <text x="88" y="410" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#94A3B8">Audit any site. Feed the answer engines. Measure who cites you.</text>
+
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" font-weight="600" text-anchor="middle">
+    <rect x="88" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#38BDF8" stroke-width="2"/>
+    <text x="149" y="485" fill="#38BDF8">SEO</text>
+
+    <rect x="226" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#818CF8" stroke-width="2"/>
+    <text x="287" y="485" fill="#818CF8">AEO</text>
+
+    <rect x="364" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#C084FC" stroke-width="2"/>
+    <text x="425" y="485" fill="#C084FC">GEO</text>
+
+    <rect x="502" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#F472B6" stroke-width="2"/>
+    <text x="563" y="485" fill="#F472B6">SMM</text>
+  </g>
+
+  <text x="88" y="566" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" fill="#64748B">github.com/bemoshiur/OmniRank  ·  publicpulse.com.bd</text>
+
+  <rect x="0" y="632" width="1280" height="8" fill="url(#accent)"/>
+</svg>
