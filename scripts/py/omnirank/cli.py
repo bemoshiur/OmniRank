@@ -42,13 +42,18 @@ def _build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--out", help="Report path (default .omnirank/reports/<date>-audit.json)")
     audit.add_argument("--fail-on", nargs="*", default=None,
                        help="Gate ids that force exit code 1. Overrides config.")
+
+    geo = sub.add_parser("geo", help="Generate llms.txt, llms-full.txt and facts.json")
+    geo.add_argument("url", nargs="?", help="Site root. Omit when using --config.")
+    geo.add_argument("--config", help="Path to omnirank.config.json")
+    geo.add_argument("--out", default="public", help="Output directory (default: public)")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    if args.command != "audit":
+    if args.command not in {"audit", "geo"}:
         return 2
 
     try:
@@ -62,6 +67,15 @@ def main(argv: list[str] | None = None) -> int:
             print("omnirank: provide a URL or --config", file=sys.stderr)
             return 2
         config = default_config(args.url.rstrip("/"))
+
+    if args.command == "geo":
+        from .geo_artifacts import generate
+
+        written = generate(config, args.out)
+        for path in written:
+            print(f"  wrote {path}")
+        print("  These must be physical files. Never serve them from a dynamic route.")
+        return 0
 
     report = audit_site(config)
     fail_on = args.fail_on if args.fail_on is not None else config.fail_on
