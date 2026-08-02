@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -74,7 +74,7 @@ class Report:
         warned = sum(1 for f in self.findings if f.severity == "warning")
         flagged_urls = {f.url for f in self.findings if f.severity in ("error", "warning")}
         return {
-            "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "generatedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "tool": {"name": "omnirank", "version": __version__},
             "site": self.site,
             "kind": self.kind,

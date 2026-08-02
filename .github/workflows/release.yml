@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build skill archive
+        run: ./scripts/build-skill-zip.sh
+
+      - name: Normalise archive name
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cp "dist/omnirank-skill-${version}.zip" dist/omnirank-skill.zip
+          ls -lh dist/
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/omnirank-skill.zip
+            dist/omnirank-skill-*.zip
+            .github/assets/og.png
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **[Download omnirank-skill.zip](https://github.com/bemoshiur/OmniRank/releases/latest/download/omnirank-skill.zip)**
+
+            ```bash
+            unzip omnirank-skill.zip -d ~/.claude/plugins/
+            ```
+
+            Or clone and run `./scripts/build-skill-zip.sh` yourself.

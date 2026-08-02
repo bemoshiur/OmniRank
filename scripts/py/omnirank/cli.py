@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import UTC, datetime
 
 from . import __version__
 from .audit import audit_site, default_config
@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     report = audit_site(config)
     fail_on = args.fail_on if args.fail_on is not None else config.fail_on
 
-    out = args.out or f".omnirank/reports/{date.today().isoformat()}-audit.json"
+    out = args.out or f".omnirank/reports/{datetime.now(UTC).date().isoformat()}-audit.json"
     written = report.write(out)
 
     print(_summarise(report, fail_on))

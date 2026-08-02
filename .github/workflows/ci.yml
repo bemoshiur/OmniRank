@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e "./scripts/py[dev]"
+
+      - name: Lint
+        run: python -m ruff check scripts/py
+
+      - name: Test
+        run: python -m pytest tests -v
+
+  node:
+    name: Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: scripts/node/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: scripts/node
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Test
+        working-directory: scripts/node
+        run: pnpm vitest run
+
+      - name: Typecheck
+        working-directory: scripts/node
+        run: pnpm tsc --noEmit -p tsconfig.json
+
+  smoke:
+    name: Zero-config audit smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: python -m pip install -e "./scripts/py[dev]"
+
+      - name: Audit a real site
+        run: |
+          python -m omnirank.cli audit https://example.com \
+            --out /tmp/smoke.json --fail-on || true
+          test -s /tmp/smoke.json
+          python -c "import json,sys; d=json.load(open('/tmp/smoke.json')); \
+            sys.exit(0 if d['tool']['name']=='omnirank' and 'score' in d else 1)"

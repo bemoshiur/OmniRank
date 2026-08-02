@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -92,7 +92,7 @@ def build_facts(config: Config) -> dict:
         "name": site["name"],
         "url": config.site_url,
         "entityType": site["entityType"],
-        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "generatedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "license": geo.get("license", "CC-BY-4.0"),
         "attribution": geo.get("attribution", site.get("legalName", site["name"])),
     }
