@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-03
+
+### Fixed
+
+- JSON-LD parsing no longer crashes on pathologically nested documents.
+  `json.loads` raises `RecursionError`, which is not a `JSONDecodeError`, so it
+  escaped the existing handler and took down the whole scan on untrusted markup.
+  Both parse sites now report the document as malformed instead. The depth cap
+  added in 0.1.0 protected only the traversal, not the parse.
+
 ## [0.1.0] - 2026-08-03
 
 ### Added
@@ -21,5 +31,6 @@ All notable changes to this project are documented here. The format follows
   path and a Node in-repo path producing identical output.
 - `omnirank` CLI with a zero-config URL mode and CI-usable exit codes.
 
-[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/bemoshiur/OmniRank/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bemoshiur/OmniRank/releases/tag/v0.1.0
