@@ -2,7 +2,7 @@
   "name": "omnirank",
   "version": "0.1.0",
   "description": "SEO · AEO · GEO · SMM growth engine. Audit any site, generate llms.txt and facts.json, emit JSON-LD, force indexing, and test whether AI engines cite you.",
-  "author": { "name": "Moshiur Rahman", "email": "moshiur@publicpulse.com.bd" },
+  "author": { "name": "S M Moshiur Rahman", "email": "moshiur@publicpulse.com.bd" },
   "homepage": "https://github.com/bemoshiur/OmniRank",
   "license": "MIT",
   "keywords": ["seo", "aeo", "geo", "smm", "llms-txt", "schema-org", "json-ld", "indexnow", "ai-search"],

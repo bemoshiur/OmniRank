@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: "OmniRank: an SEO, AEO, GEO and SMM growth engine"
+message: "If you use OmniRank in your work, please cite it as below."
+type: software
+authors:
+  - family-names: Rahman
+    given-names: S M Moshiur
+    email: moshiur@publicpulse.com.bd
+    affiliation: Public Pulse Agency
+    city: Dhaka
+    country: BD
+repository-code: "https://github.com/bemoshiur/OmniRank"
+url: "https://publicpulse.com.bd"
+abstract: >-
+  OmniRank audits websites across search-engine, answer-engine and
+  generative-engine criteria, generates machine-ingestible ground truth for AI
+  crawlers, and measures whether AI engines cite the site.
+keywords:
+  - seo
+  - answer-engine-optimization
+  - generative-engine-optimization
+  - structured-data
+  - llms-txt
+license: MIT
+version: 0.1.0
+date-released: "2026-08-03"
