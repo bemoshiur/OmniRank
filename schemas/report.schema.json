@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bemoshiur/OmniRank/main/schemas/report.schema.json",
+  "title": "OmniRank report",
+  "type": "object",
+  "required": ["generatedAt", "tool", "site", "kind", "score", "stats", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": { "name": { "const": "omnirank" }, "version": { "type": "string" } }
+    },
+    "site": { "type": "string" },
+    "kind": {
+      "enum": ["audit", "entity", "rank", "citation", "mention-gap", "indexing", "weekly"]
+    },
+    "score": {
+      "type": "object",
+      "required": ["overall"],
+      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 100 }
+    },
+    "stats": {
+      "type": "object",
+      "required": ["urlsChecked", "passed", "failed", "warned"],
+      "additionalProperties": false,
+      "properties": {
+        "urlsChecked": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "warned": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "layer", "url", "gate", "observed", "expected", "fix"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$" },
+          "severity": { "enum": ["error", "warning", "info"] },
+          "layer": { "enum": ["seo", "aeo", "geo", "offsite", "smm", "perf"] },
+          "url": { "type": "string" },
+          "gate": { "type": "string" },
+          "observed": { "type": "string" },
+          "expected": { "type": "string" },
+          "fix": { "type": "string" },
+          "autoFixable": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}
