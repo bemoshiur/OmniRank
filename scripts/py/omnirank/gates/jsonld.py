@@ -25,7 +25,7 @@ def extract_blocks(html: str) -> list[dict]:
     for raw in _raw_scripts(html):
         try:
             data = json.loads(raw)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, RecursionError):
             continue
         for node in data if isinstance(data, list) else [data]:
             if not isinstance(node, dict):
@@ -105,10 +105,10 @@ def run(html: str, url: str) -> list[Finding]:
     for raw in raws:
         try:
             json.loads(raw)
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, RecursionError) as exc:
             findings.append(_f(
                 "seo.schema.malformed", "schema", url, "error",
-                f"unparseable ld+json: {exc.msg}", "valid JSON",
+                f"unparseable ld+json: {exc}", "valid JSON",
                 "Fix the JSON-LD. Malformed blocks are discarded silently by "
                 "crawlers, so the markup does nothing."))
 

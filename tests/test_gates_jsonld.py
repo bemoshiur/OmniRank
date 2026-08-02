@@ -97,14 +97,35 @@ def test_graph_child_keeps_its_own_context():
 
 
 def test_deeply_nested_jsonld_does_not_crash():
+    # 200 levels is comfortably above MAX_WALK_DEPTH (100), so this proves the
+    # _walk() cap fires, while staying well within what json.dumps/json.loads
+    # can encode and parse on Python 3.11's tighter default stack headroom.
     node: dict = {"@type": "Thing"}
     root = node
-    for _ in range(3000):
+    for _ in range(200):
         node["nested"] = {"@type": "Thing"}
         node = node["nested"]
     payload = {"@context": "https://schema.org", "@type": "Product", "detail": root}
     findings = jsonld.run(page(payload), URL)   # must not raise
     assert isinstance(findings, list)
+
+
+def test_pathologically_nested_jsonld_is_reported_not_crashed():
+    # Built as a raw string: json.dumps would itself blow the stack here.
+    # 200_000 was picked empirically on this machine (CPython 3.14, the C
+    # `_json` accelerator): depths up to ~100_000 parsed without incident,
+    # while 150_000+ reliably raised RecursionError ("Stack overflow ...
+    # while decoding a JSON object"). 200_000 gives comfortable margin above
+    # that observed threshold while still parsing/failing in well under a
+    # second, so the test stays fast and non-flaky.
+    depth = 200_000
+    raw = '{"@context":"https://schema.org","@type":"Thing","n":' * depth
+    raw += '{"@type":"Thing"}'
+    raw += "}" * depth
+    html = (f'<html><head><script type="application/ld+json">{raw}</script>'
+            f"</head><body></body></html>")
+    findings = jsonld.run(html, URL)          # must not raise
+    assert "seo.schema.malformed" in {f.id for f in findings}
 
 
 def test_malformed_block_does_not_hide_other_blocks():
