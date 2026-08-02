@@ -79,3 +79,40 @@ def test_review_with_author_passes():
                "reviewBody": "Great work.",
                "author": {"@type": "Person", "name": "A Real Client"}}
     assert jsonld.run(page(payload), URL) == []
+
+
+def test_graph_children_inherit_container_context():
+    payload = {"@context": "https://schema.org",
+               "@graph": [{"@type": "Organization", "name": "X"},
+                          {"@type": "WebSite", "name": "X"}]}
+    assert "seo.schema.no-context" not in ids(jsonld.run(page(payload), URL))
+
+
+def test_graph_child_keeps_its_own_context():
+    payload = {"@context": "https://schema.org",
+               "@graph": [{"@context": "https://example.org/ctx",
+                           "@type": "Organization", "name": "X"}]}
+    blocks = jsonld.extract_blocks(page(payload))
+    assert blocks[0]["@context"] == "https://example.org/ctx"
+
+
+def test_deeply_nested_jsonld_does_not_crash():
+    node: dict = {"@type": "Thing"}
+    root = node
+    for _ in range(3000):
+        node["nested"] = {"@type": "Thing"}
+        node = node["nested"]
+    payload = {"@context": "https://schema.org", "@type": "Product", "detail": root}
+    findings = jsonld.run(page(payload), URL)   # must not raise
+    assert isinstance(findings, list)
+
+
+def test_malformed_block_does_not_hide_other_blocks():
+    html = ('<html><head>'
+            '<script type="application/ld+json">{not json</script>'
+            '<script type="application/ld+json">'
+            '{"@context":"https://schema.org","@type":"Review","reviewBody":"x"}'
+            '</script></head><body></body></html>')
+    found = ids(jsonld.run(html, URL))
+    assert "seo.schema.malformed" in found
+    assert "seo.schema-fabrication.anonymous-review" in found

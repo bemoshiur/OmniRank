@@ -32,22 +32,36 @@ def extract_blocks(html: str) -> list[dict]:
                 continue
             graph = node.get("@graph")
             if isinstance(graph, list):
-                blocks.extend(n for n in graph if isinstance(n, dict))
+                context = node.get("@context")
+                for n in graph:
+                    if isinstance(n, dict):
+                        if context is not None:
+                            n.setdefault("@context", context)
+                        blocks.append(n)
             else:
                 blocks.append(node)
     return blocks
 
 
-def _walk(node: object) -> list[dict]:
-    """Every dict anywhere in the tree, so nested ratings and reviews are seen."""
+MAX_WALK_DEPTH = 100
+
+
+def _walk(node: object, depth: int = 0) -> list[dict]:
+    """Every dict anywhere in the tree, so nested ratings and reviews are seen.
+
+    Depth-capped: OmniRank parses untrusted third-party markup, and an
+    unbounded walk turns a hostile or malformed document into a crashed scan.
+    """
+    if depth > MAX_WALK_DEPTH:
+        return []
     out: list[dict] = []
     if isinstance(node, dict):
         out.append(node)
         for value in node.values():
-            out.extend(_walk(value))
+            out.extend(_walk(value, depth + 1))
     elif isinstance(node, list):
         for item in node:
-            out.extend(_walk(item))
+            out.extend(_walk(item, depth + 1))
     return out
 
 

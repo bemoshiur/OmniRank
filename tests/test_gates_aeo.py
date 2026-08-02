@@ -76,3 +76,27 @@ def test_speakable_selector_that_matches_nothing_is_an_error():
 def test_custom_selector_is_honoured():
     html = clean().replace('class="answer-block"', 'class="tldr"')
     assert "aeo.answer-block.missing" not in ids(aeo.run(html, URL, selector=".tldr"))
+
+
+def block_with(word_count: int) -> str:
+    html = clean()
+    start = html.index('<div class="answer-block" data-speakable>')
+    end = html.index("</div>", start) + len("</div>")
+    words = " ".join(["word"] * word_count)
+    return html[:start] + f'<div class="answer-block" data-speakable>{words}</div>' + html[end:]
+
+
+def test_exactly_forty_words_passes():
+    assert "aeo.answer-block.length" not in ids(aeo.run(block_with(40), URL))
+
+
+def test_thirty_nine_words_fails():
+    assert "aeo.answer-block.length" in ids(aeo.run(block_with(39), URL))
+
+
+def test_exactly_sixty_words_passes():
+    assert "aeo.answer-block.length" not in ids(aeo.run(block_with(60), URL))
+
+
+def test_sixty_one_words_fails():
+    assert "aeo.answer-block.length" in ids(aeo.run(block_with(61), URL))

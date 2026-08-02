@@ -92,3 +92,16 @@ def test_small_sitemap_is_not_flagged():
 def test_sitemap_without_lastmod_is_not_flagged():
     xml = '<?xml version="1.0"?><urlset><url><loc>https://x.example/a</loc></url></urlset>'
     assert hygiene.check_lastmod(xml, SITE) == []
+
+
+def test_exactly_ninety_percent_does_not_fire():
+    # 9 of 10 share a date = 0.9 exactly. Policy is "MORE than 90%", so this passes.
+    xml = sitemap_with(["2026-08-03"] * 9 + ["2026-01-01"])
+    assert hygiene.check_lastmod(xml, SITE) == []
+
+
+def test_just_over_ninety_percent_fires():
+    # 10 of 11 share a date = 0.909... > 0.9
+    xml = sitemap_with(["2026-08-03"] * 10 + ["2026-01-01"])
+    found = hygiene.check_lastmod(xml, SITE)
+    assert found and found[0].id == "seo.lastmod-inflation.uniform"
