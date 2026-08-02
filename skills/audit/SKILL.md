@@ -16,9 +16,9 @@ pre-deploy verification, or "why doesn't ChatGPT cite us?"
 ## When NOT to use
 
 - Generating `llms.txt` / `facts.json` — that is `geo-artifacts`.
-- Writing schema or AnswerBlocks — that is `aeo-onpage`.
-- Submitting URLs for indexing — that is `indexing`.
-- Off-site, backlink, or entity work — that is `offsite-entity`.
+- Writing schema or AnswerBlocks — that is `aeo-onpage` *(planned, not in v0.1.0)*.
+- Submitting URLs for indexing — that is `indexing` *(planned, not in v0.1.0)*.
+- Off-site, backlink, or entity work — that is `offsite-entity` *(planned, not in v0.1.0)*.
 
 Audit only diagnoses. It never edits the site.
 

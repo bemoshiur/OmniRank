@@ -108,3 +108,24 @@ def test_generate_creates_missing_output_dir(tmp_path):
     respx.get(f"{SITE}/").mock(return_value=httpx.Response(200, text=PAGE_HTML))
     out = tmp_path / "public"
     assert all(p.exists() for p in generate(cfg(), out, make_client()))
+
+
+def test_statistics_config_passes_real_load_config(tmp_path):
+    import json as _json
+
+    from omnirank.config import load_config
+    from omnirank.geo_artifacts import build_facts
+
+    raw = {
+        "site": {"name": "X", "url": "https://x.example",
+                 "entityType": "Organization"},
+        "statistics": [
+            {"name": "CPM", "value": "BDT 42", "published": True},
+            {"name": "ROAS", "value": "3.1x", "published": False},
+        ],
+    }
+    path = tmp_path / "omnirank.config.json"
+    path.write_text(_json.dumps(raw))
+    cfg = load_config(path)          # must NOT raise
+    facts = build_facts(cfg)
+    assert [s["name"] for s in facts["statistics"]] == ["CPM"]

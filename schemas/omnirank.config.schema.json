@@ -130,6 +130,28 @@
       }
     },
     "competitors": { "type": "array", "items": { "type": "string" } },
+    "statistics": {
+      "type": "array",
+      "description": "First-party benchmarks. Only entries with published:true are emitted to facts.json.",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "string" },
+          "unit": { "type": "string" },
+          "sampleSize": { "type": "integer", "minimum": 0 },
+          "methodology": { "type": "string" },
+          "asOf": { "type": "string" },
+          "source": { "type": "string" },
+          "published": {
+            "type": "boolean",
+            "description": "Real-only gate. Absent or false means the statistic renders nowhere."
+          }
+        }
+      }
+    },
     "secrets": {
       "type": "object",
       "additionalProperties": {

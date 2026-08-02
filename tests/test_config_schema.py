@@ -51,3 +51,23 @@ def test_env_pointer_secret_is_accepted():
     cfg = minimal()
     cfg["secrets"] = {"serpapi": "env:SERPAPI_KEY"}
     assert list(validator().iter_errors(cfg)) == []
+
+
+def test_statistics_with_published_flag_validates():
+    cfg = minimal()
+    cfg["statistics"] = [
+        {"name": "CPM", "value": "BDT 42", "sampleSize": 118, "published": True}
+    ]
+    assert list(validator().iter_errors(cfg)) == []
+
+
+def test_statistics_without_required_value_fails():
+    cfg = minimal()
+    cfg["statistics"] = [{"name": "CPM"}]
+    assert list(validator().iter_errors(cfg))
+
+
+def test_statistic_with_unknown_field_fails():
+    cfg = minimal()
+    cfg["statistics"] = [{"name": "CPM", "value": "BDT 42", "bogus": 1}]
+    assert list(validator().iter_errors(cfg))
