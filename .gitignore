@@ -1,0 +1,41 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*service-account*.json
+
+# OmniRank working directory (reports, queues, logs are per-machine)
+.omnirank/
+
+# Session/tooling state
+.remember/
+.claude/settings.local.json
+
+# Node
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Go
+cmd/crawler/crawler
+*.test
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
