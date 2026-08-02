@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 from omnirank.report import Finding, Report
 
@@ -54,7 +54,8 @@ def test_overall_is_mean_of_layers_that_ran():
 def test_to_dict_validates_against_schema():
     r = Report(site="https://x.example", kind="audit")
     r.add(f())
-    errors = list(Draft202012Validator(SCHEMA).iter_errors(r.to_dict()))
+    validator = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
+    errors = list(validator.iter_errors(r.to_dict()))
     assert errors == [], errors
 
 
@@ -76,3 +77,27 @@ def test_write_creates_parent_dirs(tmp_path):
     out = r.write(tmp_path / "nested" / "report.json")
     assert out.exists()
     assert json.loads(out.read_text())["site"] == "https://x.example"
+
+
+def test_passed_counts_urls_not_findings():
+    r = Report(site="https://x.example", kind="audit")
+    r.urls_checked = 3
+    r.add(f(url="https://x.example/a"))
+    r.add(f(url="https://x.example/a", id="seo.canonical.missing", gate="canonical"))
+    stats = r.to_dict()["stats"]
+    assert stats["failed"] == 2, "two findings"
+    assert stats["passed"] == 2, "but only one URL was flagged, so 2 of 3 passed"
+
+
+def test_passed_never_negative():
+    r = Report(site="https://x.example", kind="audit")
+    r.urls_checked = 1
+    for i in range(5):
+        r.add(f(url=f"https://x.example/{i}"))
+    assert r.to_dict()["stats"]["passed"] == 0
+
+
+def test_auto_fixable_serialises_to_camel_case():
+    r = Report(site="https://x.example", kind="audit")
+    r.add(f(auto_fixable=True))
+    assert r.to_dict()["findings"][0]["autoFixable"] is True

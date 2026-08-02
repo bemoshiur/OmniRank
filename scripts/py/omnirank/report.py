@@ -72,6 +72,7 @@ class Report:
     def to_dict(self) -> dict:
         failed = sum(1 for f in self.findings if f.severity == "error")
         warned = sum(1 for f in self.findings if f.severity == "warning")
+        flagged_urls = {f.url for f in self.findings if f.severity in ("error", "warning")}
         return {
             "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "tool": {"name": "omnirank", "version": __version__},
@@ -80,7 +81,7 @@ class Report:
             "score": self.score(),
             "stats": {
                 "urlsChecked": self.urls_checked,
-                "passed": max(0, self.urls_checked - failed - warned),
+                "passed": max(0, self.urls_checked - len(flagged_urls)),
                 "failed": failed,
                 "warned": warned,
             },

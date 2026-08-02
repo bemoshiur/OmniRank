@@ -27,10 +27,10 @@
       "required": ["urlsChecked", "passed", "failed", "warned"],
       "additionalProperties": false,
       "properties": {
-        "urlsChecked": { "type": "integer", "minimum": 0 },
-        "passed": { "type": "integer", "minimum": 0 },
-        "failed": { "type": "integer", "minimum": 0 },
-        "warned": { "type": "integer", "minimum": 0 }
+        "urlsChecked": { "type": "integer", "minimum": 0, "description": "Number of URLs fetched and evaluated." },
+        "passed": { "type": "integer", "minimum": 0, "description": "Number of evaluated URLs with no error or warning finding." },
+        "failed": { "type": "integer", "minimum": 0, "description": "Number of error-severity findings (not URLs)." },
+        "warned": { "type": "integer", "minimum": 0, "description": "Number of warning-severity findings (not URLs)." }
       }
     },
     "findings": {
