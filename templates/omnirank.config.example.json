@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/bemoshiur/OmniRank/main/schemas/omnirank.config.schema.json",
+  "site": {
+    "name": "The Pulse Today",
+    "legalName": "Public Pulse Agency",
+    "url": "https://pulsetoday.com.bd",
+    "entityType": "NewsMediaOrganization",
+    "parentOrganization": "Pulse Group",
+    "locales": [
+      { "code": "bn-BD", "path": "/bn", "default": true },
+      { "code": "en", "path": "/en" }
+    ]
+  },
+  "nap": {
+    "city": "Dhaka",
+    "country": "BD",
+    "email": "editor@pulsetoday.com.bd",
+    "geo": { "lat": 23.8103, "lng": 90.4125 }
+  },
+  "sameAs": {
+    "facebook": "https://facebook.com/ThePulseToday",
+    "x": null,
+    "linkedin": null,
+    "youtube": null,
+    "wikidata": null,
+    "crunchbase": null
+  },
+  "stack": {
+    "framework": "next-app-router",
+    "srcDir": "src",
+    "publicDir": "public",
+    "builtHtml": ".next/server/app"
+  },
+  "crawlers": { "allowAI": true, "disallow": ["/manage", "/api/auth"] },
+  "geo": {
+    "license": "CC-BY-4.0",
+    "attribution": "Public Pulse Agency",
+    "answerBlockSelector": ".answer-block"
+  },
+  "audit": {
+    "sampleSize": 200,
+    "failOn": ["h1", "canonical", "schema", "crawl-hygiene"]
+  },
+  "competitors": ["prothomalo.com", "thedailystar.net", "bdnews24.com"],
+  "secrets": {
+    "serpapi": "env:SERPAPI_KEY",
+    "perplexity": "env:PERPLEXITY_API_KEY"
+  }
+}

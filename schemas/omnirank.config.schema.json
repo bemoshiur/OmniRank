@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bemoshiur/OmniRank/main/schemas/omnirank.config.schema.json",
+  "title": "OmniRank site configuration",
+  "type": "object",
+  "required": ["site"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "site": {
+      "type": "object",
+      "required": ["name", "url", "entityType"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "legalName": { "type": "string" },
+        "url": { "type": "string", "format": "uri", "pattern": "^https?://" },
+        "entityType": {
+          "enum": ["Organization", "LocalBusiness", "ProfessionalService",
+                   "NewsMediaOrganization", "SoftwareApplication",
+                   "EducationalOrganization", "MedicalOrganization"]
+        },
+        "parentOrganization": { "type": "string" },
+        "locales": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "code": { "type": "string" },
+              "path": { "type": "string" },
+              "default": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "nap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "street": { "type": "string" }, "city": { "type": "string" },
+        "region": { "type": "string" }, "postalCode": { "type": "string" },
+        "country": { "type": "string" }, "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "geo": {
+          "type": "object",
+          "required": ["lat", "lng"],
+          "additionalProperties": false,
+          "properties": { "lat": { "type": "number" }, "lng": { "type": "number" } }
+        },
+        "openingHours": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "identifiers": { "type": "object", "additionalProperties": { "type": "string" } },
+    "sameAs": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "null"] }
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "framework": {
+          "enum": ["next-app-router", "next-pages", "astro", "nuxt", "sveltekit",
+                   "wordpress", "jekyll", "shopify", "static", "other"]
+        },
+        "srcDir": { "type": "string" },
+        "publicDir": { "type": "string" },
+        "builtHtml": { "type": "string" }
+      }
+    },
+    "crawlers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowAI": { "type": "boolean" },
+        "disallow": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "geo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "license": { "type": "string" },
+        "attribution": { "type": "string" },
+        "answerBlockSelector": { "type": "string" }
+      }
+    },
+    "indexing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "indexnowKeyFile": { "type": "string" },
+        "gscProperty": { "type": "string" },
+        "bing": { "type": "boolean" },
+        "wayback": { "type": "boolean" },
+        "priorityUrls": { "type": "string" }
+      }
+    },
+    "tracking": { "type": "object", "additionalProperties": { "type": "string" } },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sampleSize": { "type": "integer", "minimum": 0 },
+        "failOn": {
+          "type": "array",
+          "items": {
+            "enum": ["h1", "canonical", "title-length", "description-length", "hreflang",
+                     "og", "image-dims", "answer-block", "faq", "speakable",
+                     "llms-txt", "llms-full", "facts-json", "ai-allowlist",
+                     "citation-licence", "crawl-hygiene", "sitemap-health",
+                     "lastmod-inflation", "schema", "schema-fabrication"]
+          }
+        }
+      }
+    },
+    "smm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platforms": {
+          "type": "array",
+          "items": { "enum": ["facebook", "instagram", "x", "linkedin", "youtube"] }
+        },
+        "queueDir": { "type": "string" },
+        "requireHumanApproval": { "type": "boolean" }
+      }
+    },
+    "competitors": { "type": "array", "items": { "type": "string" } },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^env:[A-Z_][A-Z0-9_]*$",
+        "description": "Must be an env: pointer. Literal secrets are rejected by design."
+      }
+    }
+  }
+}
