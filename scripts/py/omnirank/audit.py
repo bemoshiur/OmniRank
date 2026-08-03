@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 
+from .bands import resolve_band
 from .config import Config
 from .fetch import fetch, make_client, read_sitemap
 from .gates import aeo, geo, hygiene, jsonld, seo
@@ -55,7 +56,8 @@ def audit_site(config: Config, client: httpx.Client | None = None,
 
         for page in pages:
             report.extend(seo.run(page.html, page.url))
-            report.extend(aeo.run(page.html, page.url, config.answer_block_selector))
+            report.extend(aeo.run(page.html, page.url, config.answer_block_selector,
+                                  resolve_band(page.lang, config)))
             report.extend(jsonld.run(page.html, page.url))
 
         report.urls_checked = len(targets)

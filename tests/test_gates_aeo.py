@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from omnirank.bands import Band
 from omnirank.gates import aeo
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -86,6 +87,15 @@ def block_with(word_count: int) -> str:
     return html[:start] + f'<div class="answer-block" data-speakable>{words}</div>' + html[end:]
 
 
+def block_with_text(text: str) -> str:
+    html = clean()
+    start = html.index('<div class="answer-block" data-speakable>')
+    end = html.index("</div>", start) + len("</div>")
+    return (html[:start]
+            + f'<div class="answer-block" data-speakable>{text}</div>'
+            + html[end:])
+
+
 def test_exactly_forty_words_passes():
     assert "aeo.answer-block.length" not in ids(aeo.run(block_with(40), URL))
 
@@ -100,3 +110,31 @@ def test_exactly_sixty_words_passes():
 
 def test_sixty_one_words_fails():
     assert "aeo.answer-block.length" in ids(aeo.run(block_with(61), URL))
+
+
+def test_default_band_is_unchanged_for_existing_callers():
+    # 47-word fixture block, inside the default 40-60 band
+    assert "aeo.answer-block.length" not in ids(aeo.run(clean(), URL))
+
+
+def test_explicit_char_band_accepts_a_cjk_block():
+    cjk = "这是一个完整的段落" * 12          # 108 characters, 1 whitespace token
+    html = block_with_text(cjk)
+    findings = ids(aeo.run(html, URL, band=Band("chars", 80, 200)))
+    assert "aeo.answer-block.length" not in findings
+
+
+def test_word_band_would_wrongly_flag_the_same_cjk_block():
+    cjk = "这是一个完整的段落" * 12
+    html = block_with_text(cjk)
+    found = [f for f in aeo.run(html, URL, band=Band("words", 40, 60))
+             if f.id == "aeo.answer-block.length"]
+    assert found, "demonstrates the bug: split() sees 1 token in 108 CJK characters"
+    assert found[0].observed == "1 words"
+
+
+def test_finding_text_names_the_band_that_was_applied():
+    short = block_with_text("far too short")
+    found = [f for f in aeo.run(short, URL, band=Band("chars", 80, 200))
+             if f.id == "aeo.answer-block.length"]
+    assert found and found[0].expected == "80-200 characters"
