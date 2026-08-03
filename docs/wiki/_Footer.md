@@ -1,0 +1,1 @@
+[OmniRank](https://github.com/bemoshiur/OmniRank) · maintained by [S M Moshiur Rahman](https://github.com/bemoshiur) at [Public Pulse Agency](https://publicpulse.com.bd), Dhaka · Code [MIT](https://github.com/bemoshiur/OmniRank/blob/main/LICENSE), docs [CC BY 4.0](https://github.com/bemoshiur/OmniRank/blob/main/LICENSE-CONTENT) · v0.1.1 ships two skills; the rest is [[Roadmap]]
