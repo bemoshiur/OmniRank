@@ -75,7 +75,7 @@ def test_statistic_with_unknown_field_fails():
 
 NEW_GATES = ["duplicate-title", "duplicate-description", "noindex-in-sitemap",
              "canonical-cluster", "hreflang-reciprocity",
-             "ttfb", "page-weight", "compression", "render-blocking"]
+             "response-time", "page-weight", "compression", "render-blocking"]
 
 
 def test_new_site_and_perf_gates_are_accepted_in_fail_on():

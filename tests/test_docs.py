@@ -51,7 +51,7 @@ NEW_GATE_IDS = [
     "seo.duplicate-title.shared", "seo.duplicate-description.shared",
     "seo.noindex.in-sitemap", "seo.canonical.chained",
     "seo.hreflang.not-reciprocal",
-    "perf.ttfb.slow", "perf.page-weight.heavy",
+    "perf.response-time.slow", "perf.page-weight.heavy",
     "perf.compression.missing", "perf.render-blocking.head-scripts",
 ]
 

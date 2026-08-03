@@ -26,6 +26,45 @@ All notable changes to this project are documented here. The format follows
 
 - `audit_site` collects each fetched page into a `PageData` record rather than
   discarding its HTML, which is what makes the cross-URL pass possible.
+- The `perf` response-time gate is named `response-time`, not `ttfb` as in an earlier
+  draft of this release. `page.elapsed_ms` brackets the whole `client.get()` call — DNS
+  through reading the complete response body — not the time to the first byte, and
+  reporting it as TTFB overstated the real figure several-fold, producing findings that
+  vanished on re-measurement. Its thresholds are raised accordingly (`RESPONSE_WARN_MS =
+  2000`, `RESPONSE_ERROR_MS = 5000`) to reflect that it measures a full download, not
+  server think-time. Never shipped in a release under the old name, so there is no
+  finding id to preserve.
+
+### Fixed
+
+- `seo.duplicate-title.shared`/`seo.duplicate-description.shared` no longer fire on a
+  full hreflang cluster (e.g. locale pages that all declare each other as alternates and
+  share a brand-name `<title>`) — hreflang exists precisely to stop engines
+  consolidating those pages, so flagging them as duplicates and telling the user to
+  differentiate them was backwards.
+- `audit_site` no longer marks `aeo`/`perf` as having run — and scores them a silent
+  `100` — before any page was actually fetched. An audit of a wholly unreachable target
+  now omits `aeo` and `perf` from the score map entirely instead of reporting a
+  fabricated pass.
+- `site.py`'s canonical/hreflang gates now resolve relative `href`s against the page URL
+  (`urljoin`) before comparing, instead of only handling absolute URLs, and match
+  `rel="canonical"`/`rel="alternate"` case-insensitively per the HTML spec.
+- Hreflang reciprocity now checks the full set of an alternate's declared hrefs rather
+  than a last-write-wins `lang -> href` map, so a page with two `hreflang` entries no
+  longer silently drops the earlier one's back-link.
+- `noindex` detection now tokenises on whitespace as well as commas
+  (`content="noindex nofollow"`) and recognises `content="none"`, both of which Google
+  honours and both of which the previous comma-only split missed.
+- `read_sitemap` now XML-unescapes each `<loc>` (`&amp;` -> `&`), so a spec-compliant
+  sitemap URL containing an escaped query string is fetched at its real address instead
+  of 404ing on the literal escaped text.
+- `read_sitemap` now detects a `<sitemapindex>` and recurses one level into the child
+  sitemaps' `<loc>` entries, respecting `sampleSize`, instead of auditing the index's
+  XML files themselves as if they were web pages.
+- A `bs4.XMLParsedAsHTMLWarning` filter is installed at package import, silencing the
+  warning spam previously printed for every XML document OmniRank parses.
+- `perf.page-weight.heavy` reports byte counts consistently (`bytes` and `KiB`, not a
+  truncated `KB` figure that could round the same value below its own stated threshold).
 
 ## [0.1.1] - 2026-08-03
 

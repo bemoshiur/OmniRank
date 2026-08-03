@@ -3,11 +3,16 @@ from __future__ import annotations
 from ..page import PageData
 from ..report import Finding
 
-TTFB_WARN_MS = 800
-TTFB_ERROR_MS = 2500
+RESPONSE_WARN_MS = 2000
+RESPONSE_ERROR_MS = 5000
 HTML_WARN_BYTES = 500_000
 MAX_HEAD_SCRIPTS = 2
 
+# gzip and deflate are the only encodings OmniRank's own client (see fetch.py) ever
+# advertises in Accept-Encoding, so they are the only ones it can actually observe
+# a server choosing. br/zstd are matched defensively in case a server ignores
+# Accept-Encoding and sends one anyway (fetch() already handles that response
+# gracefully), but OmniRank never claims to verify them — see docs/audit-guide.md.
 _COMPRESSED = ("gzip", "br", "deflate", "zstd")
 
 
@@ -17,24 +22,31 @@ def _f(id_: str, gate: str, url: str, severity: str, observed: str,
                    observed=observed, expected=expected, fix=fix)
 
 
-def _ttfb(page: PageData) -> list[Finding]:
-    """Wall-clock time for OmniRank's own request.
+def _response_time(page: PageData) -> list[Finding]:
+    """Wall-clock time for OmniRank's own request, start to finish.
 
-    This is a smoke signal, not a user-experienced metric. OmniRank has no browser
-    and measures nothing a real visitor experiences; the finding text says so.
+    This is NOT time-to-first-byte: `page.elapsed_ms` brackets the entire
+    `client.get()` call — DNS, TCP, TLS, request, and reading the *complete* response
+    body — not the time until the first byte arrived. Measuring it as TTFB overstates
+    the real figure severalfold on anything but a tiny page, and produces false
+    positives that vanish on re-measurement. This is a smoke signal derived from a
+    full download, not a user-experienced metric and not real TTFB; the finding text
+    says so.
     """
-    if page.elapsed_ms >= TTFB_ERROR_MS:
-        return [_f("perf.ttfb.critical", "ttfb", page.url, "error",
-                   f"{page.elapsed_ms} ms to first byte for this audit's request",
-                   f"under {TTFB_WARN_MS} ms",
+    if page.elapsed_ms >= RESPONSE_ERROR_MS:
+        return [_f("perf.response-time.critical", "response-time", page.url, "error",
+                   f"{page.elapsed_ms} ms for the full response to this audit's request",
+                   f"under {RESPONSE_WARN_MS} ms",
                    "Investigate server response time: cold starts, uncached database "
-                   "queries, or origin distance. Measured from where this audit ran, "
+                   "queries, or origin distance. This measures the complete download, "
+                   "not server think-time, and is measured from where this audit ran, "
                    "so treat it as a signal to investigate rather than a user metric.")]
-    if page.elapsed_ms >= TTFB_WARN_MS:
-        return [_f("perf.ttfb.slow", "ttfb", page.url, "warning",
-                   f"{page.elapsed_ms} ms to first byte for this audit's request",
-                   f"under {TTFB_WARN_MS} ms",
-                   "Consider caching or a CDN. Measured from where this audit ran, "
+    if page.elapsed_ms >= RESPONSE_WARN_MS:
+        return [_f("perf.response-time.slow", "response-time", page.url, "warning",
+                   f"{page.elapsed_ms} ms for the full response to this audit's request",
+                   f"under {RESPONSE_WARN_MS} ms",
+                   "Consider caching or a CDN. This measures the complete download, "
+                   "not server think-time, and is measured from where this audit ran, "
                    "so treat it as a signal to investigate rather than a user metric.")]
     return []
 
@@ -85,7 +97,7 @@ def run(page: PageData) -> list[Finding]:
     Lighthouse score. OmniRank does not measure those and must not imply it does.
     """
     return [
-        *_ttfb(page),
+        *_response_time(page),
         *_page_weight(page),
         *_compression(page),
         *_render_blocking(page),
