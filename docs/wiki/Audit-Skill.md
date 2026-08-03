@@ -216,15 +216,27 @@ each is a named constant in `scripts/py/omnirank/gates/perf.py`.
 
 | Gate | Finding id | Rule (constant) | Severity |
 |---|---|---|---|
-| `ttfb` | `perf.ttfb.slow` | Response took ≥ `TTFB_WARN_MS` (800 ms) | warning |
-| `ttfb` | `perf.ttfb.critical` | Response took ≥ `TTFB_ERROR_MS` (2500 ms) — supersedes `.slow`; only one `ttfb` finding ever fires per page | **error** |
+| `response-time` | `perf.response-time.slow` | Response took ≥ `RESPONSE_WARN_MS` (2000 ms) | warning |
+| `response-time` | `perf.response-time.critical` | Response took ≥ `RESPONSE_ERROR_MS` (5000 ms) — supersedes `.slow`; only one `response-time` finding ever fires per page | **error** |
 | `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes, ~488 KiB) before any subresource | warning |
-| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip`, `br`, `deflate` or `zstd` | warning |
+| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip` or `deflate` (`br`/`zstd` matched too if present, but never requested — see below) | warning |
 | `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) external `<script src="...">` tags in `<head>` without `async` or `defer` | warning |
 
-Response time is measured from wherever OmniRank's own request ran, never from a real
-visitor's location or network. Treat every `perf` finding as a signal to investigate,
-not as a metric any user actually experienced. See [[FAQ#does-omnirank-measure-core-web-vitals]].
+**`response-time` is not time-to-first-byte.** `page.elapsed_ms` brackets the entire
+`client.get()` call — DNS, TCP, TLS, request, and reading the *complete* response body —
+not the time until the first byte arrived. The gate used to be named `ttfb` and measure
+the same value, which overstated real TTFB several-fold and produced findings that
+vanished on re-measurement; it is named `response-time` for exactly that reason, and its
+`fix` text says explicitly that it covers "the complete download, not server think-time."
+It is measured from wherever OmniRank's own request ran, never from a real visitor's
+location or network. Treat every `perf` finding as a signal to investigate, not as a
+metric any user actually experienced. See [[FAQ#does-omnirank-measure-core-web-vitals]].
+
+**`compression` can only verify `gzip`/`deflate`.** OmniRank's HTTP client does not
+depend on `brotli` or `zstandard`, so it never requests `br` or `zstd` via
+`Accept-Encoding` — a well-behaved origin will never choose to send either back. The
+check still matches those strings defensively in case a misconfigured origin sends one
+unprompted, but OmniRank cannot claim to verify `br`/`zstd` support.
 
 ### Sitemap `lastmod` inflation (`lastmod-inflation`)
 
@@ -283,38 +295,37 @@ nothing. A layer that ran and accumulated zero findings scores exactly `100`.
 `sum(scores.values()) // len(scores)`. Not a rounded mean: `//` truncates. With one layer
 at 90 and one at 91, `overall` is `90`, not `91` or `90.5`.
 
-**The `layers_run` mechanic.** The `Report` model can, in principle, omit a layer that
-never ran from the score map entirely — this is exercised directly against a bare
-`Report` object in `tests/test_report.py::test_layer_that_did_not_run_is_absent`. **In
-practice, `audit_site()` — the function the CLI actually calls — always populates
-`layers_run` with exactly `{"seo", "aeo", "geo", "perf"}` at the very start of the run,
-before any URL is fetched.** As of 0.2.0 that is **four** layers, not three — `perf`
-joined the set when the performance gates were wired in. A plain `omnirank audit`
-therefore always reports all four layers, and `overall` is always
-`sum(scores.values()) // 4`; you will not currently see a report missing `aeo`, `geo`, or
-`perf` from the score map, even on total failure.
+**The `layers_run` mechanic.** The `Report` model omits a layer that never ran from the
+score map entirely — this is exercised directly against a bare `Report` object in
+`tests/test_report.py::test_layer_that_did_not_run_is_absent`, and `audit_site()` relies
+on that behaviour rather than working around it. `seo` and `geo` are marked run
+unconditionally at the start of `audit_site()` — `seo` covers `seo.page.unreachable` and
+the sitemap gates, and `geo.run()` probes site-level artifacts regardless of page
+reachability. `aeo` and `perf` are only marked run once `_collect()` has returned at
+least one page, since both are per-page gates: if zero pages were parsed, they are
+absent from `layers_run` and therefore absent from the score map, never silently scored
+`100`. A plain `omnirank audit` against a reachable site still reports all four layers;
+an `overall` divisor other than 4 is the signal that a layer never ran.
 
 **The edge case this produces:** if the single audited URL is unreachable, the per-page
-loop records one `seo.page.unreachable` error and `continue`s — it never calls
-`aeo.run()`, `perf.run()`, or the JSON-LD checks for that URL. The `geo` layer still runs
-independently (it fetches `llms.txt` etc. itself, regardless of page reachability). Net
-effect: a site whose homepage is completely down can show `aeo 100` **and** `perf 100` in
-the score map — not because either passed, but because neither was ever evaluated
-against any content:
+loop in `_collect()` records one `seo.page.unreachable` error and never adds that URL to
+the page collection — `aeo.run()`, `perf.run()`, and the JSON-LD checks never run for it.
+Net effect: a site whose homepage is completely down shows **no `aeo` or `perf` key at
+all** in the score map — they are absent, not a fabricated `100`:
 
 ```
-$ python3 -m omnirank.cli audit https://this-domain-does-not-exist.invalid
-OmniRank 0.2.0 — https://this-domain-does-not-exist.invalid
-  overall 87/100  aeo 100  geo 60  perf 100  seo 90
+$ python3 -m omnirank.cli audit https://example.com/nope-xyz
+OmniRank 0.2.0 — https://example.com/nope-xyz
+  overall 75/100  geo 60  seo 90
   1 URLs checked, 5 findings
-  [FAIL] seo.page.unreachable  https://this-domain-does-not-exist.invalid/
-         observed: HTTP 0
+  [FAIL] seo.page.unreachable  https://example.com/nope-xyz/
+         observed: HTTP 404
          fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
   [FAIL] geo.llms.missing  ...
   ...
 ```
 
-(`overall 87` = `(90 + 100 + 60 + 100) // 4 = 350 // 4 = 87`.) Read
+(`overall 75` = `(90 + 60) // 2 = 150 // 2 = 75` — only `seo` and `geo` ran.) Read
 `seo.page.unreachable` as the signal that the whole run is unreliable, regardless of what
 the other layers show.
 

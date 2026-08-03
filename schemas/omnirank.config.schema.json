@@ -135,7 +135,7 @@
                      "lastmod-inflation", "schema", "schema-fabrication",
                      "duplicate-title", "duplicate-description", "noindex-in-sitemap",
                      "canonical-cluster", "hreflang-reciprocity",
-                     "ttfb", "page-weight", "compression", "render-blocking"]
+                     "response-time", "page-weight", "compression", "render-blocking"]
           }
         }
       }

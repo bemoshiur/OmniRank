@@ -39,11 +39,18 @@ hit this on the GEO layer alone, since every one of `llms.txt`, `llms-full.txt`,
 
 No. OmniRank has no browser, so it cannot measure Largest Contentful Paint, Cumulative
 Layout Shift or Interaction to Next Paint. Its `perf` layer reports only what one HTTP
-response reveals: response time to first byte, HTML weight, compression, and
-render-blocking scripts in the head — four gates in `scripts/py/omnirank/gates/perf.py`,
-each against a tunable OmniRank default (`TTFB_WARN_MS`, `TTFB_ERROR_MS`,
-`HTML_WARN_BYTES`, `MAX_HEAD_SCRIPTS`), not an industry benchmark. For field metrics use
-Chrome UX Report data or Lighthouse directly.
+response reveals: full response time (`response-time` — **not** time-to-first-byte; see
+below), HTML weight, compression, and render-blocking scripts in the head — four gates in
+`scripts/py/omnirank/gates/perf.py`, each against a tunable OmniRank default
+(`RESPONSE_WARN_MS`, `RESPONSE_ERROR_MS`, `HTML_WARN_BYTES`, `MAX_HEAD_SCRIPTS`), not an
+industry benchmark. For field metrics use Chrome UX Report data or Lighthouse directly.
+
+`response-time` in particular is not TTFB despite sounding like it: `page.elapsed_ms`
+brackets OmniRank's entire request — DNS through reading the complete response body —
+not the time until the first byte arrived. The gate was named `ttfb` and measured the
+same value in an earlier draft of 0.2.0; that overstated real TTFB several-fold and
+produced findings that vanished on re-measurement, so it was renamed and its thresholds
+raised to reflect that it measures a full download.
 
 ### Does OmniRank work on non-Next.js sites?
 
@@ -81,12 +88,18 @@ counts errors; listing any of them has no effect on the exit code by design: `og
 `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation` from the original
 gate set, plus four site-level gates added in 0.2.0 (`duplicate-title`,
 `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`) and three `perf`
-gates also added in 0.2.0 (`page-weight`, `compression`, `render-blocking`). `ttfb` is
-the one new `perf` gate name that is **not** warning-only — it emits an error-severity
-finding once response time crosses `TTFB_ERROR_MS`. Second, two
-gate names — `crawl-hygiene`, `sitemap-health` — are accepted by the config schema but
-are not wired into the automatic `omnirank audit` pipeline in v0.2.0, so they never
-produce a finding at all from a plain run. See
+gates also added in 0.2.0 (`page-weight`, `compression`, `render-blocking`).
+`response-time` is the one new `perf` gate name that is **not** warning-only — it emits
+an error-severity finding once response time crosses `RESPONSE_ERROR_MS`. Second, one
+gate name — `crawl-hygiene` — is accepted by the config schema but its check
+(`hygiene.check_removed()`) is never called by the automatic `omnirank audit` pipeline in
+v0.2.0, so it never produces a finding from a plain run. `sitemap-health` looks like it
+belongs in that same "inert" bucket — `hygiene.check_sitemap()` is likewise never
+called automatically — but the gate name itself is **not** inert: an unreachable target
+URL reports its `seo.page.unreachable` finding under `gate: "sitemap-health"` (see
+`_collect()` in `audit.py`), so `--fail-on sitemap-health` does fail a build against any
+site with a dead page or a bad `sitemap.xml` entry, through that code path rather than
+through `check_sitemap()`. See
 [ci-integration.md](ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap)
 for the full gate-by-severity breakdown.
 
@@ -99,14 +112,17 @@ in the report; they just cannot flip the exit code on their own.
 
 ### What does it mean when a layer's score is 100 — did it actually pass?
 
-Usually yes, but check `urlsChecked` in the report first. A layer scoring `100` means it
-accumulated zero error/warning-cost findings — which is the correct outcome for a clean
-layer, but it is also what you see if the layer's checks never actually ran against real
-content. Concretely: if the one page OmniRank tried to audit is unreachable, the AEO and
-JSON-LD checks are skipped for that URL entirely (the loop records one
-`seo.page.unreachable` error and moves on), so AEO can show `100` on a site that is
-completely down. Always check for a `seo.page.unreachable` finding before trusting a
-clean score elsewhere in the same report.
+Yes. A layer scoring `100` means it accumulated zero error/warning-cost findings *and*
+it actually ran — `Report.score()` only includes a layer that is present in
+`layers_run`, and `audit_site()` only adds `aeo`/`perf` to `layers_run` once at least one
+page was actually fetched and parsed. If the one page OmniRank tried to audit is
+unreachable, the AEO, JSON-LD and perf checks never run for that URL (the loop in
+`_collect()` records one `seo.page.unreachable` error and moves on), so `aeo` and `perf`
+are **absent** from the score map entirely rather than shown as a false `100` — you will
+not see `aeo 100` on a site that never served any content. `seo` and `geo` always run
+(they cover `seo.page.unreachable` and site-level artifact probes respectively), so they
+always appear. Always check for a `seo.page.unreachable` finding, and check which layers
+are actually present in the score line, before trusting a report.
 
 ### Can I run OmniRank without a config file?
 

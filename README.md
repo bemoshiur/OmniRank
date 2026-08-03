@@ -199,9 +199,9 @@ detail, including which gates can never trip `--fail-on`, is in
 
 | Gate | Rule | Severity |
 |---|---|---|
-| `ttfb` | Response ≥ 800 ms (warning) or ≥ 2500 ms (error) — OmniRank's own tunable thresholds | warning / error |
+| `response-time` | Full response ≥ 2000 ms (warning) or ≥ 5000 ms (error) — OmniRank's own tunable thresholds. This is the complete time for OmniRank's own request (DNS through the last byte of the body), **not** time-to-first-byte; it measures a full download, not server think-time | warning / error |
 | `page-weight` | Raw HTML exceeds 500,000 bytes before any subresource | warning |
-| `compression` | No `gzip`/`br`/`deflate`/`zstd` `content-encoding` | warning |
+| `compression` | No `gzip`/`deflate` `content-encoding` — the only encodings OmniRank's client ever requests, so `br`/`zstd` are matched if present but never verifiable | warning |
 | `render-blocking` | More than 2 blocking `<script>` tags in `<head>` | warning |
 
 `perf` never measures Largest Contentful Paint, Cumulative Layout Shift, Interaction to

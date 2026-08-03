@@ -123,12 +123,21 @@ each is a named constant in `scripts/py/omnirank/gates/perf.py`.
 
 | Gate | Finding id | Rule (constant) | Severity |
 |---|---|---|---|
-| `ttfb` | `perf.ttfb.slow` | Response took ≥ `TTFB_WARN_MS` (800 ms) | warning |
-| `ttfb` | `perf.ttfb.critical` | Response took ≥ `TTFB_ERROR_MS` (2500 ms) — supersedes `.slow`; only one `ttfb` finding ever fires per page | **error** |
+| `response-time` | `perf.response-time.slow` | Response took ≥ `RESPONSE_WARN_MS` (2000 ms) | warning |
+| `response-time` | `perf.response-time.critical` | Response took ≥ `RESPONSE_ERROR_MS` (5000 ms) — supersedes `.slow`; only one `response-time` finding ever fires per page | **error** |
 | `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes, ~488 KiB) before any subresource — CSS, JS and images are not counted | warning |
-| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip`, `br`, `deflate` or `zstd` | warning |
+| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip` or `deflate` (`br`/`zstd` matched too if present, but never actually requested — see below) | warning |
 | `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) external `<script src="...">` tags in `<head>` without `async` or `defer` | warning |
 
-Response time is measured from wherever OmniRank's own request ran — a laptop, a CI
-runner — never from a real visitor's location or network. Treat every `perf` finding
-as a signal to investigate, not as a metric any user actually experienced.
+**`response-time` is not time-to-first-byte.** `page.elapsed_ms` brackets the entire
+`client.get()` call — DNS, TCP, TLS, request, and reading the *complete* response body —
+so it measures a full download, not first-byte latency; the gate was renamed from `ttfb`
+for exactly this reason, with thresholds raised to match. It is measured from wherever
+OmniRank's own request ran — a laptop, a CI runner — never from a real visitor's location
+or network. Treat every `perf` finding as a signal to investigate, not as a metric any
+user actually experienced.
+
+**`compression` can only verify `gzip`/`deflate`.** OmniRank's HTTP client does not
+depend on `brotli` or `zstandard`, so it never requests `br` or `zstd` via
+`Accept-Encoding` — an origin will not choose to send either back in response to a
+request that never asked for them.

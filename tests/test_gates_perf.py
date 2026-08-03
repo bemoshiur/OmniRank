@@ -27,25 +27,35 @@ def test_every_finding_carries_the_perf_layer():
 
 
 def test_slow_response_is_a_warning():
-    found = [f for f in perf.run(page(elapsed_ms=1200)) if f.id == "perf.ttfb.slow"]
+    found = [f for f in perf.run(page(elapsed_ms=2500))
+             if f.id == "perf.response-time.slow"]
     assert found and found[0].severity == "warning"
-    assert found[0].gate == "ttfb"
-    assert "1200" in found[0].observed
+    assert found[0].gate == "response-time"
+    assert "2500" in found[0].observed
 
 
 def test_very_slow_response_is_an_error_not_two_findings():
-    findings = perf.run(page(elapsed_ms=4000))
-    assert "perf.ttfb.critical" in ids(findings)
-    assert "perf.ttfb.slow" not in ids(findings), "escalate, do not double-report"
-    critical = [f for f in findings if f.id == "perf.ttfb.critical"][0]
+    findings = perf.run(page(elapsed_ms=6000))
+    assert "perf.response-time.critical" in ids(findings)
+    assert "perf.response-time.slow" not in ids(findings), "escalate, do not double-report"
+    critical = [f for f in findings if f.id == "perf.response-time.critical"][0]
     assert critical.severity == "error"
 
 
-def test_ttfb_finding_does_not_claim_to_be_a_field_metric():
-    found = [f for f in perf.run(page(elapsed_ms=1200)) if f.gate == "ttfb"][0]
+def test_response_time_finding_does_not_claim_to_be_ttfb_or_a_field_metric():
+    found = [f for f in perf.run(page(elapsed_ms=2500)) if f.gate == "response-time"][0]
     combined = (found.fix + found.observed).lower()
     assert "lighthouse" not in combined
     assert "core web vitals" not in combined
+    assert "first byte" not in combined, (
+        "elapsed_ms brackets the full response read, not first byte — the finding "
+        "text must not claim otherwise")
+
+
+def test_response_time_below_the_new_higher_thresholds_is_clean():
+    # Old TTFB-labelled thresholds (800ms/2500ms) would have flagged this; the
+    # renamed gate measures a full download, so its thresholds are higher.
+    assert perf.run(page(elapsed_ms=1500)) == []
 
 
 def test_heavy_html_is_a_warning():

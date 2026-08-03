@@ -224,15 +224,33 @@ config option can change them.
 
 | Gate | Finding id | Rule (constant) | Severity |
 |---|---|---|---|
-| `ttfb` | `perf.ttfb.slow` | Response took ≥ `TTFB_WARN_MS` (800 ms) | warning |
-| `ttfb` | `perf.ttfb.critical` | Response took ≥ `TTFB_ERROR_MS` (2500 ms) — supersedes `.slow`; only one `ttfb` finding ever fires per page | **error** |
+| `response-time` | `perf.response-time.slow` | Response took ≥ `RESPONSE_WARN_MS` (2000 ms) | warning |
+| `response-time` | `perf.response-time.critical` | Response took ≥ `RESPONSE_ERROR_MS` (5000 ms) — supersedes `.slow`; only one `response-time` finding ever fires per page | **error** |
 | `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes, ~488 KiB) before any subresource — CSS, JS and images are not counted | warning |
-| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip`, `br`, `deflate` or `zstd` | warning |
+| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip` or `deflate` (`br`/`zstd` are matched too if a server sends them unprompted, but see the callout below) | warning |
 | `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) external `<script src="...">` tags in `<head>` without `async` or `defer` | warning |
 
-Response time is measured from wherever OmniRank's own request ran — a laptop, a CI
-runner — never from a real visitor's location or network. Treat every `perf` finding as
-a signal to investigate, not as a metric any user actually experienced.
+**`response-time` is not time-to-first-byte, despite the name it had before this
+release.** `page.elapsed_ms` (`fetch.py`) brackets the *entire* `client.get()` call —
+DNS, TCP, TLS, the request, and reading the *complete* response body — not the time
+until the first byte arrived. Naming the gate `ttfb` and measuring the full download
+overstated real TTFB by roughly 5-7x on a page of any size, and produced findings that
+vanished on re-measurement once the "slow" response turned out to be a large body, not a
+slow server. The gate is named `response-time` for exactly this reason, its thresholds
+(2000 ms / 5000 ms) are set higher to account for measuring a full download rather than
+first-byte latency, and its `fix` text says explicitly that it covers "the complete
+download, not server think-time." It is measured from wherever OmniRank's own request
+ran — a laptop, a CI runner — never from a real visitor's location or network. Treat
+every `perf` finding as a signal to investigate, not as a metric any user actually
+experienced.
+
+**`compression` can only ever verify `gzip` or `deflate`.** OmniRank's HTTP client
+(`fetch.py`) does not depend on the `brotli` or `zstandard` Python packages, so it never
+sends `br` or `zstd` in its `Accept-Encoding` request header — a well-behaved origin will
+therefore never choose to send either back, and OmniRank has no way to confirm a site
+supports them even if it does. The `_COMPRESSED` check still matches the literal strings
+`br` and `zstd` defensively, in case a misconfigured origin ignores `Accept-Encoding` and
+sends one anyway, but the gate's real, exercised coverage is `gzip`/`deflate` only.
 
 ### Sitemap `lastmod` inflation (`lastmod-inflation` — SEO layer)
 
@@ -308,38 +326,42 @@ nothing. A layer that ran and accumulated zero findings scores exactly `100`.
 round to nearest. With one layer at 90 and one at 91, `overall` is `90`, not `91` or
 `90.5`.
 
-**`layers_run`:** the `Report` model can, in principle, omit a layer that never ran from
-the score map entirely (`tests/test_report.py::test_layer_that_did_not_run_is_absent`
-exercises this directly against a bare `Report` object). **In practice, `audit_site()` —
-the function the CLI actually calls — always populates `layers_run` with exactly `{"seo",
-"aeo", "geo", "perf"}` at the very start of the run, before any URL is fetched.** As of
-0.2.0 that is **four** layers, not three — `perf` joined the set when the performance
-gates were wired in. A plain `omnirank audit` therefore always reports all four layers,
-and `overall` is always `sum(scores.values()) // 4`; you will not currently see a report
-missing `aeo`, `geo`, or `perf` from the score map, even on total failure.
+**`layers_run`:** the `Report` model can omit a layer that never ran from the score map
+entirely (`tests/test_report.py::test_layer_that_did_not_run_is_absent` exercises this
+directly against a bare `Report` object), and `audit_site()` — the function the CLI
+actually calls — relies on exactly that behaviour. `seo` and `geo` are marked run
+unconditionally at the start of `audit_site()`, because `seo` covers
+`seo.page.unreachable` and the sitemap gates, and `geo.run()` probes site-level artifacts
+(`llms.txt`, `robots.txt`, ...) regardless of whether any page was fetched. `aeo` and
+`perf` are only marked run **after** `_collect()` has actually returned at least one
+page — they are per-page gates, so if zero pages were parsed, `aeo` and `perf` are
+absent from `layers_run` and therefore absent from the score map, not silently scored
+`100`. A plain `omnirank audit` against a reachable site still reports all four layers;
+a `overall` divisor of anything other than 4 is the signal that at least one layer never
+ran.
 
-**A related edge case worth knowing, reproduced directly:** if the single audited URL is
-unreachable, the per-page loop records one `seo.page.unreachable` error and `continue`s —
-it never calls `aeo.run()`, `perf.run()`, or the JSON-LD checks for that URL. The `geo`
-layer still runs independently (it fetches `llms.txt` etc. itself, regardless of page
-reachability). Net effect: a site whose homepage is completely down can show `aeo 100`
-**and** `perf 100` in the score map, because neither genuinely found a problem — they
-were never evaluated against any content:
+**The unreachable-URL edge case, reproduced directly:** if the single audited URL is
+unreachable, the per-page loop in `_collect()` records one `seo.page.unreachable` error
+and never adds that URL's page to the collection — `aeo.run()`, `perf.run()`, and the
+JSON-LD checks never run for it. Net effect: a site whose homepage is completely down
+shows **no `aeo` or `perf` key at all** in the score map, because neither ever touched
+any content — they are absent, not a fabricated `100`:
 
 ```
-$ python3 -m omnirank.cli audit https://this-domain-does-not-exist.invalid
-OmniRank 0.2.0 — https://this-domain-does-not-exist.invalid
-  overall 87/100  aeo 100  geo 60  perf 100  seo 90
+$ python3 -m omnirank.cli audit https://example.com/nope-xyz
+OmniRank 0.2.0 — https://example.com/nope-xyz
+  overall 75/100  geo 60  seo 90
   1 URLs checked, 5 findings
-  [FAIL] seo.page.unreachable  https://this-domain-does-not-exist.invalid/
-         observed: HTTP 0
+  [FAIL] seo.page.unreachable  https://example.com/nope-xyz/
+         observed: HTTP 404
          fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
   [FAIL] geo.llms.missing  ...
   ...
 ```
 
-(`overall 87` = `(90 + 100 + 60 + 100) // 4 = 350 // 4 = 87`.) Real output, captured
-against `https://this-domain-does-not-exist.invalid` on 0.2.0.
+(`overall 75` = `(90 + 60) // 2 = 150 // 2 = 75` — only `seo` and `geo` ran, so the
+average is over **two** layers, not four.) Real output, captured against
+`https://example.com/nope-xyz` on 0.2.0.
 
 Read `seo.page.unreachable` as the signal that the whole run is unreliable, regardless of
 what the other layers show.
@@ -365,8 +387,8 @@ errors = `10*2 = 20` cost, `100 - 20 = 80`. ✓
 Deriving `geo 60`: `llms.txt`, `llms-full.txt`, `facts.json`, and `robots.txt` all return
 404 — 4 errors = `10*4 = 40` cost, `100 - 40 = 60`. ✓
 
-Deriving `perf 100`: `example.com` serves a small, Brotli-compressed response with no
-render-blocking `<head>` scripts and a fast time-to-first-byte from wherever this audit
+Deriving `perf 100`: `example.com` serves a small, gzip-compressed response with no
+render-blocking `<head>` scripts and a fast full-response time from wherever this audit
 ran — zero `perf` findings, `100 - 0 = 100`. ✓
 
 Deriving `overall 76`: as of 0.2.0 the average is over **four** layers, not three —

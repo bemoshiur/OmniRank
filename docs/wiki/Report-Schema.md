@@ -98,7 +98,7 @@ segment" pattern are worth knowing:
 | `seo.noindex.in-sitemap` | `noindex-in-sitemap` | seo | error |
 | `seo.canonical.chained` | `canonical-cluster` | seo | warning |
 | `seo.hreflang.not-reciprocal` | `hreflang-reciprocity` | seo | warning |
-| `perf.ttfb.slow` (warning) / `.critical` (error) | `ttfb` | perf | warning / error |
+| `perf.response-time.slow` (warning) / `.critical` (error) | `response-time` | perf | warning / error |
 | `perf.page-weight.heavy` | `page-weight` | perf | warning |
 | `perf.compression.missing` | `compression` | perf | warning |
 | `perf.render-blocking.head-scripts` | `render-blocking` | perf | warning |
@@ -125,7 +125,7 @@ site-level cross-URL pass, and the four `perf.*` ids from the `perf` layer — b
 | `geo` | Yes |
 | `offsite` | No — reserved for the roadmap `offsite-entity` skill |
 | `smm` | No — reserved for the roadmap `smm-content` / `smm-publish` skills |
-| `perf` | Yes, as of 0.2.0 — `perf.run(page)` runs on every audited page (`ttfb`, `page-weight`, `compression`, `render-blocking`); before 0.2.0 the layer existed in the schema with no gate ever populating it |
+| `perf` | Yes, as of 0.2.0 — `perf.run(page)` runs on every audited page (`response-time`, `page-weight`, `compression`, `render-blocking`); before 0.2.0 the layer existed in the schema with no gate ever populating it |
 
 ## Why released ids are never renamed
 
