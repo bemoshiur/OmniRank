@@ -4,10 +4,9 @@ import json
 
 from bs4 import BeautifulSoup
 
+from ..bands import DEFAULT_BAND, Band, measure
 from ..report import Finding
 
-MIN_WORDS = 40
-MAX_WORDS = 60
 MIN_FAQS = 3
 LIST_TAGS = ("ul", "ol", "li")
 
@@ -18,22 +17,24 @@ def _f(id_: str, gate: str, url: str, severity: str, observed: str,
                    observed=observed, expected=expected, fix=fix)
 
 
-def _answer_block(soup: BeautifulSoup, url: str, selector: str) -> list[Finding]:
+def _answer_block(soup: BeautifulSoup, url: str, selector: str,
+                  band: Band) -> list[Finding]:
     blocks = soup.select(selector)
     if not blocks:
         return [_f("aeo.answer-block.missing", "answer-block", url, "error",
                    f"no element matching {selector!r}", "one answer block near the top",
                    f'Add <div class="{selector.lstrip(".")}" data-speakable> with a '
-                   f"{MIN_WORDS}-{MAX_WORDS} word plain-prose answer.")]
+                   f"{band.describe()} plain-prose answer.")]
 
     block = blocks[0]
     findings: list[Finding] = []
 
-    words = len(block.get_text(" ", strip=True).split())
-    if not MIN_WORDS <= words <= MAX_WORDS:
+    size = measure(block.get_text(" ", strip=True), band)
+    if not band.contains(size):
+        unit = "words" if band.unit == "words" else "characters"
         findings.append(_f(
             "aeo.answer-block.length", "answer-block", url, "error",
-            f"{words} words", f"{MIN_WORDS}-{MAX_WORDS} words",
+            f"{size} {unit}", band.describe(),
             "Rewrite to a single liftable paragraph in that range; answer engines "
             "quote whole blocks, not fragments."))
 
@@ -89,10 +90,11 @@ def _speakable_selectors(node: object) -> list[str]:
     return found
 
 
-def run(html: str, url: str, selector: str = ".answer-block") -> list[Finding]:
+def run(html: str, url: str, selector: str = ".answer-block",
+        band: Band | None = None) -> list[Finding]:
     soup = BeautifulSoup(html, "lxml")
     return [
-        *_answer_block(soup, url, selector),
+        *_answer_block(soup, url, selector, band or DEFAULT_BAND),
         *_faq(soup, url),
         *_speakable(soup, url),
     ]
