@@ -4,93 +4,248 @@
 
 **One page. Every engine.**
 
-SEO · AEO · GEO · SMM growth engine for Claude Code and Cursor.
+Score a site's SEO, AEO and GEO signals against its real HTML, then generate the
+machine-readable ground truth AI engines can cite.
 
 [![CI](https://github.com/bemoshiur/OmniRank/actions/workflows/ci.yml/badge.svg)](https://github.com/bemoshiur/OmniRank/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/bemoshiur/OmniRank)](https://github.com/bemoshiur/OmniRank/releases)
+[![Code: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
 [![Content: CC BY 4.0](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey.svg)](LICENSE-CONTENT)
+[![Python 3.11 | 3.12 | 3.13](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](docs/getting-started.md#prerequisites)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-5A32FB.svg)](docs/claude-code-setup.md)
 
 </div>
 
 ---
 
-Three audiences read the same HTML. Optimise once, win three channels.
+OmniRank scores a website's live HTML against the concrete rules that search engines,
+answer engines and generative AI systems use to crawl, quote and cite content, then
+generates `llms.txt`, `llms-full.txt` and `facts.json` so the page becomes machine-readable
+ground truth an AI engine can cite directly.
 
-| Layer | Audience | What it wants |
-|---|---|---|
-| **SEO** | Googlebot, Bingbot | Crawlable, canonical, fast, structured |
-| **AEO** | AI Overviews, Copilot, voice | A short, liftable, factual answer |
-| **GEO** | ChatGPT, Claude, Perplexity, Gemini | Machine-ingestible ground truth plus permission to cite |
-| **SMM** | Humans on platforms, entity resolvers | Consistent, cross-linked brand presence |
+![Terminal recording of `omnirank audit` scoring a live site and printing a prioritised fix list](.github/assets/demo.gif)
 
-## Quick start
+*Real terminal output from `omnirank audit https://example.com` — nothing staged, nothing cropped.*
 
-OmniRank is not published to PyPI, npm or a container registry yet — install it from
-source into a virtual environment. Homebrew and other PEP 668-managed Python
-installs refuse a bare `pip install`, so activate a venv first:
+## SEO, AEO and GEO read the same HTML
+
+Three audiences parse one document. A crawlable, well-marked-up, machine-readable page wins
+all three at once — that is the entire bet OmniRank makes, and why it audits one artifact
+(your rendered HTML) instead of three separate tools.
+
+| Layer | Audience | What it wants | What OmniRank does |
+|---|---|---|---|
+| **SEO** | Googlebot, Bingbot | Crawlable, canonical, correctly sized metadata, valid structured data | Checks `h1`, `canonical`, title/description length, OpenGraph, JSON-LD |
+| **AEO** | AI Overviews, Copilot, voice assistants | A short, liftable, factual answer near the top of the page | Checks for a 40–60 word AnswerBlock, an FAQ section, and `speakable` markup |
+| **GEO** | ChatGPT, Claude, Perplexity, Gemini | Machine-ingestible ground truth plus explicit permission to cite | Generates and verifies `llms.txt`, `llms-full.txt`, `facts.json` with a citation licence |
+
+The table above is not aspirational copy — it is also, deliberately, how this README is
+written. It has one `<h1>`, an AnswerBlock-shaped opening paragraph, an FAQ section, and
+descriptive headings. If OmniRank asked your page to do these things, it does them too.
+
+## Audit any site in one command
+
+OmniRank is not published to PyPI, npm or a container registry — install it from source
+into a virtual environment. Homebrew and other PEP 668-managed Python installs refuse a
+bare `pip install`, so activate a venv first:
 
 ```bash
-git clone https://github.com/bemoshiur/OmniRank.git
-cd OmniRank
-
-python3 -m venv .venv && source .venv/bin/activate
-make install
-
-# Audit any live site — no configuration required
+git clone https://github.com/bemoshiur/OmniRank.git && cd OmniRank
+python3 -m venv .venv && source .venv/bin/activate && make install
 python3 -m omnirank.cli audit https://example.com
 ```
 
-Output is a scored report plus a prioritised fix list, written to
-`.omnirank/reports/<date>-audit.json`.
+Real output, captured against `https://example.com`:
 
-For a configured repo, copy `templates/omnirank.config.example.json` to
-`omnirank.config.json`, fill it in, then:
+```
+OmniRank 0.1.1 — https://example.com
+  overall 69/100  aeo 80  geo 60  seo 67
+  1 URLs checked, 10 findings
+  [FAIL] seo.canonical.missing  https://example.com/
+         observed: no rel=canonical
+         fix: Add <link rel="canonical" href="https://example.com/"> to <head>.
+  [FAIL] seo.description.missing  https://example.com/
+         observed: no meta description
+         fix: Add a meta description summarising the page.
+  [WARN] seo.og.missing  https://example.com/
+         observed: missing og:title, og:image
+         fix: Add the missing OpenGraph tags so social unfurls render.
+  [FAIL] aeo.answer-block.missing  https://example.com/
+         observed: no element matching '.answer-block'
+         fix: Add <div class="answer-block" data-speakable> with a 40-60 word plain-prose answer.
+  [FAIL] aeo.faq.too-few  https://example.com/
+         observed: 0 FAQ pairs
+         fix: Add FAQs as semantic <dl>/<dt>/<dd> or <details>, mirrored by FAQPage JSON-LD.
+  [FAIL] seo.schema.absent  https://example.com/
+         observed: no application/ld+json blocks
+         fix: Emit JSON-LD describing this page and cross-reference the site organisation by stable @id.
+  [FAIL] geo.llms.missing  https://example.com/llms.txt
+         observed: HTTP 404 at llms.txt
+         fix: Generate llms.txt at build time and serve it as a static file.
+  [FAIL] geo.llms-full.missing  https://example.com/llms-full.txt
+         observed: HTTP 404 at llms-full.txt
+         fix: Generate llms-full.txt at build time and serve it as a static file.
+  [FAIL] geo.facts.missing  https://example.com/facts.json
+         observed: HTTP 404 at facts.json
+         fix: Generate facts.json at build time and serve it as a static file.
+  [FAIL] geo.ai-allowlist.missing  https://example.com/robots.txt
+         observed: HTTP 404 at /robots.txt
+         fix: Publish a robots.txt that explicitly allows AI crawlers.
+  report: .omnirank/reports/2026-08-03-audit.json
+```
+
+`example.com` ships nothing but a static placeholder page, so this is close to a worst
+case — real sites usually clear a handful of these on the first pass. Every finding
+carries `observed`, `expected`, and `fix` — enough to act on without opening the code.
+
+For a configured repo, copy the starter config and gate a build on specific gates:
 
 ```bash
+cp templates/omnirank.config.example.json omnirank.config.json
 python3 -m omnirank.cli audit --config omnirank.config.json --fail-on h1 canonical schema
 python3 -m omnirank.cli geo   --config omnirank.config.json --out public
 ```
 
-Exit codes: `0` clean · `1` a configured gate failed · `2` usage or config error. The
-non-zero exit makes it a drop-in CI check.
+Exit codes: `0` clean · `1` a `--fail-on` gate failed · `2` usage or config error. The
+non-zero exit is what makes it a CI gate, not just a report — see
+[Use OmniRank as a CI gate](#use-omnirank-as-a-ci-gate) below.
 
-## Download
-
-Prefer not to clone? Grab the packaged skill:
-
-**[⬇ Download OmniRank skill (.zip)](https://github.com/bemoshiur/OmniRank/releases/latest/download/omnirank-skill.zip)**
-
-Unzip it into your Claude Code plugins directory:
-
-```bash
-unzip omnirank-skill.zip -d ~/.claude/plugins/
-```
-
-Building it yourself is one command:
-
-```bash
-./scripts/build-skill-zip.sh          # -> dist/omnirank-skill-<version>.zip
-```
-
-## What ships in v0.1.0
+## What ships in v0.1.1
 
 | Skill | Status | What it does |
 |---|---|---|
-| `audit` | **shipped** | Scores SEO, AEO, GEO and crawl-hygiene gates; emits findings with `observed` / `expected` / `fix` |
-| `geo-artifacts` | **shipped** | Generates `llms.txt`, `llms-full.txt`, `facts.json` with a citation licence |
+| `audit` | **Shipped** | Scores SEO, AEO, GEO and structured-data gates against a site's real HTML; reports `observed` / `expected` / `fix` for every gap |
+| `geo-artifacts` | **Shipped** | Generates `llms.txt`, `llms-full.txt` and `facts.json`, each with an explicit citation licence |
 
-### Roadmap
+That is the entire shipped surface. Everything below is roadmap, not present in v0.1.1.
+
+## Roadmap
 
 | Skill | Target | What it will do |
 |---|---|---|
 | `aeo-onpage` | v0.2 | Emit JSON-LD by entity type; draft AnswerBlocks and FAQs; Next.js codegen |
 | `indexing` | v0.3 | IndexNow, GSC URL Inspection, Bing Submit, Wayback, hash-based freshness |
-| `offsite-entity` | v0.4 | `sameAs` gap analysis, peer mention-gap, outreach drafts |
+| `offsite-entity` | v0.4 | `sameAs` gap analysis, peer mention-gap detection, outreach drafts for human review |
 | `measure` | v0.5 | Rank tracking plus real AI-citation testing across engines |
 | `smm-content` | v0.6 | Repurpose published pages into platform-native assets |
-| `smm-publish` | v0.7 | Gated publishing — dry-run default, human approval required |
+| `smm-publish` | v0.7 | Gated publishing — dry-run by default, human approval required |
 
-Adapters for WordPress, Jekyll, Shopify, Astro, Vue and Svelte land at v1.0.
+Adapters for WordPress, Jekyll, Shopify, Astro, Vue and Svelte land at v1.0. None of the
+skills in this table exist in the installed package today — asking Claude Code to "write
+our JSON-LD" or "submit this URL to Google" will not trigger anything, because `aeo-onpage`
+and `indexing` are not built yet.
+
+## Every gate OmniRank checks, grouped by layer
+
+20 gate names exist in the config schema; 13 can fail a build, 5 are warning-only by
+design, and 2 are schema-accepted but not yet wired into the automatic pipeline. Full
+detail, including which gates can never trip `--fail-on`, is in
+[audit-guide.md](docs/audit-guide.md#gate-reference) and
+[ci-integration.md](docs/ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap).
+
+**SEO**
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `h1` | Exactly one `<h1>` | error |
+| `canonical` | Present, absolute, self-referencing | error |
+| `title-length` | Present, ≤60 characters | error if missing, warning if over |
+| `description-length` | Present, ≤160 characters | error if missing, warning if over |
+| `og` | `og:title` and `og:image` present | warning |
+| `hreflang` | If any hreflang, an `x-default` exists | warning |
+| `image-dims` | Every `<img>` has width and height | warning |
+
+**AEO**
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `answer-block` | 40–60 word plain-prose element exists, no lists inside | error |
+| `faq` | ≥3 pairs as `<dl>`/`<dt>`/`<dd>` or `<details>` | error |
+| `speakable` | Every `speakable.cssSelector` resolves to real markup | error |
+
+**GEO**
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `llms-txt` | `/llms.txt` returns 200 | error |
+| `llms-full` | `/llms-full.txt` returns 200 | error |
+| `facts-json` | `/facts.json` returns 200 and parses | error |
+| `ai-allowlist` | `robots.txt` does not `Disallow: /` any AI crawler | error |
+| `citation-licence` | `llms.txt` contains a licence or attribution statement | warning |
+
+**Structured data**
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `schema` | At least one valid `application/ld+json` block with `@type` | error |
+| `schema-fabrication` | `AggregateRating` has a real `ratingCount`; every `Review` has an `author` | error |
+
+## Download and install OmniRank
+
+**Option 1 — packaged skill for Claude Code, no clone required:**
+
+```bash
+curl -LO https://github.com/bemoshiur/OmniRank/releases/latest/download/omnirank-skill.zip
+unzip omnirank-skill.zip -d ~/.claude/plugins/
+```
+
+The archive is built by [`scripts/build-skill-zip.sh`](scripts/build-skill-zip.sh) and
+published on every `v*` tag. It contains the plugin manifest, both skills, the Python
+package, JSON Schemas and the config template — everything needed to run the CLI and have
+both skills register, without the tests, CI config or Node sources. Build it yourself
+instead of downloading it:
+
+```bash
+./scripts/build-skill-zip.sh          # -> dist/omnirank-skill-<version>.zip
+```
+
+**Option 2 — clone, for CLI use or contributing:**
+
+```bash
+git clone https://github.com/bemoshiur/OmniRank.git ~/.claude/plugins/omnirank
+```
+
+This gets the full repository — tests, CI config, and the Node GEO-artifacts generator —
+and lets you `git pull` to update instead of re-downloading a release archive. See
+[claude-code-setup.md](docs/claude-code-setup.md) for confirming the skills registered and
+the real trigger phrases for each.
+
+## Use OmniRank as a CI gate
+
+`omnirank audit --fail-on <gates>` exits `1` when a named gate has an error-severity
+finding and `0` otherwise — that is the entire integration surface:
+
+```yaml
+name: OmniRank audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install OmniRank
+        run: pip install "omnirank @ git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"
+
+      - name: Audit
+        run: |
+          omnirank audit --config omnirank.config.json --out omnirank-report.json \
+            --fail-on h1 canonical schema llms-txt llms-full facts-json ai-allowlist
+```
+
+Picking `--fail-on h1 canonical schema` (structural baseline) is a better starting point
+than listing all 20 gate names — 5 of them are warning-only and can never fail a build, and
+2 more are schema-accepted but not yet wired into the automatic pipeline. The full
+reasoning, plus a GitLab CI job and a generic shell script, is in
+[ci-integration.md](docs/ci-integration.md).
 
 ## Design principles
 
@@ -104,22 +259,137 @@ gates did not run is absent from the score map rather than scored 100.
 **Secrets are pointers.** Config holds `env:NAME` only. A missing variable fails loudly —
 a skipped submission is otherwise indistinguishable from a successful one in logs.
 
-**Audit diagnoses; it never edits.**
+**Audit diagnoses; it never edits.** `geo-artifacts` writes the three GEO artifacts it
+generates and nothing else — neither skill touches existing site source.
 
-## What this does not do
+## What OmniRank does not do
 
-- **It does not force rankings.** Nothing can. It dominates the signals search engines use.
-- **It does not send cold email.** Outreach is drafted for human review and manual send.
+- **It does not force rankings.** Nothing can. It scores the signals search and answer
+  engines are known to use, and hands you a prioritised list of gaps to close.
+- **It does not send cold email.** Outreach text is drafted for human review and manual
+  send, never dispatched automatically.
 - **It does not abuse the Google Indexing API.** That API covers `JobPosting` and
   `BroadcastEvent` only; misuse earns a manual action.
-- **It does not generate AI slop.** Every generated page expects a human edit pass.
-- **It does not ship thin programmatic pages.** Matrices are pruned to real demand signals.
+- **It does not generate AI slop.** Every generated page expects a human edit pass before
+  publishing.
+- **It does not ship thin programmatic pages.** Matrices are pruned to real demand
+  signals, not generated to fill a sitemap.
 
-## Documentation
+## Frequently asked questions
 
-The [wiki](https://github.com/bemoshiur/OmniRank/wiki) covers configuration, every gate,
-adapters, the report schema, and CI recipes. Questions and results belong in
-[Discussions](https://github.com/bemoshiur/OmniRank/discussions).
+<details>
+<summary>Does OmniRank guarantee my site will rank higher?</summary>
+
+No — nothing can guarantee a ranking, since search and answer engines rank content using
+signals no third-party tool controls. OmniRank scores a site against the concrete,
+checkable signals those engines are known to use and returns a prioritised list of gaps;
+closing them improves the odds without touching what OmniRank cannot see, such as backlink
+profile or content quality relative to competitors. See [faq.md](docs/faq.md) for the full
+answer.
+</details>
+
+<details>
+<summary>Is my site's data sent anywhere when I run an audit?</summary>
+
+No — OmniRank runs entirely on your machine or CI runner and only makes outbound HTTP
+requests to the URL you point it at, fetching pages, `sitemap.xml`, `robots.txt`,
+`llms.txt`, `llms-full.txt` and `facts.json` from that one site. There is no telemetry and
+no third-party API call in the `audit` or `geo-artifacts` code paths.
+</details>
+
+<details>
+<summary>What's the difference between the `audit` and `geo-artifacts` skills?</summary>
+
+`audit` reads a site and reports what's wrong, with no side effects. `geo-artifacts` writes
+three new files (`llms.txt`, `llms-full.txt`, `facts.json`) and nothing else. They compose:
+run `geo-artifacts` to generate the files, deploy them, then run `audit` to confirm they
+actually serve in production — the GEO layer checks exactly that.
+</details>
+
+<details>
+<summary>Does OmniRank edit my site automatically?</summary>
+
+No — `audit` only diagnoses; `SKILL.md` states directly that "Audit only diagnoses. It
+never edits the site." `geo-artifacts` does write files, but only the three GEO artifacts
+it generates into the output directory you specify, never existing site source.
+</details>
+
+<details>
+<summary>Is OmniRank on PyPI or npm yet?</summary>
+
+No, not as of v0.1.1. Install the Python CLI from source — clone the repository and `pip
+install -e ./scripts/py` inside a virtual environment, or install directly from git with
+`pip install "omnirank @ git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"`.
+The Node generator is likewise unpublished; import `scripts/node/src/generate.ts` directly
+or copy it into your project.
+</details>
+
+<details>
+<summary>What Python and Node versions does it require?</summary>
+
+Python 3.11 or newer is required for the CLI and both skills (`pyproject.toml` sets
+`requires-python = ">=3.11"`; CI tests 3.11, 3.12 and 3.13). Node 22 or newer is needed only
+if you use the in-repo Node GEO-artifacts generator instead of the Python crawl path — Node
+is not required at all for the CLI.
+</details>
+
+<details>
+<summary>Will using OmniRank guarantee ChatGPT or Perplexity cites my site?</summary>
+
+No — publishing `llms.txt`, `llms-full.txt` and `facts.json` follows the community
+[llms.txt convention](https://llmstxt.org/) and grants an explicit citation licence, which
+removes a real barrier to a model quoting the content, but no engine's retrieval or
+citation behaviour is under OmniRank's control. Publishing them is a low-cost,
+evidence-backed bet, not a guarantee.
+</details>
+
+<details>
+<summary>Can I run an audit without writing a config file first?</summary>
+
+Yes, for both commands — `omnirank audit <url>` and `omnirank geo <url>` both work with
+just a URL, using an in-memory default config. A config file is required only for CI
+gating with a committed `audit.failOn`, first-party facts (`nap`, `identifiers`,
+`statistics`), or anything the roadmap skills will eventually read from `secrets`.
+</details>
+
+<details>
+<summary>Why does my site score 0 on one layer?</summary>
+
+A layer scores 0 when its error and warning cost meets or exceeds 100 —
+`max(0, 100 - 10*errors - 3*warnings)` floors at zero. Ten or more error-severity findings
+in one layer is enough on its own. A brand-new site missing a `<title>`, canonical tag,
+JSON-LD, and `llms.txt` will commonly hit this on the GEO layer alone, since each missing
+artifact is a separate error.
+</details>
+
+More questions, including secrets handling and where the JSON report schema lives, are
+answered in [docs/faq.md](docs/faq.md).
+
+## Documentation and guides
+
+Every page is verified against the v0.1.1 source, generated from the JSON Schema where
+applicable, and every command shown was actually run.
+
+| Guide | Covers |
+|---|---|
+| [docs/README.md](docs/README.md) | Documentation index and reading order by task |
+| [getting-started.md](docs/getting-started.md) | Zero-to-first-audit: install, run, read the result, exit codes |
+| [configuration.md](docs/configuration.md) | Every `omnirank.config.json` field, with a complete example |
+| [audit-guide.md](docs/audit-guide.md) | The `audit` skill in depth: every gate, the scoring formula, a worked example |
+| [geo-artifacts-guide.md](docs/geo-artifacts-guide.md) | Generating the three GEO artifacts and the OpenNext/CloudFront 403 trap |
+| [ci-integration.md](docs/ci-integration.md) | GitHub Actions, GitLab CI, shell examples, and choosing `--fail-on` gates |
+| [claude-code-setup.md](docs/claude-code-setup.md) | Installing as a Claude Code plugin and the real trigger phrases per skill |
+| [troubleshooting.md](docs/troubleshooting.md) | Real error text for likely failures, with the fix for each |
+| [faq.md](docs/faq.md) | 16 direct, honest answers, including what OmniRank does not do |
+
+## Contributing
+
+Read [CONTRIBUTING.md](.github/CONTRIBUTING.md) before opening a pull request — it covers
+the non-negotiables (real-only data, never claiming an unevaluated gate passed, `env:`
+secrets only) and the test-driven workflow this project enforces on itself.
+
+If OmniRank caught something on your site that you'd otherwise have shipped broken, a star
+helps the next person searching "AEO audit tool" find it too — that's the only ask.
 
 ## Credits & Standards
 
@@ -129,9 +399,11 @@ OmniRank implements and builds on public standards and published research:
 - [IndexNow](https://www.indexnow.org/) — instant indexing protocol
 - [llms.txt](https://llmstxt.org/) — the proposal for AI-readable site indexes
 - [Sitemaps XML](https://www.sitemaps.org/) and the Robots Exclusion Protocol (RFC 9309)
-- **arXiv 2311.09735** — *GEO: Generative Engine Optimization* (Princeton, KDD 2024). Source
-  of the finding that statistics, quotations and cited primary sources lift AI visibility.
-- **arXiv 2509.10762** — *GEO-16*, generative-engine optimisation criteria
+- [**arXiv 2311.09735**](https://arxiv.org/abs/2311.09735) — *GEO: Generative Engine
+  Optimization* (Princeton, KDD 2024). Source of the finding that statistics, quotations
+  and cited primary sources lift AI visibility.
+- [**arXiv 2509.10762**](https://arxiv.org/abs/2509.10762) — *GEO-16*, generative-engine
+  optimisation criteria
 - **Ahrefs** — AI-search and brand-mention correlation studies
 - **Seer Interactive** — ChatGPT / Bing citation-overlap analysis
 
@@ -139,8 +411,8 @@ Correlations from that research are observational, drawn largely from English-la
 datasets, and are treated as directional. Validate empirically per site.
 
 Built and maintained by [S M Moshiur Rahman](https://github.com/bemoshiur) at
-[Public Pulse Agency](https://publicpulse.com.bd), Dhaka — across
-publicpulse.com.bd, tenderpulse.com.bd and pulsetoday.com.bd.
+[Public Pulse Agency](https://publicpulse.com.bd), Dhaka — across publicpulse.com.bd,
+tenderpulse.com.bd and pulsetoday.com.bd.
 
 ## Contact
 
@@ -148,15 +420,14 @@ publicpulse.com.bd, tenderpulse.com.bd and pulsetoday.com.bd.
 
 | | |
 |---|---|
-| 💬 **WhatsApp** | **[+880 1717 714676](https://wa.me/8801717714676)** — fastest for project discussion |
+| 💬 WhatsApp | **[+880 1717 714676](https://wa.me/8801717714676)** — fastest for project discussion |
 | ✉️ Email | [moshiur@publicpulse.com.bd](mailto:moshiur@publicpulse.com.bd) |
 | 🌐 Web | [publicpulse.com.bd](https://publicpulse.com.bd) |
 | 💻 GitHub | [@bemoshiur](https://github.com/bemoshiur) |
 
-For bugs and feature requests, please use
-[Issues](https://github.com/bemoshiur/OmniRank/issues/new/choose) rather than direct
-message — it keeps the answer searchable for the next person. For consulting,
-partnerships, or anything project-specific, WhatsApp gets the quickest reply.
+For bugs and feature requests, use [Issues](https://github.com/bemoshiur/OmniRank/issues/new/choose)
+rather than direct message — it keeps the answer searchable for the next person. For
+consulting, partnerships, or anything project-specific, WhatsApp gets the quickest reply.
 
 ## Licence
 
