@@ -69,23 +69,34 @@ def _band_from(raw: dict, path: str) -> Band:
 
 
 def resolve_band(lang: str | None, config: Config) -> Band:
-    """The band for this page: config byScript, then config default, then builtin."""
+    """The band for this page.
+
+    Precedence, most specific first:
+      1. config aeo.answerBlock.byScript[script]  — explicit per-script override
+      2. builtin band for that script             — script-specific, beats a
+                                                    script-agnostic default
+      3. config aeo.answerBlock.default           — the site's own general band
+      4. DEFAULT_BAND
+
+    A builtin outranks the config default deliberately: `default` is
+    script-agnostic, and a words band cannot validly apply to a script with no
+    word separators. A site that genuinely wants to override CJK sets
+    byScript.cjk explicitly.
+    """
     answer_block = config.raw.get("aeo", {}).get("answerBlock", {})
     script = script_of(lang)
 
     by_script = answer_block.get("byScript", {})
     if script in by_script:
-        return _band_from(
-            by_script[script], f"aeo.answerBlock.byScript.{script}"
-        )
+        return _band_from(by_script[script], f"aeo.answerBlock.byScript.{script}")
 
-    if script in _BUILTIN_BY_SCRIPT and "byScript" not in answer_block:
+    if script in _BUILTIN_BY_SCRIPT:
         return _BUILTIN_BY_SCRIPT[script]
 
     if "default" in answer_block:
         return _band_from(answer_block["default"], "aeo.answerBlock.default")
 
-    return _BUILTIN_BY_SCRIPT.get(script, DEFAULT_BAND)
+    return DEFAULT_BAND
 
 
 def measure(text: str, band: Band) -> int:
