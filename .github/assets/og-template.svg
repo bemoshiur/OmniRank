@@ -1,55 +1,217 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="OmniRank — One page. Every engine.">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0B1120"/>
+      <stop offset="0%" stop-color="#070B16"/>
       <stop offset="55%" stop-color="#111C33"/>
-      <stop offset="100%" stop-color="#0A0F1C"/>
+      <stop offset="100%" stop-color="#080C1A"/>
     </linearGradient>
     <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#38BDF8"/>
-      <stop offset="50%" stop-color="#818CF8"/>
+      <stop offset="33%" stop-color="#818CF8"/>
+      <stop offset="66%" stop-color="#C084FC"/>
       <stop offset="100%" stop-color="#F472B6"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.28"/>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#131F3B"/>
+      <stop offset="100%" stop-color="#0A0F20"/>
+    </linearGradient>
+    <radialGradient id="glowCyan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.30"/>
       <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
     </radialGradient>
+    <radialGradient id="glowPink" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#F472B6" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#F472B6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowAmber" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FBBF24" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#FBBF24" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" fill="none" stroke="#1B2740" stroke-width="1"/>
+    </pattern>
+    <filter id="blurTight" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <filter id="blurCard" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
   </defs>
 
+  <!-- base field -->
   <rect width="1280" height="640" fill="url(#bg)"/>
-  <circle cx="1030" cy="150" r="330" fill="url(#glow)"/>
+  <rect width="1280" height="640" fill="url(#grid)" opacity="0.55"/>
+  <circle cx="1120" cy="120" r="360" fill="url(#glowCyan)"/>
+  <circle cx="210" cy="600" r="320" fill="url(#glowPink)"/>
+  <circle cx="760" cy="420" r="420" fill="url(#glowAmber)"/>
 
-  <g stroke="#1E293B" stroke-width="1" opacity="0.55">
-    <path d="M0 160H1280M0 320H1280M0 480H1280"/>
-    <path d="M320 0V640M640 0V640M960 0V640"/>
+  <!-- header: mark + wordmark -->
+  <g transform="translate(64,56)">
+    <rect width="64" height="64" rx="16" fill="url(#panel)" stroke="url(#accent)" stroke-width="2"/>
+    <g stroke-linecap="round">
+      <line x1="32" y1="10" x2="32" y2="24" stroke="#38BDF8" stroke-width="4"/>
+      <line x1="54" y1="32" x2="40" y2="32" stroke="#818CF8" stroke-width="4"/>
+      <line x1="32" y1="54" x2="32" y2="40" stroke="#C084FC" stroke-width="4"/>
+      <line x1="10" y1="32" x2="24" y2="32" stroke="#F472B6" stroke-width="4"/>
+    </g>
+    <circle cx="32" cy="32" r="6.5" fill="#F8FAFC"/>
   </g>
 
-  <g transform="translate(88, 150)">
-    <rect x="0" y="0" width="60" height="60" rx="14" fill="url(#accent)"/>
-    <path d="M16 42V26M30 42V16M44 42V32" stroke="#0B1120" stroke-width="7" stroke-linecap="round"/>
+  <text x="146" y="118" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="76" font-weight="800" fill="#F8FAFC" letter-spacing="-2.5">OmniRank</text>
+
+  <text x="64" y="186" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="30" font-weight="600" fill="url(#accent)">One page. Every engine.</text>
+
+  <text x="64" y="222" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="19" fill="#93A1BE">Audit any site. Generate llms.txt + facts.json.</text>
+
+  <!-- the page: one document, four layers -->
+  <rect x="58" y="252" width="296" height="332" rx="26" fill="#F472B6" opacity="0.10" filter="url(#blurCard)"/>
+  <rect x="64" y="246" width="284" height="332" rx="22" fill="url(#panel)" stroke="#243352" stroke-width="1.5"/>
+
+  <circle cx="90" cy="281" r="4.5" fill="#5B6B8C"/>
+  <rect x="84" y="266" width="244" height="30" rx="15" fill="none" stroke="#243352" stroke-width="1.5"/>
+  <rect x="102" y="278" width="176" height="6" rx="3" fill="#2B3A5C"/>
+
+  <!-- SEO -->
+  <g transform="translate(0,300)">
+    <rect x="84" y="0" width="4" height="54" rx="2" fill="#38BDF8"/>
+    <rect x="96" y="0" width="232" height="54" rx="27" fill="#38BDF8" fill-opacity="0.10" stroke="#38BDF8" stroke-width="2"/>
+    <circle cx="120" cy="25" r="7" fill="none" stroke="#38BDF8" stroke-width="2.2"/>
+    <line x1="125" y1="30" x2="131" y2="36" stroke="#38BDF8" stroke-width="2.6" stroke-linecap="round"/>
+    <text x="142" y="37" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="28" font-weight="800" fill="#38BDF8">SEO</text>
+    <text x="316" y="36" text-anchor="end" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#CBD5E1" opacity="0.6">Search</text>
   </g>
 
-  <text x="88" y="292" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#F8FAFC" letter-spacing="-2">OmniRank</text>
-
-  <text x="88" y="352" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="500" fill="url(#accent)">One page. Every engine.</text>
-
-  <text x="88" y="410" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#94A3B8">Audit any site. Feed the answer engines.</text>
-
-  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" font-weight="600" text-anchor="middle">
-    <rect x="88" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#38BDF8" stroke-width="2"/>
-    <text x="149" y="485" fill="#38BDF8">SEO</text>
-
-    <rect x="226" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#818CF8" stroke-width="2"/>
-    <text x="287" y="485" fill="#818CF8">AEO</text>
-
-    <rect x="364" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#C084FC" stroke-width="2"/>
-    <text x="425" y="485" fill="#C084FC">GEO</text>
-
-    <rect x="502" y="452" width="122" height="52" rx="26" fill="#0F1B33" stroke="#F472B6" stroke-width="2"/>
-    <text x="563" y="485" fill="#F472B6">SMM</text>
+  <!-- AEO -->
+  <g transform="translate(0,368)">
+    <rect x="84" y="0" width="4" height="54" rx="2" fill="#818CF8"/>
+    <rect x="96" y="0" width="232" height="54" rx="27" fill="#818CF8" fill-opacity="0.10" stroke="#818CF8" stroke-width="2"/>
+    <rect x="112" y="19" width="17" height="12" rx="4" fill="#818CF8" fill-opacity="0.9"/>
+    <path d="M116 31 L123 31 L118 37 Z" fill="#818CF8" fill-opacity="0.9"/>
+    <text x="142" y="37" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="28" font-weight="800" fill="#818CF8">AEO</text>
+    <text x="316" y="36" text-anchor="end" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#CBD5E1" opacity="0.6">Answers</text>
   </g>
 
-  <text x="88" y="566" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" fill="#64748B">github.com/bemoshiur/OmniRank  ·  publicpulse.com.bd</text>
+  <!-- GEO -->
+  <g transform="translate(0,436)">
+    <rect x="84" y="0" width="4" height="54" rx="2" fill="#C084FC"/>
+    <rect x="96" y="0" width="232" height="54" rx="27" fill="#C084FC" fill-opacity="0.10" stroke="#C084FC" stroke-width="2"/>
+    <circle cx="120" cy="25" r="3" fill="#C084FC"/>
+    <ellipse cx="120" cy="25" rx="11" ry="5" fill="none" stroke="#C084FC" stroke-width="1.6" transform="rotate(-25 120 25)"/>
+    <text x="142" y="37" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="28" font-weight="800" fill="#C084FC">GEO</text>
+    <text x="316" y="36" text-anchor="end" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#CBD5E1" opacity="0.6">Generative</text>
+  </g>
 
-  <rect x="0" y="632" width="1280" height="8" fill="url(#accent)"/>
+  <!-- SMM -->
+  <g transform="translate(0,504)">
+    <rect x="84" y="0" width="4" height="54" rx="2" fill="#F472B6"/>
+    <rect x="96" y="0" width="232" height="54" rx="27" fill="#F472B6" fill-opacity="0.10" stroke="#F472B6" stroke-width="2"/>
+    <circle cx="116" cy="31" r="2.2" fill="#F472B6"/>
+    <path d="M119 28 A6 6 0 0 1 124 22" stroke="#F472B6" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M122 32 A11 11 0 0 1 130 18" stroke="#F472B6" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+    <text x="142" y="37" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="28" font-weight="800" fill="#F472B6">SMM</text>
+    <text x="316" y="36" text-anchor="end" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#CBD5E1" opacity="0.6">Social</text>
+  </g>
+
+  <!-- fan-out: the page, read by every engine -->
+  <circle cx="348" cy="412" r="16" fill="#F8FAFC" opacity="0.20" filter="url(#blurTight)"/>
+  <circle cx="348" cy="412" r="6.5" fill="#F8FAFC"/>
+
+  <g fill="none" stroke-linecap="round">
+    <path d="M348,412 C613,412 713,247 978,247" stroke="#FBBF24" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,247 978,247" stroke="#FBBF24" stroke-width="2" opacity="0.75"/>
+
+    <path d="M348,412 C613,412 713,302 978,302" stroke="#34D399" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,302 978,302" stroke="#34D399" stroke-width="2" opacity="0.75"/>
+
+    <path d="M348,412 C613,412 713,357 978,357" stroke="#22D3EE" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,357 978,357" stroke="#22D3EE" stroke-width="2" opacity="0.75"/>
+
+    <path d="M348,412 C613,412 713,412 978,412" stroke="#FB7185" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,412 978,412" stroke="#FB7185" stroke-width="2" opacity="0.75"/>
+
+    <path d="M348,412 C613,412 713,467 978,467" stroke="#A3E635" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,467 978,467" stroke="#A3E635" stroke-width="2" opacity="0.75"/>
+
+    <path d="M348,412 C613,412 713,522 978,522" stroke="#A78BFA" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,522 978,522" stroke="#A78BFA" stroke-width="2" opacity="0.75"/>
+
+    <path d="M348,412 C613,412 713,577 978,577" stroke="#F97316" stroke-width="6" opacity="0.14" filter="url(#blurTight)"/>
+    <path d="M348,412 C613,412 713,577 978,577" stroke="#F97316" stroke-width="2" opacity="0.75"/>
+  </g>
+
+  <!-- Google -->
+  <g>
+    <circle cx="1000" cy="247" r="27" fill="#FBBF24" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="247" r="22" fill="#0B1326" stroke="#FBBF24" stroke-width="2"/>
+    <circle cx="1000" cy="247" r="8" fill="none" stroke="#FBBF24" stroke-width="2.2"/>
+    <circle cx="1000" cy="247" r="2.6" fill="#FBBF24"/>
+    <text x="1036" y="255" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">Google</text>
+  </g>
+
+  <!-- Bing -->
+  <g>
+    <circle cx="1000" cy="302" r="27" fill="#34D399" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="302" r="22" fill="#0B1326" stroke="#34D399" stroke-width="2"/>
+    <path d="M994,294 L1008,302 L994,310 Z" fill="#34D399"/>
+    <text x="1036" y="310" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">Bing</text>
+  </g>
+
+  <!-- ChatGPT -->
+  <g>
+    <circle cx="1000" cy="357" r="27" fill="#22D3EE" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="357" r="22" fill="#0B1326" stroke="#22D3EE" stroke-width="2"/>
+    <path d="M1000,349 L1006.9,353 L1006.9,361 L1000,365 L993.1,361 L993.1,353 Z" fill="none" stroke="#22D3EE" stroke-width="2"/>
+    <text x="1036" y="365" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">ChatGPT</text>
+  </g>
+
+  <!-- Claude -->
+  <g>
+    <circle cx="1000" cy="412" r="27" fill="#FB7185" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="412" r="22" fill="#0B1326" stroke="#FB7185" stroke-width="2"/>
+    <rect x="993" y="408" width="2.6" height="8" rx="1.3" fill="#FB7185"/>
+    <rect x="998.8" y="405" width="2.6" height="14" rx="1.3" fill="#FB7185"/>
+    <rect x="1004.6" y="407" width="2.6" height="10" rx="1.3" fill="#FB7185"/>
+    <text x="1036" y="420" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">Claude</text>
+  </g>
+
+  <!-- Perplexity -->
+  <g>
+    <circle cx="1000" cy="467" r="27" fill="#A3E635" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="467" r="22" fill="#0B1326" stroke="#A3E635" stroke-width="2"/>
+    <path d="M1000,458 L1009,467 L1000,476 L991,467 Z" fill="none" stroke="#A3E635" stroke-width="2"/>
+    <text x="1036" y="475" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">Perplexity</text>
+  </g>
+
+  <!-- Gemini -->
+  <g>
+    <circle cx="1000" cy="522" r="27" fill="#A78BFA" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="522" r="22" fill="#0B1326" stroke="#A78BFA" stroke-width="2"/>
+    <circle cx="996" cy="522" r="6" fill="none" stroke="#A78BFA" stroke-width="1.8"/>
+    <circle cx="1004" cy="522" r="6" fill="none" stroke="#A78BFA" stroke-width="1.8"/>
+    <text x="1036" y="530" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">Gemini</text>
+  </g>
+
+  <!-- Copilot -->
+  <g>
+    <circle cx="1000" cy="577" r="27" fill="#F97316" opacity="0.22" filter="url(#blurTight)"/>
+    <circle cx="1000" cy="577" r="22" fill="#0B1326" stroke="#F97316" stroke-width="2"/>
+    <path d="M993,581 L1000,571 L1007,581" fill="none" stroke="#F97316" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1036" y="585" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#E7ECF5">Copilot</text>
+  </g>
+
+  <!-- footer -->
+  <text x="64" y="598" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" fill="#5B6B8C">github.com/bemoshiur/OmniRank<tspan fill="#3A4664">   ·   </tspan>publicpulse.com.bd</text>
+
+  <!-- corner brackets: audit / scan motif -->
+  <g stroke="#38BDF8" stroke-width="2" opacity="0.35" fill="none">
+    <path d="M28,52 V28 H52"/>
+    <path d="M1228,588 V612 H1252"/>
+  </g>
+  <g stroke="#F472B6" stroke-width="2" opacity="0.35" fill="none">
+    <path d="M1252,28 H1228 V52"/>
+    <path d="M52,612 H28 V588"/>
+  </g>
+
+  <rect x="0" y="0" width="1280" height="4" fill="url(#accent)"/>
+  <rect x="0" y="636" width="1280" height="4" fill="url(#accent)"/>
 </svg>
