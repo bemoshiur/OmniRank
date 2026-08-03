@@ -3,6 +3,7 @@ import respx
 
 from omnirank.audit import audit_site, default_config
 from omnirank.fetch import make_client
+from omnirank.report import Report
 
 SITE = "https://x.example"
 
@@ -92,3 +93,25 @@ def test_falls_back_to_root_when_sitemap_absent():
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
     report = audit_site(default_config(SITE), make_client())
     assert report.urls_checked == 1
+
+
+@respx.mock
+def test_audit_collects_pages_for_the_site_pass():
+    from omnirank.audit import _collect
+
+    mock_site()
+    pages = _collect(make_client(), [f"{SITE}/"], Report(site=SITE, kind="audit"))
+    assert len(pages) == 1
+    assert pages[0].url == f"{SITE}/"
+    assert "<h1>" in pages[0].html
+
+
+@respx.mock
+def test_unreachable_pages_are_not_collected_but_are_reported():
+    from omnirank.audit import _collect
+
+    mock_site(page_status=500)
+    report = Report(site=SITE, kind="audit")
+    pages = _collect(make_client(), [f"{SITE}/"], report)
+    assert pages == [], "a page that could not be fetched must not enter the site pass"
+    assert any(f.id == "seo.page.unreachable" for f in report.findings)
