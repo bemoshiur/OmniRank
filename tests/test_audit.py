@@ -200,15 +200,43 @@ def test_site_pass_sees_duplicates_across_urls():
     assert "seo.duplicate-description.shared" in found
 
 
-@respx.mock
-def test_report_still_validates_with_the_new_layers():
+def test_report_validates_with_every_new_v0_2_0_finding_shape():
+    # S10: the previous version of this test validated against mock_site()'s CLEAN
+    # fixture, so `findings` was always empty — it validated the *shape* of a report
+    # with no findings, never the actual shape of a perf.* or seo.duplicate-* (or any
+    # other new-in-0.2.0) finding against the schema's `id` pattern and required
+    # fields. Build one finding of every id introduced in 0.2.0 instead, with a
+    # FormatChecker attached so `generatedAt`'s date-time format is checked too.
     import json
     from pathlib import Path
 
     from jsonschema import Draft202012Validator, FormatChecker
 
-    mock_site()
-    report = audit_site(default_config(SITE), make_client())
+    from omnirank.report import Finding, Report
+
+    def new_finding(id_: str, gate: str, layer: str, severity: str = "warning") -> Finding:
+        return Finding(id=id_, severity=severity, layer=layer, url=f"{SITE}/",
+                      gate=gate, observed="observed", expected="expected", fix="fix")
+
+    report = Report(site=SITE, kind="audit")
+    report.layers_run.update({"seo", "aeo", "geo", "perf"})
+    report.urls_checked = 1
+    for f in (
+        new_finding("seo.duplicate-title.shared", "duplicate-title", "seo"),
+        new_finding("seo.duplicate-description.shared", "duplicate-description", "seo"),
+        new_finding("seo.noindex.in-sitemap", "noindex-in-sitemap", "seo", "error"),
+        new_finding("seo.canonical.chained", "canonical-cluster", "seo"),
+        new_finding("seo.hreflang.not-reciprocal", "hreflang-reciprocity", "seo"),
+        new_finding("perf.response-time.slow", "response-time", "perf"),
+        new_finding("perf.response-time.critical", "response-time", "perf", "error"),
+        new_finding("perf.page-weight.heavy", "page-weight", "perf"),
+        new_finding("perf.compression.missing", "compression", "perf"),
+        new_finding("perf.render-blocking.head-scripts", "render-blocking", "perf"),
+    ):
+        report.add(f)
+
+    assert len(report.findings) == 10, "one finding for every id introduced in 0.2.0"
+
     schema = json.loads(
         (Path(__file__).resolve().parents[1] / "schemas" / "report.schema.json").read_text())
     errors = list(Draft202012Validator(schema, format_checker=FormatChecker())
