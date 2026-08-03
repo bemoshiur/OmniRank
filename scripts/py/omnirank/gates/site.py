@@ -53,6 +53,48 @@ def _duplicates(pages: list[PageData], extract, id_: str, gate: str,
     return findings
 
 
+_ROBOTS_META_NAMES = ("robots", "googlebot")
+
+
+def _canonical_key(url: str) -> str:
+    """Compare URLs ignoring a trailing slash, which sitemaps and markup disagree on."""
+    return url.rstrip("/")
+
+
+def _is_noindex(page: PageData) -> bool:
+    """True when any robots meta carries the noindex token.
+
+    Token-based, not substring — "noindexing" is not a directive.
+    """
+    for name in _ROBOTS_META_NAMES:
+        tag = page.soup().find("meta", attrs={"name": lambda v, n=name: (
+            v is not None and v.strip().lower() == n)})
+        if not tag:
+            continue
+        content = (tag.get("content") or "").lower()
+        if "noindex" in [token.strip() for token in content.split(",")]:
+            return True
+    return False
+
+
+def _noindex_in_sitemap(pages: list[PageData],
+                        sitemap_urls: list[str] | None) -> list[Finding]:
+    if not sitemap_urls:
+        return []
+    listed = {_canonical_key(u) for u in sitemap_urls}
+    findings: list[Finding] = []
+    for page in pages:
+        if _canonical_key(page.url) in listed and _is_noindex(page):
+            findings.append(_f(
+                "seo.noindex.in-sitemap", "noindex-in-sitemap", page.url, "error",
+                "page is listed in sitemap.xml but carries a noindex directive",
+                "either indexable and listed, or noindexed and unlisted",
+                "Remove the noindex meta, or drop this URL from the sitemap. "
+                "Submitting a page for indexing while forbidding indexing wastes "
+                "crawl budget and signals a misconfiguration."))
+    return findings
+
+
 def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Finding]:
     """Cross-URL gates. Needs the whole page collection, unlike the per-URL gates."""
     return [
@@ -60,4 +102,5 @@ def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Fi
                      "duplicate-title", "title"),
         *_duplicates(pages, _description_of, "seo.duplicate-description.shared",
                      "duplicate-description", "meta description"),
+        *_noindex_in_sitemap(pages, sitemap_urls),
     ]
