@@ -146,3 +146,57 @@ def test_trailing_slash_is_normalised_when_matching_targets():
     pages = [page("/a", title="A", extra_head=canon(f"{SITE}/b/")),
              page("/b", title="B", extra_head=canon(f"{SITE}/b"))]
     assert "seo.canonical.chained" not in ids(site.run(pages))
+
+
+def alts(pairs: list[tuple[str, str]]) -> str:
+    return "".join(
+        f'<link rel="alternate" hreflang="{lang}" href="{href}">' for lang, href in pairs)
+
+
+def test_reciprocal_hreflang_is_fine():
+    pages = [
+        page("/en", title="EN", lang="en",
+             extra_head=alts([("en", f"{SITE}/en"), ("bn", f"{SITE}/bn")])),
+        page("/bn", title="BN", lang="bn",
+             extra_head=alts([("en", f"{SITE}/en"), ("bn", f"{SITE}/bn")])),
+    ]
+    assert "seo.hreflang.not-reciprocal" not in ids(site.run(pages))
+
+
+def test_one_way_hreflang_is_flagged():
+    pages = [
+        page("/en", title="EN", lang="en",
+             extra_head=alts([("bn", f"{SITE}/bn")])),
+        page("/bn", title="BN", lang="bn"),          # declares nothing back
+    ]
+    found = [f for f in site.run(pages) if f.id == "seo.hreflang.not-reciprocal"]
+    assert found and found[0].severity == "warning"
+    assert found[0].gate == "hreflang-reciprocity"
+    assert f"{SITE}/bn" in found[0].observed
+
+
+def test_alternate_outside_the_crawled_set_is_not_judged():
+    pages = [page("/en", title="EN",
+                  extra_head=alts([("fr", "https://elsewhere.example/fr")]))]
+    assert "seo.hreflang.not-reciprocal" not in ids(site.run(pages))
+
+
+def test_self_referential_alternate_needs_no_partner():
+    pages = [page("/en", title="EN", extra_head=alts([("en", f"{SITE}/en")]))]
+    assert "seo.hreflang.not-reciprocal" not in ids(site.run(pages))
+
+
+def test_x_default_is_exempt_from_reciprocity():
+    pages = [
+        page("/en", title="EN", extra_head=alts([("x-default", f"{SITE}/en"),
+                                                 ("bn", f"{SITE}/bn")])),
+        page("/bn", title="BN", extra_head=alts([("en", f"{SITE}/en"),
+                                                 ("bn", f"{SITE}/bn")])),
+    ]
+    findings = [f for f in site.run(pages) if f.id == "seo.hreflang.not-reciprocal"]
+    assert findings == [], "x-default is a fallback pointer, not a language pair"
+
+
+def test_pages_without_hreflang_are_ignored():
+    assert "seo.hreflang.not-reciprocal" not in ids(
+        site.run([page("/a"), page("/b")]))

@@ -133,6 +133,48 @@ def _canonical_chains(pages: list[PageData]) -> list[Finding]:
     return findings
 
 
+def _alternates(page: PageData) -> dict[str, str]:
+    """hreflang -> href for this page, excluding x-default."""
+    out: dict[str, str] = {}
+    for tag in page.soup().find_all("link", rel="alternate", hreflang=True):
+        lang = (tag.get("hreflang") or "").strip().lower()
+        href = (tag.get("href") or "").strip()
+        if lang and href and lang != "x-default":
+            out[lang] = href
+    return out
+
+
+def _hreflang_reciprocity(pages: list[PageData]) -> list[Finding]:
+    """Flag A -> B where B does not declare A back.
+
+    Engines discard one-way hreflang entirely, so a site can appear to have
+    international targeting configured while receiving none of its benefit.
+    x-default is a fallback pointer rather than a language pair and is exempt.
+    """
+    by_key = {_canonical_key(p.url): p for p in pages}
+    findings: list[Finding] = []
+
+    for page in pages:
+        page_key = _canonical_key(page.url)
+        for _lang, href in sorted(_alternates(page).items()):
+            target_key = _canonical_key(href)
+            if target_key == page_key:
+                continue                              # self-reference is normal
+            target = by_key.get(target_key)
+            if target is None:
+                continue                              # outside the crawled set
+            back = {_canonical_key(h) for h in _alternates(target).values()}
+            if page_key not in back:
+                findings.append(_f(
+                    "seo.hreflang.not-reciprocal", "hreflang-reciprocity",
+                    page.url, "warning",
+                    f"declares an alternate at {href}, which does not link back",
+                    "every hreflang pair declared from both sides",
+                    f"Add <link rel=\"alternate\" hreflang=\"...\" href=\"{page.url}\"> "
+                    f"to {href}. Engines ignore one-way hreflang entirely."))
+    return findings
+
+
 def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Finding]:
     """Cross-URL gates. Needs the whole page collection, unlike the per-URL gates."""
     return [
@@ -142,4 +184,5 @@ def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Fi
                      "duplicate-description", "meta description"),
         *_noindex_in_sitemap(pages, sitemap_urls),
         *_canonical_chains(pages),
+        *_hreflang_reciprocity(pages),
     ]
