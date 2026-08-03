@@ -188,12 +188,17 @@ Free-form string map. **Schema-only** — validated, not read.
 | `sampleSize` | integer, minimum `0` | no | `200` | Maximum URLs pulled from the sitemap for a crawl. `0` means no limit. |
 | `failOn` | array of gate-name enum values | no | `[]` | Gate names that make `omnirank audit` exit `1` when they carry an error-severity finding. Overridden by the CLI's `--fail-on` flag whenever that flag is present at all, even with zero names. |
 
-`failOn`'s allowed values (20 gate names): `h1`, `canonical`, `title-length`,
+`failOn`'s allowed values (29 gate names): `h1`, `canonical`, `title-length`,
 `description-length`, `hreflang`, `og`, `image-dims`, `answer-block`, `faq`, `speakable`,
 `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `citation-licence`,
-`crawl-hygiene`, `sitemap-health`, `lastmod-inflation`, `schema`, `schema-fabrication`.
-Two of these — `crawl-hygiene` and `sitemap-health` — validate successfully but match no
-finding a plain `omnirank audit` run produces automatically; see
+`crawl-hygiene`, `sitemap-health`, `lastmod-inflation`, `schema`, `schema-fabrication`,
+`duplicate-title`, `duplicate-description`, `noindex-in-sitemap`, `canonical-cluster`,
+`hreflang-reciprocity`, `response-time`, `page-weight`, `compression`,
+`render-blocking`. Only one of these — `crawl-hygiene` — validates but matches no
+finding a plain `omnirank audit` run produces automatically. `sitemap-health` looks like
+it belongs in that bucket too but does not: an unreachable target is reported as an
+error under `gate: "sitemap-health"` through a different code path, so it can fail a
+build. See
 [[Audit-Skill#what-do-crawl-hygiene-and-sitemap-health-not-cover-automatically]].
 
 ## `smm`

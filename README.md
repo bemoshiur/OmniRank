@@ -142,9 +142,12 @@ Google" will not trigger anything, because `aeo-onpage` and `indexing` are not b
 
 ## Every gate OmniRank checks, grouped by layer
 
-29 gate names exist in the config schema; 15 can fail a build, 12 are warning-only by
-design, and 2 are schema-accepted but not yet wired into the automatic pipeline. Full
-detail, including which gates can never trip `--fail-on`, is in
+29 gate names exist in the config schema; 16 can fail a build, 12 are warning-only by
+design, and 1 (`crawl-hygiene`) is schema-accepted but its dedicated check is not wired
+into the automatic pipeline — `sitemap-health` looks like it belongs in that bucket too
+(its own dedicated check is equally unwired) but is not actually inert: an unreachable
+target reports its error under `gate: "sitemap-health"` through a different code path, so
+it can fail a build. Full detail, including which gates can never trip `--fail-on`, is in
 [audit-guide.md](docs/audit-guide.md#gate-reference) and
 [ci-integration.md](docs/ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap).
 
@@ -273,9 +276,9 @@ jobs:
 
 Picking `--fail-on h1 canonical schema` (structural baseline) is a better starting point
 than listing all 29 gate names — 12 of them are warning-only and can never fail a build,
-and 2 more are schema-accepted but not yet wired into the automatic pipeline. The full
-reasoning, plus a GitLab CI job and a generic shell script, is in
-[ci-integration.md](docs/ci-integration.md).
+and 1 more (`crawl-hygiene`) is schema-accepted but its dedicated check is not wired into
+the automatic pipeline. The full reasoning, plus a GitLab CI job and a generic shell
+script, is in [ci-integration.md](docs/ci-integration.md).
 
 ## Design principles
 

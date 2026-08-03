@@ -202,17 +202,23 @@ Type: object, free-form string map. **Status: Schema-only** — validated, not r
 | `sampleSize` | integer, minimum `0` | no | `200` | Maximum URLs pulled from the sitemap for a crawl. `0` means no limit — every sitemap URL is checked. |
 | `failOn` | array of gate-name enum values | no | `[]` | Gate names that make `omnirank audit` exit `1` when they carry an error-severity finding. Overridden by the CLI's `--fail-on` flag when that flag is present at all (even with zero names). |
 
-`failOn`'s allowed values (the full gate-name enum): `h1`, `canonical`, `title-length`,
-`description-length`, `hreflang`, `og`, `image-dims`, `answer-block`, `faq`, `speakable`,
-`llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `citation-licence`,
-`crawl-hygiene`, `sitemap-health`, `lastmod-inflation`, `schema`, `schema-fabrication`.
+`failOn`'s allowed values (the full 29-name gate enum): `h1`, `canonical`,
+`title-length`, `description-length`, `hreflang`, `og`, `image-dims`, `answer-block`,
+`faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`,
+`citation-licence`, `crawl-hygiene`, `sitemap-health`, `lastmod-inflation`, `schema`,
+`schema-fabrication`, `duplicate-title`, `duplicate-description`, `noindex-in-sitemap`,
+`canonical-cluster`, `hreflang-reciprocity`, `response-time`, `page-weight`,
+`compression`, `render-blocking`.
 
-Two of these — `crawl-hygiene` and `sitemap-health` — validate successfully but currently
-match **no finding a plain `omnirank audit` run ever produces**: the checks that would
-emit them (`hygiene.check_removed()`, `hygiene.check_sitemap()`) are real, tested Python
-functions, but `audit_site()` does not call them automatically — see
-[audit-guide.md](audit-guide.md#gate-reference) for the full explanation. Listing them in
-`failOn` is harmless, just currently inert.
+Only one of these — `crawl-hygiene` — validates successfully but currently matches **no
+finding a plain `omnirank audit` run ever produces**: the check that would emit it
+(`hygiene.check_removed()`) is a real, tested Python function, but `audit_site()` does
+not call it automatically — see [audit-guide.md](audit-guide.md#gate-reference) for the
+full explanation. Listing it in `failOn` is harmless, just currently inert.
+`sitemap-health` looks like it belongs in the same bucket — its own dedicated check,
+`hygiene.check_sitemap()`, is equally unwired — but it is not actually inert: an
+unreachable target URL is reported as an error under `gate: "sitemap-health"` through a
+different code path (`_collect()` in `audit.py`), so it can and does fail a build.
 
 ## `smm`
 
