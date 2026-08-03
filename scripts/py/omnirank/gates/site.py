@@ -95,6 +95,44 @@ def _noindex_in_sitemap(pages: list[PageData],
     return findings
 
 
+def _canonical_target(page: PageData) -> str | None:
+    tag = page.soup().find("link", rel="canonical")
+    href = tag.get("href") if tag else None
+    return href.strip() if href else None
+
+
+def _canonical_chains(pages: list[PageData]) -> list[Finding]:
+    """Flag A -> B where B itself canonicalises somewhere else.
+
+    Engines may follow one hop and stop, stranding A's signals. Only pages in the
+    crawled set are judged: a canonical pointing outside it is unevaluated, and an
+    unevaluated gate is never reported as a finding.
+    """
+    canonical_of = {
+        _canonical_key(p.url): _canonical_target(p) for p in pages
+    }
+    findings: list[Finding] = []
+
+    for page in pages:
+        target = _canonical_target(page)
+        if not target:
+            continue                                  # per-URL gate's problem
+        target_key = _canonical_key(target)
+        if target_key == _canonical_key(page.url):
+            continue                                  # self-canonical, correct
+        if target_key not in canonical_of:
+            continue                                  # outside the crawled set
+        onward = canonical_of[target_key]
+        if onward and _canonical_key(onward) != target_key:
+            findings.append(_f(
+                "seo.canonical.chained", "canonical-cluster", page.url, "warning",
+                f"canonical points to {target}, which itself canonicalises to {onward}",
+                "a canonical pointing directly at a self-canonical page",
+                f"Point this page's canonical straight at {onward}. Engines may "
+                "follow only one hop, stranding this page's signals mid-chain."))
+    return findings
+
+
 def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Finding]:
     """Cross-URL gates. Needs the whole page collection, unlike the per-URL gates."""
     return [
@@ -103,4 +141,5 @@ def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Fi
         *_duplicates(pages, _description_of, "seo.duplicate-description.shared",
                      "duplicate-description", "meta description"),
         *_noindex_in_sitemap(pages, sitemap_urls),
+        *_canonical_chains(pages),
     ]
