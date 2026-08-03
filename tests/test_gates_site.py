@@ -102,3 +102,47 @@ def test_sitemap_urls_omitted_means_the_gate_does_not_run():
 def test_trailing_slash_difference_still_matches():
     pages = [page("/a", extra_head=NOINDEX)]
     assert "seo.noindex.in-sitemap" in ids(site.run(pages, [f"{SITE}/a/"]))
+
+
+def canon(target: str) -> str:
+    return f'<link rel="canonical" href="{target}">'
+
+
+def test_self_canonical_pages_are_fine():
+    pages = [page("/a", title="A", extra_head=canon(f"{SITE}/a")),
+             page("/b", title="B", extra_head=canon(f"{SITE}/b"))]
+    assert "seo.canonical.chained" not in ids(site.run(pages))
+
+
+def test_a_canonical_chain_is_flagged():
+    # /a -> /b, /b -> /c : following one hop from /a lands on a page that is
+    # itself canonicalised elsewhere
+    pages = [page("/a", title="A", extra_head=canon(f"{SITE}/b")),
+             page("/b", title="B", extra_head=canon(f"{SITE}/c")),
+             page("/c", title="C", extra_head=canon(f"{SITE}/c"))]
+    found = [f for f in site.run(pages) if f.id == "seo.canonical.chained"]
+    assert found and found[0].severity == "warning"
+    assert found[0].gate == "canonical-cluster"
+    assert f"{SITE}/a" == found[0].url
+
+
+def test_a_single_hop_to_a_self_canonical_target_is_fine():
+    pages = [page("/a", title="A", extra_head=canon(f"{SITE}/b")),
+             page("/b", title="B", extra_head=canon(f"{SITE}/b"))]
+    assert "seo.canonical.chained" not in ids(site.run(pages))
+
+
+def test_canonical_pointing_outside_the_crawled_set_is_not_judged():
+    pages = [page("/a", title="A", extra_head=canon("https://elsewhere.example/x"))]
+    assert "seo.canonical.chained" not in ids(site.run(pages)), (
+        "no evidence about an uncrawled target; never report an unevaluated gate")
+
+
+def test_missing_canonical_is_left_to_the_per_url_gate():
+    assert "seo.canonical.chained" not in ids(site.run([page("/a")]))
+
+
+def test_trailing_slash_is_normalised_when_matching_targets():
+    pages = [page("/a", title="A", extra_head=canon(f"{SITE}/b/")),
+             page("/b", title="B", extra_head=canon(f"{SITE}/b"))]
+    assert "seo.canonical.chained" not in ids(site.run(pages))
