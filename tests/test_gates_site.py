@@ -93,6 +93,19 @@ def test_noindex_matching_is_token_based_not_substring():
     assert "seo.noindex.in-sitemap" not in ids(site.run(pages, [f"{SITE}/a"]))
 
 
+# --- S3: noindex detection must handle space-separated directives and "none" ---
+
+def test_noindex_matching_handles_space_separated_directives():
+    pages = [page("/a", extra_head='<meta name="robots" content="noindex nofollow">')]
+    assert "seo.noindex.in-sitemap" in ids(site.run(pages, [f"{SITE}/a"]))
+
+
+def test_noindex_matching_recognises_the_none_token():
+    # "none" is Google's documented shorthand for "noindex, nofollow"
+    pages = [page("/a", extra_head='<meta name="robots" content="none">')]
+    assert "seo.noindex.in-sitemap" in ids(site.run(pages, [f"{SITE}/a"]))
+
+
 def test_sitemap_urls_omitted_means_the_gate_does_not_run():
     pages = [page("/a", extra_head=NOINDEX)]
     assert "seo.noindex.in-sitemap" not in ids(site.run(pages)), (
@@ -148,6 +161,27 @@ def test_trailing_slash_is_normalised_when_matching_targets():
     assert "seo.canonical.chained" not in ids(site.run(pages))
 
 
+# --- S1: relative hrefs must be resolved against the page's own URL ---
+
+def test_relative_canonical_is_resolved_against_the_page_url():
+    pages = [page("/a", title="A", extra_head=canon("/b")),
+             page("/b", title="B", extra_head=canon(f"{SITE}/c")),
+             page("/c", title="C", extra_head=canon(f"{SITE}/c"))]
+    found = [f for f in site.run(pages) if f.id == "seo.canonical.chained"]
+    assert found and found[0].url == f"{SITE}/a", (
+        "a relative canonical href must resolve against the page URL, not be "
+        "treated as pointing outside the crawled set")
+
+
+def test_canonical_rel_matching_is_case_insensitive():
+    # rel="Canonical" is exactly as valid as rel="canonical" per the HTML spec
+    pages = [page("/a", title="A", extra_head='<link rel="Canonical" href="/b">'),
+             page("/b", title="B", extra_head=canon(f"{SITE}/c")),
+             page("/c", title="C", extra_head=canon(f"{SITE}/c"))]
+    found = [f for f in site.run(pages) if f.id == "seo.canonical.chained"]
+    assert found and found[0].url == f"{SITE}/a"
+
+
 def alts(pairs: list[tuple[str, str]]) -> str:
     return "".join(
         f'<link rel="alternate" hreflang="{lang}" href="{href}">' for lang, href in pairs)
@@ -200,6 +234,52 @@ def test_x_default_is_exempt_from_reciprocity():
 def test_pages_without_hreflang_are_ignored():
     assert "seo.hreflang.not-reciprocal" not in ids(
         site.run([page("/a"), page("/b")]))
+
+
+# --- S1: relative hreflang hrefs must be resolved against the page's own URL ---
+
+def test_relative_back_link_is_recognised_as_reciprocal():
+    # /bn links back with a RELATIVE href — without urljoin() this compares as a
+    # different URL from the absolute SITE + "/en" key and is falsely reported
+    # non-reciprocal even though it genuinely does link back.
+    pages = [
+        page("/en", title="EN", lang="en", extra_head=alts([("bn", f"{SITE}/bn")])),
+        page("/bn", title="BN", lang="bn", extra_head=alts([("en", "/en")])),
+    ]
+    assert "seo.hreflang.not-reciprocal" not in ids(site.run(pages))
+
+
+def test_relative_alternate_missing_its_target_is_still_resolved_and_flagged():
+    pages = [
+        page("/en", title="EN", lang="en", extra_head=alts([("bn", "/bn")])),
+        page("/bn", title="BN", lang="bn"),          # declares nothing back
+    ]
+    found = [f for f in site.run(pages) if f.id == "seo.hreflang.not-reciprocal"]
+    assert found and f"{SITE}/bn" in found[0].observed
+
+
+def test_hreflang_alternate_rel_matching_is_case_insensitive():
+    pages = [
+        page("/en", title="EN", lang="en",
+             extra_head='<link rel="Alternate" hreflang="bn" href="/bn">'),
+        page("/bn", title="BN", lang="bn"),
+    ]
+    found = [f for f in site.run(pages) if f.id == "seo.hreflang.not-reciprocal"]
+    assert found and f"{SITE}/bn" in found[0].observed
+
+
+# --- S2: reciprocity must see every declared alternate, not just the last per lang ---
+
+def test_a_repeated_hreflang_value_does_not_drop_an_earlier_back_link():
+    # /bn declares hreflang="en" twice: once correctly back to /en, then again (a
+    # real markup bug) pointing somewhere irrelevant. A lang -> href map would
+    # keep only the last href and silently lose the genuine back-link.
+    pages = [
+        page("/en", title="EN", lang="en", extra_head=alts([("bn", f"{SITE}/bn")])),
+        page("/bn", title="BN", lang="bn",
+             extra_head=alts([("en", f"{SITE}/en"), ("en", f"{SITE}/elsewhere")])),
+    ]
+    assert "seo.hreflang.not-reciprocal" not in ids(site.run(pages))
 
 
 # --- B1: hreflang-paired translations must not be flagged as duplicate-title ---

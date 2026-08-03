@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from urllib.parse import urljoin
 
 from ..page import PageData
 from ..report import Finding
@@ -81,7 +82,11 @@ def _canonical_key(url: str) -> str:
 def _is_noindex(page: PageData) -> bool:
     """True when any robots meta carries the noindex token.
 
-    Token-based, not substring — "noindexing" is not a directive.
+    Token-based, not substring — "noindexing" is not a directive. Directives are
+    separated by commas per the meta-robots convention, but real-world markup also
+    space-separates them (`content="noindex nofollow"`), which Google honours
+    identically — both separators are split on. `none` is treated as noindex too:
+    it is Google's documented shorthand for `noindex, nofollow`.
     """
     for name in _ROBOTS_META_NAMES:
         tag = page.soup().find("meta", attrs={"name": lambda v, n=name: (
@@ -89,7 +94,8 @@ def _is_noindex(page: PageData) -> bool:
         if not tag:
             continue
         content = (tag.get("content") or "").lower()
-        if "noindex" in [token.strip() for token in content.split(",")]:
+        tokens = content.replace(",", " ").split()
+        if "noindex" in tokens or "none" in tokens:
             return True
     return False
 
@@ -112,10 +118,32 @@ def _noindex_in_sitemap(pages: list[PageData],
     return findings
 
 
+def _has_rel(tag, name: str) -> bool:
+    """True if `tag`'s rel attribute contains `name`, matched case-insensitively.
+
+    HTML rel keywords are case-insensitive (`rel="Canonical"` is exactly as valid
+    as `rel="canonical"`), and bs4 exposes `rel` as a list for <link>/<a> tags
+    since it is a space-separated token list per the HTML spec — this checks
+    membership in that list rather than string equality.
+    """
+    rel = tag.get("rel")
+    if rel is None:
+        return False
+    values = rel if isinstance(rel, list) else [rel]
+    return any(isinstance(v, str) and v.strip().lower() == name for v in values)
+
+
 def _canonical_target(page: PageData) -> str | None:
-    tag = page.soup().find("link", rel="canonical")
-    href = tag.get("href") if tag else None
-    return href.strip() if href else None
+    for tag in page.soup().find_all("link", href=True):
+        if not _has_rel(tag, "canonical"):
+            continue
+        href = tag["href"].strip()
+        if href:
+            # Resolved against the page's own URL: a canonical chain written with
+            # relative hrefs must compare correctly against other crawled URLs,
+            # which are always absolute.
+            return urljoin(page.url, href)
+    return None
 
 
 def _canonical_chains(pages: list[PageData]) -> list[Finding]:
@@ -150,14 +178,26 @@ def _canonical_chains(pages: list[PageData]) -> list[Finding]:
     return findings
 
 
-def _alternates(page: PageData) -> dict[str, str]:
-    """hreflang -> href for this page, excluding x-default."""
-    out: dict[str, str] = {}
-    for tag in page.soup().find_all("link", rel="alternate", hreflang=True):
+def _alternates(page: PageData) -> set[str]:
+    """The set of absolute hrefs this page declares as hreflang alternates.
+
+    A set of hrefs, not a lang -> href map: a page repeating one hreflang value
+    (a markup bug, but a real one seen in the wild) would otherwise keep only the
+    last href and silently drop a genuine back-link, failing reciprocity for a
+    pair that is in fact reciprocal. Hrefs are resolved with urljoin() against the
+    page's own URL, so a relative href (`href="/en/"`) compares correctly against
+    other crawled URLs instead of registering as a false non-reciprocal or a false
+    "outside the crawled set". x-default is excluded — it is a fallback pointer,
+    not a language pair. rel is matched case-insensitively via `_has_rel`.
+    """
+    out: set[str] = set()
+    for tag in page.soup().find_all("link", href=True):
+        if not _has_rel(tag, "alternate"):
+            continue
         lang = (tag.get("hreflang") or "").strip().lower()
-        href = (tag.get("href") or "").strip()
+        href = tag["href"].strip()
         if lang and href and lang != "x-default":
-            out[lang] = href
+            out.add(urljoin(page.url, href))
     return out
 
 
@@ -173,14 +213,14 @@ def _hreflang_reciprocity(pages: list[PageData]) -> list[Finding]:
 
     for page in pages:
         page_key = _canonical_key(page.url)
-        for _lang, href in sorted(_alternates(page).items()):
+        for href in sorted(_alternates(page)):
             target_key = _canonical_key(href)
             if target_key == page_key:
                 continue                              # self-reference is normal
             target = by_key.get(target_key)
             if target is None:
                 continue                              # outside the crawled set
-            back = {_canonical_key(h) for h in _alternates(target).values()}
+            back = {_canonical_key(h) for h in _alternates(target)}
             if page_key not in back:
                 findings.append(_f(
                     "seo.hreflang.not-reciprocal", "hreflang-reciprocity",
@@ -197,7 +237,7 @@ def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Fi
     # Built once and shared: _duplicates uses it to recognise an hreflang cluster,
     # _hreflang_reciprocity uses it to check the back-link.
     alternates = {
-        _canonical_key(p.url): {_canonical_key(href) for href in _alternates(p).values()}
+        _canonical_key(p.url): {_canonical_key(href) for href in _alternates(p)}
         for p in pages
     }
     return [
