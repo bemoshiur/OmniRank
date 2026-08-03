@@ -156,6 +156,27 @@ def test_perf_layer_is_declared_and_scored():
 
 
 @respx.mock
+def test_layers_that_never_ran_are_absent_when_every_target_404s():
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/llms.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(404))
+
+    report = audit_site(default_config(SITE), make_client())
+    score = report.score()
+
+    assert "aeo" not in score, (
+        "zero pages were parsed; aeo must not be scored a silent 100")
+    assert "perf" not in score, (
+        "zero pages were parsed; perf must not be scored a silent 100")
+    assert "seo" in score, "seo.page.unreachable and the sitemap gates always run"
+    assert "geo" in score, "geo probes site-level artifacts regardless of page fetches"
+    assert any(f.id == "seo.page.unreachable" for f in report.findings)
+
+
+@respx.mock
 def test_site_pass_sees_duplicates_across_urls():
     dup = ("<!doctype html><html lang='en'><head><title>Same</title>"
            '<meta name="description" content="Same.">'

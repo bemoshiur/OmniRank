@@ -200,3 +200,34 @@ def test_x_default_is_exempt_from_reciprocity():
 def test_pages_without_hreflang_are_ignored():
     assert "seo.hreflang.not-reciprocal" not in ids(
         site.run([page("/a"), page("/b")]))
+
+
+# --- B1: hreflang-paired translations must not be flagged as duplicate-title ---
+
+def test_full_hreflang_cluster_sharing_a_title_is_not_a_duplicate():
+    # kubernetes.io shape: /, /de/, /fr/, /zh-cn/, /ja/ all declare each other as
+    # hreflang alternates and all carry <title>Kubernetes</title>.
+    locales = [("en", "/"), ("de", "/de/"), ("fr", "/fr/"), ("zh-cn", "/zh-cn/"),
+               ("ja", "/ja/")]
+    pairs = [(lang, f"{SITE}{path}") for lang, path in locales]
+    pages = [page(path, title="Kubernetes", lang=lang, extra_head=alts(pairs))
+             for lang, path in locales]
+    assert "seo.duplicate-title.shared" not in ids(site.run(pages)), (
+        "hreflang exists precisely to stop engines consolidating paired translations; "
+        "flagging them as duplicates is backwards")
+
+
+def test_shared_title_with_no_hreflang_is_still_flagged():
+    pages = [page("/a", title="Same"), page("/b", title="Same")]
+    assert "seo.duplicate-title.shared" in ids(site.run(pages))
+
+
+def test_partial_hreflang_pairing_does_not_exempt_the_group():
+    # /a <-> /b are mutually paired, but /c shares the title and is not paired with
+    # either — the cluster does not cover the whole duplicate group, so it still fires.
+    pages = [
+        page("/a", title="Same", extra_head=alts([("a", f"{SITE}/a"), ("b", f"{SITE}/b")])),
+        page("/b", title="Same", extra_head=alts([("a", f"{SITE}/a"), ("b", f"{SITE}/b")])),
+        page("/c", title="Same"),
+    ]
+    assert "seo.duplicate-title.shared" in ids(site.run(pages))

@@ -44,7 +44,12 @@ def audit_site(config: Config, client: httpx.Client | None = None,
     client = client or make_client()
     try:
         report = Report(site=config.site_url, kind="audit")
-        report.layers_run.update({"seo", "aeo", "geo", "perf"})
+        # seo and geo run (or at least attempt to run) unconditionally: seo covers
+        # seo.page.unreachable and the sitemap gates below, and geo.run probes
+        # site-level artifacts regardless of whether any page was fetched. aeo and
+        # perf are per-page gates — they must not be marked as having run, let alone
+        # scored 100, when zero pages were actually parsed.
+        report.layers_run.update({"seo", "geo"})
 
         sitemap_urls: list[str] | None = None
         if urls is None:
@@ -57,6 +62,8 @@ def audit_site(config: Config, client: httpx.Client | None = None,
         targets = list(dict.fromkeys(targets))
 
         pages = _collect(client, targets, report)
+        if pages:
+            report.layers_run.update({"aeo", "perf"})
 
         for page in pages:
             report.extend(seo.run(page.html, page.url))

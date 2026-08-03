@@ -26,8 +26,23 @@ def _description_of(page: PageData) -> str:
     return _normalise(tag.get("content") if tag else None)
 
 
-def _duplicates(pages: list[PageData], extract, id_: str, gate: str,
-                label: str) -> list[Finding]:
+def _is_hreflang_cluster(urls: list[str], alternates: dict[str, set[str]]) -> bool:
+    """True when every URL in the group declares every other URL as an hreflang alternate.
+
+    hreflang exists precisely to tell engines that these pages are intentional
+    per-locale translations of one another, not accidental duplicates — flagging
+    them as a duplicate-title problem and telling the user to "differentiate" them
+    is exactly backwards. A partial pairing does not count: if even one member of
+    the group is not mutually linked to every other member, the cluster does not
+    cover the whole duplicate group and it is still worth flagging.
+    """
+    keys = [_canonical_key(u) for u in urls]
+    key_set = set(keys)
+    return all(key_set - {key} <= alternates.get(key, set()) for key in keys)
+
+
+def _duplicates(pages: list[PageData], extract, id_: str, gate: str, label: str,
+                alternates: dict[str, set[str]]) -> list[Finding]:
     """One finding per duplicate group, attached to the first URL in that group.
 
     Per-URL findings would flood the report: a 200-page site sharing one template
@@ -43,6 +58,8 @@ def _duplicates(pages: list[PageData], extract, id_: str, gate: str,
     for value, urls in sorted(groups.items()):
         if len(urls) < 2:
             continue
+        if _is_hreflang_cluster(urls, alternates):
+            continue                   # declared translations of one another, not a dupe
         others = ", ".join(urls[1:4]) + ("…" if len(urls) > 4 else "")
         findings.append(_f(
             id_, gate, urls[0], "warning",
@@ -177,11 +194,17 @@ def _hreflang_reciprocity(pages: list[PageData]) -> list[Finding]:
 
 def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Finding]:
     """Cross-URL gates. Needs the whole page collection, unlike the per-URL gates."""
+    # Built once and shared: _duplicates uses it to recognise an hreflang cluster,
+    # _hreflang_reciprocity uses it to check the back-link.
+    alternates = {
+        _canonical_key(p.url): {_canonical_key(href) for href in _alternates(p).values()}
+        for p in pages
+    }
     return [
         *_duplicates(pages, _title_of, "seo.duplicate-title.shared",
-                     "duplicate-title", "title"),
+                     "duplicate-title", "title", alternates),
         *_duplicates(pages, _description_of, "seo.duplicate-description.shared",
-                     "duplicate-description", "meta description"),
+                     "duplicate-description", "meta description", alternates),
         *_noindex_in_sitemap(pages, sitemap_urls),
         *_canonical_chains(pages),
         *_hreflang_reciprocity(pages),
