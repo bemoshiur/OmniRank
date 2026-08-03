@@ -47,3 +47,14 @@ def test_lang_reads_the_html_lang_attribute():
 def test_lang_is_none_when_absent():
     p = PageData.from_fetched(fetched(text="<html><body></body></html>"))
     assert p.lang is None
+
+
+def test_replace_does_not_inherit_the_cached_soup():
+    import dataclasses
+
+    p = PageData.from_fetched(fetched())
+    p.soup()                                  # populate the cache
+    p2 = dataclasses.replace(p, html="<html><head><title>OTHER</title></head></html>")
+    assert p2.soup().find("title").get_text() == "OTHER", (
+        "a copied PageData must parse its own html, not inherit the original's cache")
+    assert p2._soup is not p._soup

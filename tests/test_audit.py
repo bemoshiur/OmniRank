@@ -115,3 +115,25 @@ def test_unreachable_pages_are_not_collected_but_are_reported():
     pages = _collect(make_client(), [f"{SITE}/"], report)
     assert pages == [], "a page that could not be fetched must not enter the site pass"
     assert any(f.id == "seo.page.unreachable" for f in report.findings)
+
+
+@respx.mock
+def test_findings_are_ordered_by_target_position():
+    good = ("<!doctype html><html lang='en'><head><title>T</title></head>"
+            "<body><h1>H</h1></body></html>")
+    respx.get(f"{SITE}/a").mock(return_value=httpx.Response(200, text=good))
+    respx.get(f"{SITE}/b").mock(return_value=httpx.Response(500))
+    respx.get(f"{SITE}/c").mock(return_value=httpx.Response(200, text=good))
+    for art in ("llms.txt", "llms-full.txt", "facts.json"):
+        respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(404))
+
+    report = audit_site(default_config(SITE), make_client(),
+                        urls=[f"{SITE}/a", f"{SITE}/b", f"{SITE}/c"])
+    targets = (f"{SITE}/a", f"{SITE}/b", f"{SITE}/c")
+    page_findings = [f for f in report.findings if f.url in targets]
+    positions = [f.url for f in page_findings]
+    # /a findings must all precede the /b error, which must precede /c findings
+    assert positions == sorted(positions, key=lambda u: [f"{SITE}/a", f"{SITE}/b",
+                                                         f"{SITE}/c"].index(u))

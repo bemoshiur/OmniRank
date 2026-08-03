@@ -21,7 +21,7 @@ class PageData:
     status: int
     elapsed_ms: int
     headers: dict[str, str]
-    _soup: list = field(default_factory=list, repr=False, compare=False)
+    _soup: list = field(default_factory=list, repr=False, compare=False, init=False)
 
     @classmethod
     def from_fetched(cls, f: Fetched) -> PageData:
