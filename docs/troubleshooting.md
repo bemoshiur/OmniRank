@@ -164,8 +164,8 @@ has no sitemap:
 $ curl -s -o /dev/null -w "%{http_code}\n" https://example.com/sitemap.xml
 404
 $ python3 -m omnirank.cli audit https://example.com
-OmniRank 0.1.1 — https://example.com
-  overall 69/100  aeo 80  geo 60  seo 67
+OmniRank 0.2.0 — https://example.com
+  overall 76/100  aeo 80  geo 60  perf 100  seo 67
   1 URLs checked, 10 findings
   ...
 ```
@@ -187,8 +187,8 @@ non-existent domain:
 
 ```
 $ python3 -m omnirank.cli audit https://this-domain-does-not-exist.invalid
-OmniRank 0.1.1 — https://this-domain-does-not-exist.invalid
-  overall 83/100  aeo 100  geo 60  seo 90
+OmniRank 0.2.0 — https://this-domain-does-not-exist.invalid
+  overall 87/100  aeo 100  geo 60  perf 100  seo 90
   1 URLs checked, 5 findings
   [FAIL] seo.page.unreachable  https://this-domain-does-not-exist.invalid/
          observed: HTTP 0

@@ -13,9 +13,9 @@ Verified directly against `schemas/report.schema.json` and
 | Field | Type | Description |
 |---|---|---|
 | `generatedAt` | string, `date-time` | When the report was generated, RFC 3339 UTC |
-| `tool` | object `{name, version}` | `name` is always the literal `"omnirank"`; `version` is the installed package version (e.g. `"0.1.1"`) |
+| `tool` | object `{name, version}` | `name` is always the literal `"omnirank"`; `version` is the installed package version (e.g. `"0.2.0"`) |
 | `site` | string | The audited site URL |
-| `kind` | enum: `audit`, `entity`, `rank`, `citation`, `mention-gap`, `indexing`, `weekly` | The report type. Only `audit` is produced by any shipped skill in v0.1.1 — the other six values are reserved for roadmap skills (`offsite-entity`, `measure`, `indexing`) that do not exist yet |
+| `kind` | enum: `audit`, `entity`, `rank`, `citation`, `mention-gap`, `indexing`, `weekly` | The report type. Only `audit` is produced by any shipped skill in v0.2.0 — the other six values are reserved for roadmap skills (`offsite-entity`, `measure`, `indexing`) that do not exist yet |
 | `score` | object, requires `overall` | Per-layer integer score (0-100) plus `overall` |
 | `stats` | object, requires `urlsChecked`, `passed`, `failed`, `warned` | Run statistics |
 | `findings` | array of Finding objects | Every finding produced, not just what the terminal summary shows |
@@ -52,7 +52,7 @@ A finding's `id` is three dot-separated, lowercase, hyphen-safe segments:
 
 | Segment | Meaning | Example |
 |---|---|---|
-| `layer` | Which of `seo`/`aeo`/`geo` produced it | `seo` |
+| `layer` | Which of `seo`/`aeo`/`geo`/`perf` produced it | `seo` |
 | `gate` | The specific check within that layer — usually, but not always, the same as `gate` | `h1` |
 | `condition` | The specific failure mode | `missing` |
 
@@ -93,6 +93,20 @@ segment" pattern are worth knowing:
 | `geo.citation-licence.missing` | `citation-licence` | geo | warning |
 | `seo.crawl-hygiene.not-found` (warning) / `.server-error` (error) | `crawl-hygiene` | seo | warning / error |
 | `seo.sitemap-health.redirect` (warning) / `.dead-url` (error) | `sitemap-health` | seo | warning / error |
+| `seo.duplicate-title.shared` | `duplicate-title` | seo | warning |
+| `seo.duplicate-description.shared` | `duplicate-description` | seo | warning |
+| `seo.noindex.in-sitemap` | `noindex-in-sitemap` | seo | error |
+| `seo.canonical.chained` | `canonical-cluster` | seo | warning |
+| `seo.hreflang.not-reciprocal` | `hreflang-reciprocity` | seo | warning |
+| `perf.ttfb.slow` (warning) / `.critical` (error) | `ttfb` | perf | warning / error |
+| `perf.page-weight.heavy` | `page-weight` | perf | warning |
+| `perf.compression.missing` | `compression` | perf | warning |
+| `perf.render-blocking.head-scripts` | `render-blocking` | perf | warning |
+
+The last five ids (`duplicate-title` through `hreflang-reciprocity`) come from the
+site-level cross-URL pass, and the four `perf.*` ids from the `perf` layer — both new in
+0.2.0. See [[Audit-Skill#site-level-cross-url-gates]] and
+[[Audit-Skill#performance-gates]].
 
 ## Severity levels
 
@@ -111,7 +125,7 @@ segment" pattern are worth knowing:
 | `geo` | Yes |
 | `offsite` | No — reserved for the roadmap `offsite-entity` skill |
 | `smm` | No — reserved for the roadmap `smm-content` / `smm-publish` skills |
-| `perf` | No — not produced by any gate in v0.1.1 |
+| `perf` | Yes, as of 0.2.0 — `perf.run(page)` runs on every audited page (`ttfb`, `page-weight`, `compression`, `render-blocking`); before 0.2.0 the layer existed in the schema with no gate ever populating it |
 
 ## Why released ids are never renamed
 

@@ -22,7 +22,7 @@ HTTP requests to the site URL you point it at — fetching pages, `sitemap.xml`,
 `robots.txt`, `llms.txt`, `llms-full.txt`, and `facts.json` from that one site. There is
 no telemetry, no phone-home, and no third-party API call in the `audit` or
 `geo-artifacts` code paths. The `secrets` config section exists for roadmap skills that
-will call third-party APIs (rank tracking, citation testing) — nothing shipped in v0.1.1
+will call third-party APIs (rank tracking, citation testing) — nothing shipped in v0.2.0
 reads a secret.
 
 ### Why does my site score 0?
@@ -35,12 +35,22 @@ new site with no `<title>`, no canonical tag, no JSON-LD, and no `llms.txt` will
 hit this on the GEO layer alone, since every one of `llms.txt`, `llms-full.txt`,
 `facts.json`, and `robots.txt`-allowlist missing is a separate error.
 
+### Does OmniRank measure Core Web Vitals?
+
+No. OmniRank has no browser, so it cannot measure Largest Contentful Paint, Cumulative
+Layout Shift or Interaction to Next Paint. Its `perf` layer reports only what one HTTP
+response reveals: response time to first byte, HTML weight, compression, and
+render-blocking scripts in the head — four gates in `scripts/py/omnirank/gates/perf.py`,
+each against a tunable OmniRank default (`TTFB_WARN_MS`, `TTFB_ERROR_MS`,
+`HTML_WARN_BYTES`, `MAX_HEAD_SCRIPTS`), not an industry benchmark. For field metrics use
+Chrome UX Report data or Lighthouse directly.
+
 ### Does OmniRank work on non-Next.js sites?
 
 Yes, for the `audit` skill and the Python path of `geo-artifacts` — both work against any
 live URL over plain HTTP, regardless of what generated the HTML. The `stack.framework`
 config field accepts `wordpress`, `jekyll`, `shopify`, `astro`, `nuxt`, `sveltekit`,
-`static`, and `other` in addition to the two Next.js variants, though as of v0.1.1 that
+`static`, and `other` in addition to the two Next.js variants, though as of v0.2.0 that
 field is schema-only — validated, not yet read by any shipped code path (see
 [configuration.md#stack](configuration.md#stack)). The Next.js-specific content in this
 documentation — the OpenNext/CloudFront 403 trap, the `dynamicParams` trap — describes a
@@ -66,11 +76,16 @@ actually serve in production — `audit`'s GEO layer checks exactly that.
 ### Why isn't `--fail-on <gate>` failing my build even though I see a `[FAIL]` line for it?
 
 Two structural reasons this happens, both worth ruling out before assuming a bug. First,
-five gate names — `og`, `hreflang`, `image-dims`, `citation-licence`,
-`lastmod-inflation` — can only ever produce warning-severity findings, and `--fail-on`
-only counts errors; listing them has no effect on the exit code by design. Second, two
+12 gate names can only ever produce warning-severity findings, and `--fail-on` only
+counts errors; listing any of them has no effect on the exit code by design: `og`,
+`hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation` from the original
+gate set, plus four site-level gates added in 0.2.0 (`duplicate-title`,
+`duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`) and three `perf`
+gates also added in 0.2.0 (`page-weight`, `compression`, `render-blocking`). `ttfb` is
+the one new `perf` gate name that is **not** warning-only — it emits an error-severity
+finding once response time crosses `TTFB_ERROR_MS`. Second, two
 gate names — `crawl-hygiene`, `sitemap-health` — are accepted by the config schema but
-are not wired into the automatic `omnirank audit` pipeline in v0.1.1, so they never
+are not wired into the automatic `omnirank audit` pipeline in v0.2.0, so they never
 produce a finding at all from a plain run. See
 [ci-integration.md](ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap)
 for the full gate-by-severity breakdown.
@@ -103,7 +118,7 @@ CI gating with a committed `audit.failOn`, first-party facts (`nap`, `identifier
 
 ### Is OmniRank on PyPI or npm?
 
-No, not as of v0.1.1. Install the Python CLI from source — clone the repository and `pip
+No, not as of v0.2.0. Install the Python CLI from source — clone the repository and `pip
 install -e ./scripts/py` inside a virtual environment, or `pip install "omnirank @
 git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"` directly from git
 — see [getting-started.md](getting-started.md). The Node generator
@@ -116,7 +131,7 @@ git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"` directly
 in the message, rather than returning an empty string or skipping silently. This is
 deliberate: the project's design principle is that "a skipped submission is otherwise
 indistinguishable from a successful one in logs," so a missing secret must fail loudly.
-No shipped skill in v0.1.1 calls `secret()` automatically — this only matters if you or a
+No shipped skill in v0.2.0 calls `secret()` automatically — this only matters if you or a
 future skill calls it directly. See [configuration.md#secrets](configuration.md#secrets).
 
 ### Does OmniRank guarantee that ChatGPT, Perplexity, Claude, or Gemini will cite my site once `llms.txt` exists?

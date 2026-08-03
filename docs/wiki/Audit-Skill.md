@@ -16,9 +16,14 @@ or answer-engine readiness, diagnose why a page is not ranking or not being cite
 verify structured data, or run pre-deploy discoverability checks on built HTML." Trigger
 phrases and what will *not* trigger it: [[Claude-Code-Setup#to-trigger-audit]].
 
+As of 0.2.0, `audit_site()` keeps every fetched page's HTML alive as a `PageData`
+record instead of discarding it after the per-page gates run — that is what makes the
+site-level cross-URL pass below possible.
+
 ## CLI reference
 
-Verbatim `--help` output from v0.1.1:
+Verbatim `--help` output from v0.2.0 (flags unchanged since v0.1.1 — this release added
+gates, not CLI surface):
 
 ```
 $ python3 -m omnirank.cli audit --help
@@ -62,14 +67,16 @@ Two behaviours worth being precise about:
 | Layer | Audience | What it wants |
 |---|---|---|
 | SEO | Googlebot, Bingbot | Crawlable, canonical, correctly sized metadata, valid structured data |
-| AEO | AI Overviews, Copilot, voice assistants | A short, liftable, factual answer near the top of the page |
+| AEO | AI Overviews, Copilot, voice assistants | A short, liftable, factual answer near the top of the page, sized for the page's script — see [[Configuration-Reference#aeoanswerblock]] |
 | GEO | ChatGPT, Claude, Perplexity, Gemini | Machine-ingestible ground truth (`llms.txt`, `facts.json`) plus explicit permission to cite |
-| Crawl hygiene | Search-engine crawlers generally | No 404s where a redirect or 410 belongs; a sitemap that reflects real change dates |
+| perf | Every crawler and user agent | A fast time-to-first-byte, reasonable HTML weight, compression, and no excess render-blocking `<head>` scripts — derived from one HTTP response, no browser involved |
 
-Crawl-hygiene findings carry `layer: "seo"` in the report — there is no separate
-`"hygiene"` value in the `Layer` type. `report.py` defines `Layer = Literal["seo", "aeo",
-"geo", "offsite", "smm", "perf"]`; `offsite`, `smm`, and `perf` are reserved for roadmap
-skills and unused by any gate today.
+Crawl-hygiene findings and the site-level cross-URL pass (below, under "Every gate, by
+layer") both carry `layer: "seo"` in the report — there is no
+separate `"hygiene"` or `"site"` value in the `Layer` type. `report.py` defines `Layer =
+Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]`. As of 0.2.0, `perf` is a real,
+populated layer — every audited page runs `perf.run(page)`. `offsite` and `smm` remain
+reserved for roadmap skills and are unused by any gate today.
 
 ## Every gate, by layer
 
@@ -106,6 +113,15 @@ The 40–60 word range is not arbitrary: answer engines lift whole blocks verbat
 than 40 words rarely carries a complete answer; more than 60 tends to get truncated or
 skipped. `geo.answerBlockSelector` in `omnirank.config.json` changes the selector — see
 [[Configuration-Reference#geo]].
+
+**40–60 words is a Latin-script default, not a universal rule.** `bands.resolve_band()`
+picks the range actually scored, per page, from the page's `<html lang>` value. Chinese,
+Japanese, Korean, Thai, Lao, Khmer, Burmese, Tibetan and Dzongkha (the `cjk` script
+family) have no space-delimited words — `str.split()` returns one token for an entire
+paragraph — so OmniRank measures characters for them (80–200 by default) instead of
+words. Bengali, Hindi, Tamil, Arabic and the other Brahmic/Arabic/Cyrillic-script
+languages remain space-delimited and keep word counting. Full precedence rules and
+config keys: [[Configuration-Reference#aeoanswerblock]].
 
 ### GEO gates
 
@@ -159,6 +175,56 @@ about. The fabrication checks walk every dict anywhere in the parsed tree (cappe
 levels deep, so a hostile document degrades to "nothing found" rather than crashing the
 scan), so a `Review` or `AggregateRating` nested inside `mainEntity` or `itemReviewed` is
 still caught.
+
+### Site-level (cross-URL) gates
+
+`site.run(pages, sitemap_urls)` needs the whole crawled set at once and cannot be
+evaluated from a single page, so `audit_site()` runs it once, after every per-page gate
+has finished, over the `PageData` collection it kept alive along the way. All five
+findings carry `layer: "seo"`, same as every other gate on this page.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `duplicate-title` | `seo.duplicate-title.shared` | Two or more crawled pages share a `<title>` (case- and whitespace-insensitive) | warning |
+| `duplicate-description` | `seo.duplicate-description.shared` | Two or more crawled pages share a meta description (case- and whitespace-insensitive) | warning |
+| `noindex-in-sitemap` | `seo.noindex.in-sitemap` | A crawled page carries a `noindex` token in its `robots`/`googlebot` meta yet its URL also appears in `sitemap.xml` | **error** |
+| `canonical-cluster` | `seo.canonical.chained` | A crawled page's canonical points at another crawled page that itself canonicalises elsewhere (A → B → C) | warning |
+| `hreflang-reciprocity` | `seo.hreflang.not-reciprocal` | A crawled page declares an `hreflang` alternate at another crawled page that does not declare the link back (`x-default` is exempt) | warning |
+
+**One finding per duplicate group, not per URL.** `duplicate-title` and
+`duplicate-description` each emit a single finding naming how many pages share the
+value, attached to the first URL in that group — never one finding per affected page. A
+200-page site sharing one template title produces one finding, not 200.
+
+**Targets outside the crawled set are never judged.** `canonical-cluster` and
+`hreflang-reciprocity` only evaluate a target when that target is itself one of the
+pages OmniRank fetched. A canonical or hreflang alternate pointing outside the crawled
+set produces no finding either way — OmniRank never reports on a gate it could not
+actually evaluate. `noindex-in-sitemap` similarly only fires for pages OmniRank both
+fetched and found listed in `sitemap.xml`. See [[Glossary#canonical-chain]].
+
+### Performance gates
+
+`perf.run(page)` derives every finding from the single HTTP response already captured
+for that page during the per-page fetch — response time, raw HTML size, the
+`content-encoding` header, and the `<head>` markup. **No browser is involved.**
+OmniRank cannot measure Largest Contentful Paint, Cumulative Layout Shift, Interaction
+to Next Paint, or produce a Lighthouse score, and no finding text implies otherwise.
+
+The thresholds below are OmniRank's own tunable defaults, not an industry benchmark —
+each is a named constant in `scripts/py/omnirank/gates/perf.py`.
+
+| Gate | Finding id | Rule (constant) | Severity |
+|---|---|---|---|
+| `ttfb` | `perf.ttfb.slow` | Response took ≥ `TTFB_WARN_MS` (800 ms) | warning |
+| `ttfb` | `perf.ttfb.critical` | Response took ≥ `TTFB_ERROR_MS` (2500 ms) — supersedes `.slow`; only one `ttfb` finding ever fires per page | **error** |
+| `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes, ~488 KiB) before any subresource | warning |
+| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip`, `br`, `deflate` or `zstd` | warning |
+| `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) external `<script src="...">` tags in `<head>` without `async` or `defer` | warning |
+
+Response time is measured from wherever OmniRank's own request ran, never from a real
+visitor's location or network. Treat every `perf` finding as a signal to investigate,
+not as a metric any user actually experienced. See [[FAQ#does-omnirank-measure-core-web-vitals]].
 
 ### Sitemap `lastmod` inflation (`lastmod-inflation`)
 
@@ -221,22 +287,25 @@ at 90 and one at 91, `overall` is `90`, not `91` or `90.5`.
 never ran from the score map entirely — this is exercised directly against a bare
 `Report` object in `tests/test_report.py::test_layer_that_did_not_run_is_absent`. **In
 practice, `audit_site()` — the function the CLI actually calls — always populates
-`layers_run` with exactly `{"seo", "aeo", "geo"}` at the very start of the run, before any
-URL is fetched.** A plain `omnirank audit` therefore always reports all three layers; you
-will not currently see a report missing `aeo` or `geo` from the score map, even on total
-failure.
+`layers_run` with exactly `{"seo", "aeo", "geo", "perf"}` at the very start of the run,
+before any URL is fetched.** As of 0.2.0 that is **four** layers, not three — `perf`
+joined the set when the performance gates were wired in. A plain `omnirank audit`
+therefore always reports all four layers, and `overall` is always
+`sum(scores.values()) // 4`; you will not currently see a report missing `aeo`, `geo`, or
+`perf` from the score map, even on total failure.
 
 **The edge case this produces:** if the single audited URL is unreachable, the per-page
-loop records one `seo.page.unreachable` error and `continue`s — it never calls `aeo.run()`
-or the JSON-LD checks for that URL. The `geo` layer still runs independently (it fetches
-`llms.txt` etc. itself, regardless of page reachability). Net effect: a site whose
-homepage is completely down can show `aeo 100` in the score map — not because AEO passed,
-but because AEO was never evaluated against any content:
+loop records one `seo.page.unreachable` error and `continue`s — it never calls
+`aeo.run()`, `perf.run()`, or the JSON-LD checks for that URL. The `geo` layer still runs
+independently (it fetches `llms.txt` etc. itself, regardless of page reachability). Net
+effect: a site whose homepage is completely down can show `aeo 100` **and** `perf 100` in
+the score map — not because either passed, but because neither was ever evaluated
+against any content:
 
 ```
 $ python3 -m omnirank.cli audit https://this-domain-does-not-exist.invalid
-OmniRank 0.1.1 — https://this-domain-does-not-exist.invalid
-  overall 83/100  aeo 100  geo 60  seo 90
+OmniRank 0.2.0 — https://this-domain-does-not-exist.invalid
+  overall 87/100  aeo 100  geo 60  perf 100  seo 90
   1 URLs checked, 5 findings
   [FAIL] seo.page.unreachable  https://this-domain-does-not-exist.invalid/
          observed: HTTP 0
@@ -245,16 +314,17 @@ OmniRank 0.1.1 — https://this-domain-does-not-exist.invalid
   ...
 ```
 
-Read `seo.page.unreachable` as the signal that the whole run is unreliable, regardless of
-what the other layers show.
+(`overall 87` = `(90 + 100 + 60 + 100) // 4 = 350 // 4 = 87`.) Read
+`seo.page.unreachable` as the signal that the whole run is unreliable, regardless of what
+the other layers show.
 
 ## Worked example
 
 Running the CLI against `https://example.com` with no config:
 
 ```
-OmniRank 0.1.1 — https://example.com
-  overall 69/100  aeo 80  geo 60  seo 67
+OmniRank 0.2.0 — https://example.com
+  overall 76/100  aeo 80  geo 60  perf 100  seo 67
   1 URLs checked, 10 findings
 ```
 
@@ -265,7 +335,11 @@ OmniRank 0.1.1 — https://example.com
   `10*2 = 20` cost, `100 - 20 = 80`.
 - `geo 60`: `llms.txt`, `llms-full.txt`, `facts.json`, and `robots.txt` all 404 = 4 errors
   = `10*4 = 40` cost, `100 - 40 = 60`.
-- `overall 69`: `(67 + 80 + 60) // 3 = 207 // 3 = 69`.
+- `perf 100`: `example.com` serves a small, Brotli-compressed response with no
+  render-blocking `<head>` scripts and a fast time-to-first-byte — zero `perf` findings,
+  `100 - 0 = 100`.
+- `overall 76`: as of 0.2.0 the average is over **four** layers, not three —
+  `(67 + 80 + 60 + 100) // 4 = 307 // 4 = 76`.
 
 Work the list by fixing every `[FAIL]` (error) before any `[WARN]` (warning) — errors
 carry 10x the score weight of warnings.

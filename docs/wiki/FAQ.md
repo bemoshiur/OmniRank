@@ -3,7 +3,7 @@
 This page answers direct questions about OmniRank in short declarative sentences, each
 opening with a yes or no where one applies. Topics include what OmniRank guarantees, what
 data leaves your machine, whether `llms.txt` is an established standard, and which of the
-eight advertised skills actually ship in version 0.1.1.
+eight advertised skills actually ship in version 0.2.0.
 
 Verified against the source in `scripts/py/omnirank/`, `schemas/`, and `.github/CONTRIBUTING.md`.
 See [[Troubleshooting]] for exact error text and [[Audit-Skill]] / [[GEO-Artifacts-Skill]]
@@ -26,7 +26,7 @@ HTTP requests to the site URL you point it at — fetching pages, `sitemap.xml`,
 `robots.txt`, `llms.txt`, `llms-full.txt`, and `facts.json` from that one site. There is
 no telemetry, no phone-home, and no third-party API call in the `audit` or
 `geo-artifacts` code paths. The `secrets` config section exists for roadmap skills that
-will call third-party APIs (rank tracking, citation testing) — nothing shipped in v0.1.1
+will call third-party APIs (rank tracking, citation testing) — nothing shipped in v0.2.0
 reads a secret.
 
 ### Is `llms.txt` a real, established standard?
@@ -65,12 +65,22 @@ new site with no `<title>`, no canonical tag, no JSON-LD, and no `llms.txt` will
 hit this on the GEO layer alone, since every one of `llms.txt`, `llms-full.txt`,
 `facts.json`, and `robots.txt`-allowlist missing is a separate error.
 
+### Does OmniRank measure Core Web Vitals?
+
+No. OmniRank has no browser, so it cannot measure Largest Contentful Paint, Cumulative
+Layout Shift or Interaction to Next Paint. Its `perf` layer reports only what one HTTP
+response reveals: response time to first byte, HTML weight, compression, and
+render-blocking scripts in the head — four gates, each against a tunable OmniRank
+default (`TTFB_WARN_MS`, `TTFB_ERROR_MS`, `HTML_WARN_BYTES`, `MAX_HEAD_SCRIPTS`), not an
+industry benchmark. See [[Audit-Skill#performance-gates]]. For field metrics use Chrome
+UX Report data or Lighthouse directly.
+
 ### Does OmniRank work on non-Next.js sites?
 
 Yes, for the `audit` skill and the Python path of `geo-artifacts` — both work against any
 live URL over plain HTTP, regardless of what generated the HTML. The `stack.framework`
 config field accepts `wordpress`, `jekyll`, `shopify`, `astro`, `nuxt`, `sveltekit`,
-`static`, and `other` in addition to the two Next.js variants, though as of v0.1.1 that
+`static`, and `other` in addition to the two Next.js variants, though as of v0.2.0 that
 field is schema-only — validated, not yet read by any shipped code path. The
 Next.js-specific content in this documentation — the OpenNext/CloudFront 403 trap, the
 `dynamicParams` trap — describes a real failure mode on that specific stack; it does not
@@ -95,11 +105,16 @@ production — `audit`'s GEO layer checks exactly that.
 ### Why isn't `--fail-on <gate>` failing my build even though I see a `[FAIL]` line for it?
 
 Two structural reasons this happens, both worth ruling out before assuming a bug. First,
-five gate names — `og`, `hreflang`, `image-dims`, `citation-licence`,
-`lastmod-inflation` — can only ever produce warning-severity findings, and `--fail-on`
-only counts errors; listing them has no effect on the exit code by design. Second, two
+12 gate names can only ever produce warning-severity findings, and `--fail-on` only
+counts errors; listing any of them has no effect on the exit code by design: `og`,
+`hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation` from the original
+gate set, plus four site-level gates added in 0.2.0 (`duplicate-title`,
+`duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`) and three `perf`
+gates also added in 0.2.0 (`page-weight`, `compression`, `render-blocking`). `ttfb` is
+the one new `perf` gate name that is **not** warning-only — it emits an error-severity
+finding once response time crosses `TTFB_ERROR_MS`. Second, two
 gate names — `crawl-hygiene`, `sitemap-health` — are accepted by the config schema but
-are not wired into the automatic `omnirank audit` pipeline in v0.1.1, so they never
+are not wired into the automatic `omnirank audit` pipeline in v0.2.0, so they never
 produce a finding at all from a plain run. See [[CI-Recipes]] for the full gate-by-severity
 breakdown.
 
@@ -130,7 +145,7 @@ CI gating with a committed `audit.failOn`, first-party facts (`nap`, `identifier
 
 ### Is OmniRank on PyPI or npm?
 
-No, not as of v0.1.1. Install the Python CLI from source — clone the repository and `pip
+No, not as of v0.2.0. Install the Python CLI from source — clone the repository and `pip
 install -e ./scripts/py` inside a virtual environment, or `pip install "omnirank @
 git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"` directly from git.
 The Node generator (`@omnirank/generators`) is likewise not published; use it by
@@ -142,7 +157,7 @@ importing `scripts/node/src/generate.ts` directly or copying it into your projec
 in the message, rather than returning an empty string or skipping silently. This is
 deliberate: the project's design principle is that "a skipped submission is otherwise
 indistinguishable from a successful one in logs," so a missing secret must fail loudly.
-No shipped skill in v0.1.1 calls `secret()` automatically — this only matters if you or a
+No shipped skill in v0.2.0 calls `secret()` automatically — this only matters if you or a
 future skill calls it directly.
 
 ### What Python and Node versions does OmniRank require?
@@ -168,7 +183,7 @@ licence block it generates.
 ### Does OmniRank send outreach emails or publish to social media for me?
 
 No. Outreach text is drafted for human review and manual send, never dispatched
-automatically, and social publishing does not exist in v0.1.1 at all — `smm-publish` is a
+automatically, and social publishing does not exist in v0.2.0 at all — `smm-publish` is a
 roadmap skill (target v0.7) whose own design requires dry-run by default, an explicit
 `approved: true` flag set by a human, and an explicit `--confirm` flag before anything
 posts. Neither exists in the installed package today.
@@ -178,7 +193,7 @@ posts. Neither exists in the installed package today.
 Exactly two ship: `audit` and `geo-artifacts`. Six more — `aeo-onpage`, `indexing`,
 `offsite-entity`, `measure`, `smm-content`, `smm-publish` — are named in the README's
 roadmap table with target versions, but none of them exist in the installed package as of
-v0.1.1. `.github/CONTRIBUTING.md` states this directly as a non-negotiable: contributors
+v0.2.0. `.github/CONTRIBUTING.md` states this directly as a non-negotiable: contributors
 must not write documentation or issue text implying the other six already exist. See
 [[Roadmap]] for the full shipped-versus-planned breakdown.
 

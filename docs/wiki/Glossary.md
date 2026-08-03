@@ -39,7 +39,7 @@ crawlers.
 SMM is publishing and maintaining a consistent brand presence across social platforms so
 entity resolvers and human audiences both recognise the same organisation everywhere it
 appears. OmniRank's config schema reserves `smm` and `sameAs` fields for this, but no SMM
-skill ships in v0.1.1 — `smm-content` and `smm-publish` are both roadmap items, targeted
+skill ships in v0.2.0 — `smm-content` and `smm-publish` are both roadmap items, targeted
 at v0.6 and v0.7 respectively.
 
 ## Engines and retrieval
@@ -171,6 +171,16 @@ when several near-duplicate URLs (with tracking parameters, trailing slashes, or
 alternate protocols) could otherwise serve the same content. OmniRank's `canonical` gate
 fails if the tag is missing or the URL is relative rather than absolute.
 
+### Canonical chain
+
+A canonical chain occurs when page A names page B as canonical while B names page C.
+Search engines commonly follow a single hop and stop, so A's ranking signals can be
+stranded on B rather than reaching C. Point every canonical directly at a page that
+declares itself canonical. OmniRank's site-level `canonical-cluster` gate
+(`seo.canonical.chained`) detects this across the whole crawled set, but only when both
+B and C are pages OmniRank actually fetched — a chain ending outside the crawled set is
+unevaluated and produces no finding.
+
 ### hreflang
 
 `hreflang` is an HTML attribute on `<link rel="alternate">` tags that tells a crawler
@@ -200,7 +210,7 @@ IndexNow is a protocol, backed by Bing and Yandex, that lets a site push a URL d
 to a search engine's indexing queue the moment it changes, instead of waiting for the
 next scheduled crawl. OmniRank's config schema reserves an `indexnowKeyFile` field for it
 under `indexing`, but the `indexing` skill itself is roadmap, targeted at v0.3, and not
-present in v0.1.1.
+present in v0.2.0.
 
 ### Sitemap
 
