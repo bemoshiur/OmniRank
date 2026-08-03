@@ -71,3 +71,43 @@ def test_statistic_with_unknown_field_fails():
     cfg = minimal()
     cfg["statistics"] = [{"name": "CPM", "value": "BDT 42", "bogus": 1}]
     assert list(validator().iter_errors(cfg))
+
+
+NEW_GATES = ["duplicate-title", "duplicate-description", "noindex-in-sitemap",
+             "canonical-cluster", "hreflang-reciprocity",
+             "ttfb", "page-weight", "compression", "render-blocking"]
+
+
+def test_new_site_and_perf_gates_are_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": NEW_GATES}
+    assert list(validator().iter_errors(cfg)) == []
+
+
+def test_unknown_gate_still_rejected():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ["not-a-real-gate"]}
+    assert list(validator().iter_errors(cfg))
+
+
+def test_answer_block_bands_validate():
+    cfg = minimal()
+    cfg["aeo"] = {
+        "answerBlock": {
+            "default": {"unit": "words", "min": 40, "max": 60},
+            "byScript": {"cjk": {"unit": "chars", "min": 80, "max": 200}},
+        }
+    }
+    assert list(validator().iter_errors(cfg)) == []
+
+
+def test_band_rejects_unknown_unit():
+    cfg = minimal()
+    cfg["aeo"] = {"answerBlock": {"default": {"unit": "syllables", "min": 1, "max": 2}}}
+    assert list(validator().iter_errors(cfg))
+
+
+def test_band_requires_min_and_max():
+    cfg = minimal()
+    cfg["aeo"] = {"answerBlock": {"default": {"unit": "words", "min": 40}}}
+    assert list(validator().iter_errors(cfg))
