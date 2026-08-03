@@ -57,3 +57,48 @@ def test_a_single_page_can_never_duplicate():
 
 def test_no_pages_is_not_an_error():
     assert site.run([]) == []
+
+
+NOINDEX = '<meta name="robots" content="noindex, follow">'
+GOOGLEBOT_NOINDEX = '<meta name="googlebot" content="NOINDEX">'
+INDEX_OK = '<meta name="robots" content="index, follow">'
+
+
+def test_noindex_page_in_sitemap_is_an_error():
+    pages = [page("/a", extra_head=NOINDEX)]
+    found = [f for f in site.run(pages, [f"{SITE}/a"])
+             if f.id == "seo.noindex.in-sitemap"]
+    assert found and found[0].severity == "error"
+    assert found[0].gate == "noindex-in-sitemap"
+
+
+def test_noindex_page_absent_from_sitemap_is_fine():
+    pages = [page("/a", extra_head=NOINDEX)]
+    assert "seo.noindex.in-sitemap" not in ids(site.run(pages, [f"{SITE}/other"]))
+
+
+def test_indexable_page_in_sitemap_is_fine():
+    pages = [page("/a", extra_head=INDEX_OK)]
+    assert "seo.noindex.in-sitemap" not in ids(site.run(pages, [f"{SITE}/a"]))
+
+
+def test_googlebot_directive_is_also_detected():
+    pages = [page("/a", extra_head=GOOGLEBOT_NOINDEX)]
+    assert "seo.noindex.in-sitemap" in ids(site.run(pages, [f"{SITE}/a"]))
+
+
+def test_noindex_matching_is_token_based_not_substring():
+    # "noindexing" is not the noindex directive
+    pages = [page("/a", extra_head='<meta name="robots" content="noindexing">')]
+    assert "seo.noindex.in-sitemap" not in ids(site.run(pages, [f"{SITE}/a"]))
+
+
+def test_sitemap_urls_omitted_means_the_gate_does_not_run():
+    pages = [page("/a", extra_head=NOINDEX)]
+    assert "seo.noindex.in-sitemap" not in ids(site.run(pages)), (
+        "without a sitemap there is nothing to contradict")
+
+
+def test_trailing_slash_difference_still_matches():
+    pages = [page("/a", extra_head=NOINDEX)]
+    assert "seo.noindex.in-sitemap" in ids(site.run(pages, [f"{SITE}/a/"]))
