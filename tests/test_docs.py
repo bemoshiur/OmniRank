@@ -45,3 +45,35 @@ def test_readme_index_links_every_page():
         if name == "README.md":
             continue
         assert name in body, f"docs/README.md does not reference {name}"
+
+
+NEW_GATE_IDS = [
+    "seo.duplicate-title.shared", "seo.duplicate-description.shared",
+    "seo.noindex.in-sitemap", "seo.canonical.chained",
+    "seo.hreflang.not-reciprocal",
+    "perf.ttfb.slow", "perf.page-weight.heavy",
+    "perf.compression.missing", "perf.render-blocking.head-scripts",
+]
+
+
+def test_gate_reference_documents_every_new_gate():
+    body = (ROOT / "skills" / "audit" / "references" / "gates.md").read_text()
+    missing = [g for g in NEW_GATE_IDS if g not in body]
+    assert not missing, f"undocumented gates: {missing}"
+
+
+def test_audit_guide_documents_the_new_gates():
+    body = (ROOT / "docs" / "audit-guide.md").read_text()
+    missing = [g for g in NEW_GATE_IDS if g not in body]
+    assert not missing, f"undocumented in audit-guide: {missing}"
+
+
+def test_configuration_docs_cover_answer_block_bands():
+    body = (ROOT / "docs" / "configuration.md").read_text()
+    assert "answerBlock" in body
+    assert "byScript" in body
+
+
+def test_perf_layer_is_no_longer_described_as_empty():
+    body = (ROOT / "docs" / "audit-guide.md").read_text().lower()
+    assert "perf" in body

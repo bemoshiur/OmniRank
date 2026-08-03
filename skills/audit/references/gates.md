@@ -82,3 +82,53 @@ hostile payload degrades instead of crashing the scan), so a `Review` or
 
 The fabrication gates are not style preferences. Unbacked ratings are a manual-action risk,
 and they corrode the trust the markup exists to build.
+
+## Site-level (cross-URL)
+
+`site.run(pages, sitemap_urls)` needs the whole crawled set at once and cannot be
+evaluated from a single page — `audit_site()` keeps every fetched page's HTML alive as a
+`PageData` record and runs this pass once, after the per-page gates. All five findings
+carry `layer: "seo"`.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `duplicate-title` | `seo.duplicate-title.shared` | Two or more crawled pages share a `<title>` (case- and whitespace-insensitive) | warning |
+| `duplicate-description` | `seo.duplicate-description.shared` | Two or more crawled pages share a meta description (case- and whitespace-insensitive) | warning |
+| `noindex-in-sitemap` | `seo.noindex.in-sitemap` | A crawled page carries a `noindex` token in its `robots` or `googlebot` meta yet its own URL also appears in `sitemap.xml` | **error** |
+| `canonical-cluster` | `seo.canonical.chained` | A crawled page's canonical points at another crawled page that itself canonicalises elsewhere (A → B → C) | warning |
+| `hreflang-reciprocity` | `seo.hreflang.not-reciprocal` | A crawled page declares an `hreflang` alternate at another crawled page that does not declare the link back (`x-default` is exempt) | warning |
+
+Two things worth knowing before wiring these into `--fail-on`:
+
+- **One finding per duplicate group, not per URL.** `duplicate-title` and
+  `duplicate-description` each emit a single finding naming how many pages share the
+  value, attached to the first URL in that group — never one finding per affected page.
+  A 200-page site sharing one template title produces one finding, not 200.
+- **Targets outside the crawled set are never judged.** `canonical-cluster` and
+  `hreflang-reciprocity` only evaluate a target when that target is itself one of the
+  pages OmniRank fetched. A canonical or hreflang alternate pointing outside the
+  crawled set produces no finding either way — OmniRank never reports on a gate it
+  could not actually evaluate.
+
+## Performance
+
+`perf.run(page)` derives every finding from the single HTTP response already captured
+for that page — response time, raw HTML size, the `content-encoding` header, and the
+`<head>` markup. **No browser is involved.** OmniRank cannot measure Largest
+Contentful Paint, Cumulative Layout Shift, Interaction to Next Paint, or produce a
+Lighthouse score, and no finding text implies otherwise.
+
+The thresholds below are OmniRank's own tunable defaults, not an industry benchmark —
+each is a named constant in `scripts/py/omnirank/gates/perf.py`.
+
+| Gate | Finding id | Rule (constant) | Severity |
+|---|---|---|---|
+| `ttfb` | `perf.ttfb.slow` | Response took ≥ `TTFB_WARN_MS` (800 ms) | warning |
+| `ttfb` | `perf.ttfb.critical` | Response took ≥ `TTFB_ERROR_MS` (2500 ms) — supersedes `.slow`; only one `ttfb` finding ever fires per page | **error** |
+| `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes, ~488 KiB) before any subresource — CSS, JS and images are not counted | warning |
+| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip`, `br`, `deflate` or `zstd` | warning |
+| `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) external `<script src="...">` tags in `<head>` without `async` or `defer` | warning |
+
+Response time is measured from wherever OmniRank's own request ran — a laptop, a CI
+runner — never from a real visitor's location or network. Treat every `perf` finding
+as a signal to investigate, not as a metric any user actually experienced.

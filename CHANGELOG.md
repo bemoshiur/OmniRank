@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-03
+
+### Added
+
+- Site-level gate pass running across all collected pages, enabling findings a
+  single-page view cannot produce: duplicate titles and descriptions, `noindex`
+  pages listed in the sitemap, canonical chains, and non-reciprocal hreflang.
+- Script-aware AnswerBlock bands. `str.split()` returns one token for an entire CJK
+  paragraph, so the 40-60 word band flagged every compliant Chinese, Japanese, Thai and
+  Khmer answer block as far too short. Those scripts now measure characters; Bengali,
+  Hindi and Arabic are space-delimited and keep word counting. Configurable per script
+  via `aeo.answerBlock`.
+- The `perf` layer, declared in the report schema since 0.1.0 with no gate emitting it,
+  now carries four gates derived from the HTTP response: response time, HTML weight,
+  compression and render-blocking head scripts. No browser metric is measured or implied.
+
+### Changed
+
+- `audit_site` collects each fetched page into a `PageData` record rather than
+  discarding its HTML, which is what makes the cross-URL pass possible.
+
 ## [0.1.1] - 2026-08-03
 
 ### Fixed
@@ -31,6 +52,7 @@ All notable changes to this project are documented here. The format follows
   path and a Node in-repo path producing identical output.
 - `omnirank` CLI with a zero-config URL mode and CI-usable exit codes.
 
-[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bemoshiur/OmniRank/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bemoshiur/OmniRank/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bemoshiur/OmniRank/releases/tag/v0.1.0

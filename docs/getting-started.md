@@ -92,8 +92,8 @@ python3 -m omnirank.cli audit https://example.com
 Real output, captured against `https://example.com` on this machine:
 
 ```
-OmniRank 0.1.1 — https://example.com
-  overall 69/100  aeo 80  geo 60  seo 67
+OmniRank 0.2.0 — https://example.com
+  overall 76/100  aeo 80  geo 60  perf 100  seo 67
   1 URLs checked, 10 findings
   [FAIL] seo.canonical.missing  https://example.com/
          observed: no rel=canonical
@@ -133,10 +133,11 @@ to a worst case — real sites usually clear a handful of these on the first pas
 
 ## 5. Read the result
 
-**The score line.** `overall 69/100  aeo 80  geo 60  seo 67` — one score per layer that
-ran, plus an overall figure. See [audit-guide.md](audit-guide.md#scoring) for exactly how
-these numbers are computed; the short version is `100` minus `10` per error and `3` per
-warning, floored at `0`, per layer, with `overall` the integer average of the layers that
+**The score line.** `overall 76/100  aeo 80  geo 60  perf 100  seo 67` — one score per
+layer that ran, plus an overall figure. See [audit-guide.md](audit-guide.md#scoring) for
+exactly how these numbers are computed; the short version is `100` minus `10` per error
+and `3` per warning, floored at `0`, per layer, with `overall` the integer average of the
+layers that
 ran.
 
 **Each finding's three fields:**

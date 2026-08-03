@@ -11,7 +11,7 @@ JSON Schema `load_config()` validates against — nothing here is guessed. The r
 and every nested object use `"additionalProperties": false`, so a typo'd field name fails
 validation rather than being silently ignored.
 
-**Consumed vs. schema-only.** Not every field the schema accepts is read by v0.1.1's
+**Consumed vs. schema-only.** Not every field the schema accepts is read by v0.2.0's
 code today. The tables below mark each field **Consumed** (a shipped code path reads it)
 or **Schema-only** (validated, stored, and forward-compatible with a roadmap skill, but
 nothing in `audit` or `geo-artifacts` reads it yet). Writing a schema-only field is not
@@ -26,7 +26,7 @@ though nothing computes from them — but do not expect it to *change behaviour*
 | `name` | string (min length 1) | yes | — | Consumed | Site/brand display name. Used as the `llms.txt` / `llms-full.txt` header and `facts.json`'s `name`. |
 | `legalName` | string | no | — | Consumed | Registered legal entity name. Adds a "Published by ..." line to `llms.txt`, and is the fallback `attribution` in the citation licence when `geo.attribution` is unset. |
 | `url` | string (`uri`, must match `^https?://`) | yes | — | Consumed | Site root. A trailing slash is stripped automatically. |
-| `entityType` | enum: `Organization`, `LocalBusiness`, `ProfessionalService`, `NewsMediaOrganization`, `SoftwareApplication`, `EducationalOrganization`, `MedicalOrganization` | yes | — | Consumed (partial) | Passed through into `facts.json`'s `entityType` field. **It does not yet drive JSON-LD emission** — schema.org markup generation by entity type is the job of the unshipped `aeo-onpage` skill (roadmap, not in v0.1.1). |
+| `entityType` | enum: `Organization`, `LocalBusiness`, `ProfessionalService`, `NewsMediaOrganization`, `SoftwareApplication`, `EducationalOrganization`, `MedicalOrganization` | yes | — | Consumed (partial) | Passed through into `facts.json`'s `entityType` field. **It does not yet drive JSON-LD emission** — schema.org markup generation by entity type is the job of the unshipped `aeo-onpage` skill (roadmap, not in v0.2.0). |
 | `parentOrganization` | string | no | — | Schema-only | Validated; not read by any shipped code path yet. |
 | `locales` | array of `{code, path, default?}` | no | — | Consumed (passthrough) | Each item requires `code` and `path`; `default` is an optional boolean. Passed through unchanged into `facts.json`'s `locales` when non-empty. Does not currently affect crawling — only one sitemap, at `site.url`, is read. |
 
@@ -85,7 +85,7 @@ whoever reads it next.
 | `builtHtml` | string | Path to server-rendered HTML output (e.g. `.next/server/app`) |
 
 **Status: Schema-only.** None of these fields are read by `audit` or `geo-artifacts` in
-v0.1.1 — in particular, `geo`'s `--out` flag (default `public`) is independent of
+v0.2.0 — in particular, `geo`'s `--out` flag (default `public`) is independent of
 `stack.publicDir`; setting the config field does **not** change where `omnirank geo`
 writes files. Pass `--out` explicitly if you want it to land elsewhere. This section
 exists for forward compatibility with adapters on the roadmap (WordPress, Jekyll,
@@ -116,6 +116,67 @@ user-agents the gate checks (see [audit-guide.md](audit-guide.md#geo) for the fu
 `geo-artifacts` skill's generation. See [audit-guide.md](audit-guide.md#aeo) and
 [geo-artifacts-guide.md](geo-artifacts-guide.md).
 
+## `aeo`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `answerBlock` | object | no | Sizing rules for the AnswerBlock the `answer-block` gate scores. See below. |
+
+**Status: Consumed.** `bands.resolve_band(lang, config)` reads `aeo.answerBlock` on
+every page, keyed off that page's `<html lang>` value.
+
+### `aeo.answerBlock`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `default` | band object (`{unit, min, max}`) | yes, if `answerBlock` is present at all | The band applied to any script that has no more specific match. |
+| `byScript` | object, `{scriptFamily: band}` | no | Per-script overrides. Valid keys: `latin`, `cjk`, `brahmic`, `arabic`, `cyrillic`. |
+
+A **band object** is `{"unit": "words" | "chars", "min": <integer ≥ 1>, "max": <integer ≥
+1>}`. `min` may not exceed `max` — `resolve_band()` raises `ConfigError` if it does.
+
+```json
+"aeo": {
+  "answerBlock": {
+    "default": { "unit": "words", "min": 40, "max": 60 },
+    "byScript": {
+      "cjk": { "unit": "chars", "min": 80, "max": 200 },
+      "arabic": { "unit": "words", "min": 35, "max": 55 }
+    }
+  }
+}
+```
+
+**Why this section exists.** OmniRank's built-in default band — 40–60 words — is
+calibrated for space-delimited Latin text. `str.split()` (how the `words` unit is
+counted) returns a single token for an entire Chinese, Japanese, Korean, Thai, Lao,
+Khmer, Burmese, Tibetan or Dzongkha paragraph, because none of those scripts use spaces
+to separate words. Word counting is meaningless there, so those languages are grouped
+into the `cjk` script family and OmniRank measures **characters** for them instead
+(whitespace-stripped character count). Bengali, Hindi, Tamil, Telugu, Kannada,
+Malayalam, Gujarati, Punjabi, Odia, Sinhala, Nepali, Assamese and Marathi (the
+`brahmic` family) as well as Arabic, Persian, Urdu, Pashto, Sindhi and Kurdish (the
+`arabic` family) remain space-delimited — `str.split()` works normally there, so they
+keep **word** counting. See `scripts/py/omnirank/bands.py::script_of` for the exact
+BCP-47-tag-to-family mapping.
+
+**Band resolution order** (`bands.resolve_band`), most specific first:
+
+1. `aeo.answerBlock.byScript[script]` — an explicit override for this page's script
+   family, if the config sets one.
+2. The **built-in band for that script**, if OmniRank ships one. Today the only
+   built-in is `cjk` → 80–200 characters (`_BUILTIN_BY_SCRIPT` in `bands.py`); `latin`,
+   `brahmic`, `arabic` and `cyrillic` have none.
+3. `aeo.answerBlock.default` — the site's own general-purpose band, if configured.
+4. `DEFAULT_BAND` — OmniRank's hard-coded fallback, 40–60 words.
+
+**Step 2 deliberately outranks step 3.** A script-specific built-in beats the config's
+script-agnostic `default` on purpose: `default` says nothing about which script it was
+written for, and a *words* band cannot validly apply to a script with no word
+separators — applying a Latin-tuned word count to Chinese text would flag every
+compliant CJK answer block as far too short. A site that genuinely wants to override
+the CJK band sets `byScript.cjk` explicitly (step 1), which always wins.
+
 ## `indexing`
 
 | Field | Type | Description |
@@ -128,7 +189,7 @@ user-agents the gate checks (see [audit-guide.md](audit-guide.md#geo) for the fu
 
 **Status: Schema-only.** This entire section belongs to the `indexing` skill on the
 roadmap (target v0.3, per the README) and is validated but not read by anything shipped
-in v0.1.1.
+in v0.2.0.
 
 ## `tracking`
 

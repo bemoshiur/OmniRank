@@ -58,8 +58,8 @@ python3 -m omnirank.cli audit https://example.com
 Real output, captured against `https://example.com`:
 
 ```
-OmniRank 0.1.1 — https://example.com
-  overall 69/100  aeo 80  geo 60  seo 67
+OmniRank 0.2.0 — https://example.com
+  overall 76/100  aeo 80  geo 60  perf 100  seo 67
   1 URLs checked, 10 findings
   [FAIL] seo.canonical.missing  https://example.com/
          observed: no rel=canonical
@@ -110,14 +110,16 @@ Exit codes: `0` clean · `1` a `--fail-on` gate failed · `2` usage or config er
 non-zero exit is what makes it a CI gate, not just a report — see
 [Use OmniRank as a CI gate](#use-omnirank-as-a-ci-gate) below.
 
-## What ships in v0.1.1
+## What ships in v0.2.0
 
 | Skill | Status | What it does |
 |---|---|---|
-| `audit` | **Shipped** | Scores SEO, AEO, GEO and structured-data gates against a site's real HTML; reports `observed` / `expected` / `fix` for every gap |
+| `audit` | **Shipped** | Scores SEO, AEO, GEO, perf and structured-data gates against a site's real HTML — including a cross-URL pass over the whole crawled set — and reports `observed` / `expected` / `fix` for every gap |
 | `geo-artifacts` | **Shipped** | Generates `llms.txt`, `llms-full.txt` and `facts.json`, each with an explicit citation licence |
 
-That is the entire shipped surface. Everything below is roadmap, not present in v0.1.1.
+That is the entire shipped surface — still exactly two skills. 0.2.0 added gates and a
+`perf` layer to the existing `audit` skill; it did not ship a new skill. Everything below
+is roadmap, not present in v0.2.0.
 
 ## Roadmap
 
@@ -130,14 +132,17 @@ That is the entire shipped surface. Everything below is roadmap, not present in 
 | `smm-content` | v0.6 | Repurpose published pages into platform-native assets |
 | `smm-publish` | v0.7 | Gated publishing — dry-run by default, human approval required |
 
-Adapters for WordPress, Jekyll, Shopify, Astro, Vue and Svelte land at v1.0. None of the
-skills in this table exist in the installed package today — asking Claude Code to "write
-our JSON-LD" or "submit this URL to Google" will not trigger anything, because `aeo-onpage`
-and `indexing` are not built yet.
+`aeo-onpage`'s "v0.2" target above predates this plan and has already slipped: 0.2.0
+shipped as a site-gates/AnswerBlock-bands/perf release instead, folded into the existing
+`audit` skill rather than a new one. Treat every target version in this table as
+directional, not a commitment — none has a firm date. Adapters for WordPress, Jekyll,
+Shopify, Astro, Vue and Svelte land at v1.0. None of the skills in this table exist in the
+installed package today — asking Claude Code to "write our JSON-LD" or "submit this URL to
+Google" will not trigger anything, because `aeo-onpage` and `indexing` are not built yet.
 
 ## Every gate OmniRank checks, grouped by layer
 
-20 gate names exist in the config schema; 13 can fail a build, 5 are warning-only by
+29 gate names exist in the config schema; 15 can fail a build, 12 are warning-only by
 design, and 2 are schema-accepted but not yet wired into the automatic pipeline. Full
 detail, including which gates can never trip `--fail-on`, is in
 [audit-guide.md](docs/audit-guide.md#gate-reference) and
@@ -179,6 +184,31 @@ detail, including which gates can never trip `--fail-on`, is in
 |---|---|---|
 | `schema` | At least one valid `application/ld+json` block with `@type` | error |
 | `schema-fabrication` | `AggregateRating` has a real `ratingCount`; every `Review` has an `author` | error |
+
+**Site-level (cross-URL)** — new in 0.2.0; needs the whole crawled set, not one page
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `duplicate-title` | Two or more crawled pages share a `<title>` | warning |
+| `duplicate-description` | Two or more crawled pages share a meta description | warning |
+| `noindex-in-sitemap` | A crawled `noindex` page is also listed in `sitemap.xml` | error |
+| `canonical-cluster` | A canonical points at a page that itself canonicalises elsewhere | warning |
+| `hreflang-reciprocity` | An `hreflang` alternate does not link back | warning |
+
+**Performance** — new in 0.2.0; derived from one HTTP response, no browser involved
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `ttfb` | Response ≥ 800 ms (warning) or ≥ 2500 ms (error) — OmniRank's own tunable thresholds | warning / error |
+| `page-weight` | Raw HTML exceeds 500,000 bytes before any subresource | warning |
+| `compression` | No `gzip`/`br`/`deflate`/`zstd` `content-encoding` | warning |
+| `render-blocking` | More than 2 blocking `<script>` tags in `<head>` | warning |
+
+`perf` never measures Largest Contentful Paint, Cumulative Layout Shift, Interaction to
+Next Paint, or a Lighthouse score — OmniRank has no browser. See
+[audit-guide.md](docs/audit-guide.md#performance-perf-layer) for the named threshold
+constants and [faq.md](docs/faq.md#does-omnirank-measure-core-web-vitals) for the full
+answer.
 
 ## Download and install OmniRank
 
@@ -242,8 +272,8 @@ jobs:
 ```
 
 Picking `--fail-on h1 canonical schema` (structural baseline) is a better starting point
-than listing all 20 gate names — 5 of them are warning-only and can never fail a build, and
-2 more are schema-accepted but not yet wired into the automatic pipeline. The full
+than listing all 29 gate names — 12 of them are warning-only and can never fail a build,
+and 2 more are schema-accepted but not yet wired into the automatic pipeline. The full
 reasoning, plus a GitLab CI job and a generic shell script, is in
 [ci-integration.md](docs/ci-integration.md).
 
@@ -317,7 +347,7 @@ it generates into the output directory you specify, never existing site source.
 <details>
 <summary>Is OmniRank on PyPI or npm yet?</summary>
 
-No, not as of v0.1.1. Install the Python CLI from source — clone the repository and `pip
+No, not as of v0.2.0. Install the Python CLI from source — clone the repository and `pip
 install -e ./scripts/py` inside a virtual environment, or install directly from git with
 `pip install "omnirank @ git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"`.
 The Node generator is likewise unpublished; import `scripts/node/src/generate.ts` directly
@@ -367,7 +397,7 @@ answered in [docs/faq.md](docs/faq.md).
 
 ## Documentation and guides
 
-Every page is verified against the v0.1.1 source, generated from the JSON Schema where
+Every page is verified against the v0.2.0 source, generated from the JSON Schema where
 applicable, and every command shown was actually run.
 
 | Guide | Covers |
@@ -380,7 +410,7 @@ applicable, and every command shown was actually run.
 | [ci-integration.md](docs/ci-integration.md) | GitHub Actions, GitLab CI, shell examples, and choosing `--fail-on` gates |
 | [claude-code-setup.md](docs/claude-code-setup.md) | Installing as a Claude Code plugin and the real trigger phrases per skill |
 | [troubleshooting.md](docs/troubleshooting.md) | Real error text for likely failures, with the fix for each |
-| [faq.md](docs/faq.md) | 16 direct, honest answers, including what OmniRank does not do |
+| [faq.md](docs/faq.md) | 17 direct, honest answers, including what OmniRank does not do |
 
 ## Contributing
 

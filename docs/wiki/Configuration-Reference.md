@@ -14,7 +14,7 @@ being silently ignored.
 
 ## What does "Consumed" vs "Schema-only" mean?
 
-Not every field the schema accepts is read by v0.1.1's shipped code. **Consumed** means a
+Not every field the schema accepts is read by v0.2.0's shipped code. **Consumed** means a
 shipped code path reads the field. **Schema-only** means the field is validated, stored,
 and forward-compatible with a roadmap skill, but nothing in `audit` or `geo-artifacts`
 reads it yet. Writing a schema-only field is not wasted — validation still checks it —
@@ -82,7 +82,7 @@ unshipped `offsite-entity` skill will eventually read. See [[Glossary#sameas]].
 | `publicDir` | string | Static-asset output directory |
 | `builtHtml` | string | Path to server-rendered HTML output (e.g. `.next/server/app`) |
 
-**Schema-only.** None of these fields are read by `audit` or `geo-artifacts` in v0.1.1 —
+**Schema-only.** None of these fields are read by `audit` or `geo-artifacts` in v0.2.0 —
 in particular, `geo`'s `--out` flag (default `public`) is independent of
 `stack.publicDir`. Pass `--out` explicitly if you want output to land elsewhere.
 
@@ -108,6 +108,62 @@ in particular, `geo`'s `--out` flag (default `public`) is independent of
 **Consumed.** All three fields feed both the `audit` skill's AEO gate and the
 `geo-artifacts` skill's generation. See [[Audit-Skill]] and [[GEO-Artifacts-Skill]].
 
+## `aeo`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `answerBlock` | object | no | Sizing rules for the AnswerBlock the `answer-block` gate scores. See below. |
+
+**Consumed.** `bands.resolve_band(lang, config)` reads `aeo.answerBlock` on every page,
+keyed off that page's `<html lang>` value.
+
+### `aeo.answerBlock`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `default` | band object `{unit, min, max}` | yes, if `answerBlock` is present at all | The band applied when no more specific match exists. |
+| `byScript` | object, `{scriptFamily: band}` | no | Per-script overrides. Valid keys: `latin`, `cjk`, `brahmic`, `arabic`, `cyrillic`. |
+
+A band object is `{"unit": "words" | "chars", "min": <int ≥ 1>, "max": <int ≥ 1>}` with
+`min <= max` (enforced — `resolve_band()` raises `ConfigError` otherwise):
+
+```json
+"aeo": {
+  "answerBlock": {
+    "default": { "unit": "words", "min": 40, "max": 60 },
+    "byScript": {
+      "cjk": { "unit": "chars", "min": 80, "max": 200 },
+      "arabic": { "unit": "words", "min": 35, "max": 55 }
+    }
+  }
+}
+```
+
+**Why per-script bands exist.** The built-in default — 40–60 words — assumes
+space-delimited text. `str.split()` (how the `words` unit counts) returns a single
+token for an entire Chinese, Japanese, Korean, Thai, Lao, Khmer, Burmese, Tibetan or
+Dzongkha paragraph, since none of those scripts use spaces between words — word
+counting is meaningless there. Those languages form the `cjk` script family and
+OmniRank measures **characters** for them instead (whitespace stripped). Bengali,
+Hindi, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi, Odia, Sinhala, Nepali,
+Assamese and Marathi (`brahmic`) and Arabic, Persian, Urdu, Pashto, Sindhi and Kurdish
+(`arabic`) are space-delimited and keep **word** counting. See
+`scripts/py/omnirank/bands.py::script_of` for the exact language-tag mapping.
+
+**Band resolution order**, most specific first:
+
+1. `aeo.answerBlock.byScript[script]` — an explicit config override for this page's
+   script family.
+2. The **built-in band** for that script, if OmniRank ships one — today only `cjk`
+   (80–200 characters). `latin`, `brahmic`, `arabic` and `cyrillic` have no built-in.
+3. `aeo.answerBlock.default` — the site's own general band.
+4. `DEFAULT_BAND` — the hard-coded fallback, 40–60 words.
+
+Step 2 deliberately outranks step 3: a script-specific built-in beats a script-agnostic
+config `default` because a *words* band cannot validly apply to a script with no word
+separators. A site that genuinely wants a different CJK band sets `byScript.cjk`
+explicitly, which always wins as step 1.
+
 ## `indexing`
 
 | Field | Type | Description |
@@ -119,7 +175,7 @@ in particular, `geo`'s `--out` flag (default `public`) is independent of
 | `priorityUrls` | string | Path to a priority-URL list |
 
 **Schema-only.** This entire section belongs to the `indexing` skill on the roadmap
-(target v0.3) and is validated but not read by anything shipped in v0.1.1.
+(target v0.3) and is validated but not read by anything shipped in v0.2.0.
 
 ## `tracking`
 
