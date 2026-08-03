@@ -65,6 +65,9 @@ def audit_site(config: Config, client: httpx.Client | None = None,
         if sitemap.ok:
             report.extend(hygiene.check_lastmod(sitemap.text, config.site_url))
 
+        order = {url: i for i, url in enumerate(targets)}
+        report.findings.sort(key=lambda f: order.get(f.url, len(order)))
+
         return report
     finally:
         if owns_client:
