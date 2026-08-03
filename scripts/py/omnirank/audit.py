@@ -5,7 +5,7 @@ import httpx
 from .bands import resolve_band
 from .config import Config
 from .fetch import fetch, make_client, read_sitemap
-from .gates import aeo, geo, hygiene, jsonld, seo
+from .gates import aeo, geo, hygiene, jsonld, perf, seo, site
 from .page import PageData
 from .report import Finding, Report
 
@@ -15,11 +15,6 @@ def default_config(url: str) -> Config:
     return Config({
         "site": {"name": url, "url": url, "entityType": "Organization"},
     })
-
-
-def _discover(client: httpx.Client, config: Config) -> list[str]:
-    urls = read_sitemap(client, config.site_url, config.sample_size)
-    return urls or [config.site_url + "/"]
 
 
 def _collect(client: httpx.Client, targets: list[str], report: Report) -> list[PageData]:
@@ -49,8 +44,17 @@ def audit_site(config: Config, client: httpx.Client | None = None,
     client = client or make_client()
     try:
         report = Report(site=config.site_url, kind="audit")
-        report.layers_run.update({"seo", "aeo", "geo"})
-        targets = urls if urls is not None else _discover(client, config)
+        report.layers_run.update({"seo", "aeo", "geo", "perf"})
+
+        sitemap_urls: list[str] | None = None
+        if urls is None:
+            sitemap_urls = read_sitemap(client, config.site_url, config.sample_size)
+            targets = sitemap_urls or [config.site_url + "/"]
+        else:
+            targets = urls
+        # Duplicate <loc> entries (or duplicate explicit urls) would otherwise
+        # double-fetch a page and inflate the site pass's duplicate-group counts.
+        targets = list(dict.fromkeys(targets))
 
         pages = _collect(client, targets, report)
 
@@ -59,6 +63,9 @@ def audit_site(config: Config, client: httpx.Client | None = None,
             report.extend(aeo.run(page.html, page.url, config.answer_block_selector,
                                   resolve_band(page.lang, config)))
             report.extend(jsonld.run(page.html, page.url))
+            report.extend(perf.run(page))
+
+        report.extend(site.run(pages, sitemap_urls))
 
         report.urls_checked = len(targets)
         report.extend(geo.run(client, config.site_url))

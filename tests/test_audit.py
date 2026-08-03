@@ -1,3 +1,5 @@
+import gzip
+
 import httpx
 import respx
 
@@ -27,7 +29,12 @@ SITEMAP = ('<?xml version="1.0"?><urlset>'
 
 def mock_site(page_status=200):
     respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(200, text=SITEMAP))
-    respx.get(f"{SITE}/").mock(return_value=httpx.Response(page_status, text=PAGE))
+    # Actually gzip the body (not just set the header) so the perf gate's
+    # compression check sees a genuinely clean page: httpx decodes responses
+    # by their declared content-encoding and errors on a mismatched body.
+    respx.get(f"{SITE}/").mock(return_value=httpx.Response(
+        page_status, content=gzip.compress(PAGE.encode()),
+        headers={"content-encoding": "gzip"}))
     respx.get(f"{SITE}/llms.txt").mock(
         return_value=httpx.Response(200, text="# X\n## How to cite us\nCC BY 4.0."))
     respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(200, text="full"))
@@ -137,3 +144,96 @@ def test_findings_are_ordered_by_target_position():
     # /a findings must all precede the /b error, which must precede /c findings
     assert positions == sorted(positions, key=lambda u: [f"{SITE}/a", f"{SITE}/b",
                                                          f"{SITE}/c"].index(u))
+
+
+@respx.mock
+def test_perf_layer_is_declared_and_scored():
+    mock_site()
+    report = audit_site(default_config(SITE), make_client())
+    assert "perf" in report.layers_run, (
+        "an undeclared layer vanishes from the score map instead of scoring 100")
+    assert "perf" in report.score()
+
+
+@respx.mock
+def test_site_pass_sees_duplicates_across_urls():
+    dup = ("<!doctype html><html lang='en'><head><title>Same</title>"
+           '<meta name="description" content="Same.">'
+           f'<link rel="canonical" href="{SITE}/x"></head>'
+           "<body><h1>H</h1></body></html>")
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(
+        200, text='<?xml version="1.0"?><urlset>'
+                  f"<url><loc>{SITE}/x</loc></url><url><loc>{SITE}/y</loc></url>"
+                  "</urlset>"))
+    for path in ("/x", "/y"):
+        respx.get(f"{SITE}{path}").mock(return_value=httpx.Response(200, text=dup))
+    for art, body in (("llms.txt", "# X\n## How to cite us\nCC BY 4.0."),
+                      ("llms-full.txt", "full"), ("facts.json", '{"a":1}')):
+        respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(200, text=body))
+    respx.get(f"{SITE}/robots.txt").mock(
+        return_value=httpx.Response(200, text="User-agent: *\nAllow: /\n"))
+
+    report = audit_site(default_config(SITE), make_client())
+    found = {f.id for f in report.findings}
+    assert "seo.duplicate-title.shared" in found
+    assert "seo.duplicate-description.shared" in found
+
+
+@respx.mock
+def test_report_still_validates_with_the_new_layers():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator, FormatChecker
+
+    mock_site()
+    report = audit_site(default_config(SITE), make_client())
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "schemas" / "report.schema.json").read_text())
+    errors = list(Draft202012Validator(schema, format_checker=FormatChecker())
+                  .iter_errors(report.to_dict()))
+    assert errors == [], errors
+
+
+@respx.mock
+def test_duplicate_sitemap_entries_are_fetched_once():
+    good = ("<!doctype html><html lang='en'><head><title>T</title>"
+            '<meta name="description" content="D."></head>'
+            "<body><h1>H</h1></body></html>")
+    route = respx.get(f"{SITE}/a").mock(return_value=httpx.Response(200, text=good))
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(
+        200, text='<?xml version="1.0"?><urlset>'
+                  f"<url><loc>{SITE}/a</loc></url>"
+                  f"<url><loc>{SITE}/a</loc></url>"
+                  "</urlset>"))
+    for art in ("llms.txt", "llms-full.txt", "facts.json"):
+        respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+
+    report = audit_site(default_config(SITE), make_client())
+    assert route.call_count == 1, "a URL listed twice must not be fetched twice"
+    assert report.urls_checked == 1
+
+
+@respx.mock
+def test_duplicate_sitemap_entries_do_not_inflate_duplicate_groups():
+    good = ("<!doctype html><html lang='en'><head><title>Same</title>"
+            '<meta name="description" content="Same."></head>'
+            "<body><h1>H</h1></body></html>")
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(
+        200, text='<?xml version="1.0"?><urlset>'
+                  f"<url><loc>{SITE}/a</loc></url>"
+                  f"<url><loc>{SITE}/a</loc></url>"
+                  f"<url><loc>{SITE}/b</loc></url>"
+                  "</urlset>"))
+    for path in ("/a", "/b"):
+        respx.get(f"{SITE}{path}").mock(return_value=httpx.Response(200, text=good))
+    for art in ("llms.txt", "llms-full.txt", "facts.json"):
+        respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+
+    report = audit_site(default_config(SITE), make_client())
+    dup = [f for f in report.findings if f.id == "seo.duplicate-title.shared"]
+    assert len(dup) == 1
+    assert "2 pages" in dup[0].observed, (
+        f"two distinct URLs share the title, got: {dup[0].observed!r}")
