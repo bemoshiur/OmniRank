@@ -64,6 +64,18 @@ def test_heavy_html_is_a_warning():
     assert found and found[0].gate == "page-weight"
 
 
+def test_page_weight_reports_bytes_and_kib_consistently():
+    # S9: at exactly 500,001 bytes the old code printed "488 KB of HTML ...
+    # expected under 488 KB" -- self-contradictory (the page is over the limit but
+    # both figures floor to the same truncated number) and mislabelled (KB, not
+    # KiB, despite dividing by 1024).
+    html = "x" * 500_001
+    assert len(html.encode("utf-8")) == 500_001
+    found = [f for f in perf.run(page(html=html)) if f.id == "perf.page-weight.heavy"][0]
+    assert found.observed == "500001 bytes (489 KiB) of HTML before any subresource"
+    assert found.expected == "under 500000 bytes (488 KiB)"
+
+
 def test_missing_compression_is_a_warning():
     found = [f for f in perf.run(page(headers={})) if f.id == "perf.compression.missing"]
     assert found and found[0].gate == "compression"

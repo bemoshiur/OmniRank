@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from ..page import PageData
 from ..report import Finding
 
@@ -52,12 +54,21 @@ def _response_time(page: PageData) -> list[Finding]:
 
 
 def _page_weight(page: PageData) -> list[Finding]:
+    """Report the byte count, not a unit-confused KiB truncation.
+
+    At exactly 500,001 bytes, `size // 1024` and `HTML_WARN_BYTES // 1024` are both
+    488 — the finding would read "488 KB ... expected under 488 KB", contradicting
+    itself about a page that is in fact over the limit. Reporting the exact byte
+    count alongside a correctly-labelled KiB figure (KiB, since this divides by
+    1024, not 1000) avoids both the self-contradiction and the KB/KiB mislabel.
+    """
     size = len(page.html.encode("utf-8"))
     if size <= HTML_WARN_BYTES:
         return []
+    size_kib = math.ceil(size / 1024)
     return [_f("perf.page-weight.heavy", "page-weight", page.url, "warning",
-               f"{size // 1024} KB of HTML before any subresource",
-               f"under {HTML_WARN_BYTES // 1024} KB",
+               f"{size} bytes ({size_kib} KiB) of HTML before any subresource",
+               f"under {HTML_WARN_BYTES} bytes ({HTML_WARN_BYTES // 1024} KiB)",
                "Large HTML delays parsing and inflates every cache. Look for inlined "
                "data, embedded base64, or a component rendering the whole dataset.")]
 
