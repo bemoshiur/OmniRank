@@ -88,6 +88,26 @@
         "answerBlockSelector": { "type": "string" }
       }
     },
+    "aeo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "AnswerBlock sizing. The default 40-60 word band is calibrated for space-delimited Latin script; scripts without word separators need character counting.",
+      "properties": {
+        "answerBlock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default"],
+          "properties": {
+            "default": { "$ref": "#/$defs/band" },
+            "byScript": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/band" },
+              "description": "Override per script family: latin, cjk, brahmic, arabic, cyrillic."
+            }
+          }
+        }
+      }
+    },
     "indexing": {
       "type": "object",
       "additionalProperties": false,
@@ -112,7 +132,10 @@
                      "og", "image-dims", "answer-block", "faq", "speakable",
                      "llms-txt", "llms-full", "facts-json", "ai-allowlist",
                      "citation-licence", "crawl-hygiene", "sitemap-health",
-                     "lastmod-inflation", "schema", "schema-fabrication"]
+                     "lastmod-inflation", "schema", "schema-fabrication",
+                     "duplicate-title", "duplicate-description", "noindex-in-sitemap",
+                     "canonical-cluster", "hreflang-reciprocity",
+                     "ttfb", "page-weight", "compression", "render-blocking"]
           }
         }
       }
@@ -158,6 +181,18 @@
         "type": "string",
         "pattern": "^env:[A-Z_][A-Z0-9_]*$",
         "description": "Must be an env: pointer. Literal secrets are rejected by design."
+      }
+    }
+  },
+  "$defs": {
+    "band": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "min", "max"],
+      "properties": {
+        "unit": { "enum": ["words", "chars"] },
+        "min": { "type": "integer", "minimum": 1 },
+        "max": { "type": "integer", "minimum": 1 }
       }
     }
   }

@@ -37,6 +37,14 @@
     "attribution": "Public Pulse Agency",
     "answerBlockSelector": ".answer-block"
   },
+  "aeo": {
+    "answerBlock": {
+      "default": { "unit": "words", "min": 40, "max": 60 },
+      "byScript": {
+        "cjk": { "unit": "chars", "min": 80, "max": 200 }
+      }
+    }
+  },
   "audit": {
     "sampleSize": 200,
     "failOn": ["h1", "canonical", "schema"]
