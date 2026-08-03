@@ -148,9 +148,15 @@ Exit code `1`. Read the finding lines above `failOn gates:` — every `[FAIL]` l
 Apply the `fix` text for the flagged gate(s) and re-run.
 
 If a gate you listed in `--fail-on` never seems to go red no matter what you do, check
-whether it is one of the five gates that only ever produce warning-severity findings
-(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`) or one of the
-two gates not wired into the automatic pipeline (`crawl-hygiene`, `sitemap-health`) — see
+whether it is one of the 12 gates that only ever produce warning-severity findings
+(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`,
+`duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`,
+`page-weight`, `compression`, `render-blocking`) or whether it is `crawl-hygiene`, the
+one gate whose dedicated check is not wired into the automatic pipeline. `sitemap-health`
+looks like it belongs in that last group too — its own dedicated check is equally
+unwired — but it is not actually inert: an unreachable target is reported as an error
+under `gate: "sitemap-health"` through a different code path, so it can trigger exit code
+`1`. See
 [ci-integration.md](ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap)
 for the full breakdown of which gate names can actually trigger exit code `1`.
 

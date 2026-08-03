@@ -266,21 +266,26 @@ below.
 
 ### What `crawl-hygiene` and `sitemap-health` do NOT cover automatically
 
-`hygiene.py` also defines `check_removed()` (the `crawl-hygiene` gate: 404s should be
-warnings, 5xx errors on unknown slugs should be errors) and `check_sitemap()` (the
-`sitemap-health` gate: every sitemap URL should return 200). **Both are real, tested
-functions — but `audit_site()` does not call either of them.** Reading
-`scripts/py/omnirank/audit.py` confirms only `hygiene.check_lastmod()` runs as part of a
-normal audit. `check_removed()` and `check_sitemap()` take an explicit list of URLs and
-must be invoked directly from Python (or your own script) — there is no CLI flag for them
-in v0.2.0.
+`hygiene.py` defines `check_removed()` (404s should be warnings, 5xx errors on unknown
+slugs should be errors) and `check_sitemap()` (every sitemap URL should return 200).
+**Both are real, tested functions — but `audit_site()` does not call either of them.**
+Reading `scripts/py/omnirank/audit.py` confirms only `hygiene.check_lastmod()` runs as
+part of a normal audit. `check_removed()` and `check_sitemap()` take an explicit list of
+URLs and must be invoked directly from Python (or your own script) — there is no CLI flag
+for them in v0.2.0.
 
-Practically: `crawl-hygiene` and `sitemap-health` are valid values in `audit.failOn` and
-`--fail-on` (the config schema's enum accepts them), but **a plain `omnirank audit` run
-will never produce a finding under either gate name**, so listing them today has no
-effect. If you rely on the 404/410/redirect policy or sitemap-URL-liveness checks, call
-`hygiene.check_removed(client, urls)` and `hygiene.check_sitemap(client, site_url,
-sample)` directly:
+**This makes `crawl-hygiene` — but not `sitemap-health` — inert as a `--fail-on` gate,
+and the two are easy to conflate.** `crawl-hygiene`'s only source is `check_removed()`,
+so with that function unwired, `crawl-hygiene` truly never fires from a plain
+`omnirank audit` run. `sitemap-health` has a *second* source: `_collect()` in `audit.py`
+reports every target URL it could not fetch as an error under `gate: "sitemap-health"`
+(the `seo.page.unreachable` finding) — a code path entirely separate from
+`check_sitemap()`. So `sitemap-health` **does** produce a finding, and can fail a build,
+any time a target 404s or errors, even though `check_sitemap()` itself never runs.
+Verify directly: `omnirank audit https://example.com/nope-xyz --fail-on sitemap-health`
+exits `1`; the otherwise-identical `--fail-on crawl-hygiene` exits `0`. If you also want
+`check_sitemap()`'s specific redirect/dead-URL policy, or `check_removed()`'s 404/5xx
+policy for a list of legacy URLs, call them directly:
 
 ```python
 from omnirank.fetch import make_client

@@ -247,11 +247,19 @@ per-page change — exactly 90% does not trigger it; anything above does. This i
 
 ## What do `crawl-hygiene` and `sitemap-health` not cover automatically?
 
-`hygiene.py` also defines `check_removed()` (the `crawl-hygiene` gate: 404s should be
-warnings, 5xx errors on unknown slugs should be errors) and `check_sitemap()` (the
-`sitemap-health` gate: every sitemap URL should return 200). **Both are real, tested
-functions — but `audit_site()` does not call either of them.** They take an explicit list
-of URLs and must be invoked directly from Python:
+`hygiene.py` also defines `check_removed()` (404s should be warnings, 5xx errors on
+unknown slugs should be errors) and `check_sitemap()` (every sitemap URL should return
+200). **Both are real, tested functions — but `audit_site()` does not call either of
+them.** This makes `crawl-hygiene` — but not `sitemap-health` — genuinely inert as a
+`--fail-on` gate: `crawl-hygiene`'s only source is `check_removed()`, so with that
+function unwired it truly never fires. `sitemap-health` has a *second* source —
+`_collect()` in `audit.py` reports every unreachable target URL as an error under
+`gate: "sitemap-health"`, a code path entirely separate from `check_sitemap()` — so it
+**does** produce findings and can fail a build even though `check_sitemap()` itself never
+runs. Verify: `omnirank audit https://example.com/nope-xyz --fail-on sitemap-health`
+exits `1`; `--fail-on crawl-hygiene` on the same URL exits `0`. If you want
+`check_removed()`'s or `check_sitemap()`'s specific policy, both take an explicit list of
+URLs and must be invoked directly from Python:
 
 ```python
 from omnirank.fetch import make_client
