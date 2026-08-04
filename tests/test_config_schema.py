@@ -163,3 +163,9 @@ def test_canonical_target_is_accepted_in_fail_on():
     cfg = minimal()
     cfg["audit"] = {"failOn": ["canonical-target"]}
     assert list(validator().iter_errors(cfg)) == []
+
+
+def test_hreflang_noindex_is_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ["hreflang-noindex"]}
+    assert list(validator().iter_errors(cfg)) == []
