@@ -5,7 +5,7 @@ import httpx
 from .bands import resolve_band
 from .config import Config
 from .fetch import fetch, make_client, read_sitemap
-from .gates import aeo, geo, hygiene, jsonld, perf, security, seo, site
+from .gates import aeo, contradictions, geo, hygiene, jsonld, perf, security, seo, site
 from .page import PageData
 from .report import Finding, NotEvaluated, Report
 
@@ -128,6 +128,12 @@ def audit_site(config: Config, client: httpx.Client | None = None,
             report.layers_run.add("security")
 
         report.extend(site.run(pages, sitemap_urls))
+
+        robots_findings, robots_not_evaluated = contradictions.check_sitemap_vs_robots(
+            client, config.site_url, sitemap_urls)
+        report.extend(robots_findings)
+        for entry in robots_not_evaluated:
+            report.flag_not_evaluated(entry)
 
         report.urls_checked = len(targets)
         report.extend(geo.run(client, config.site_url))

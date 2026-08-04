@@ -150,6 +150,12 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     # `infrastructure`: no source edit produces an origin-level redirect.
     _r("security.https-redirect.missing", "infrastructure", "error", "security",
        "https-redirect"),
+    # --- gates/contradictions.py (v0.4.0) ---------------------------------
+    # `advisory`: two opposite correct answers exist -- unblock it in robots.txt,
+    # or drop it from the sitemap -- and only the owner knows which was intended.
+    # Exactly parallel to seo.noindex.in-sitemap.
+    _r("seo.robots-sitemap.disallowed", "advisory", "error", "seo",
+       "robots-sitemap"),
 )
 
 REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}
@@ -199,6 +205,10 @@ def scoring_gate_count(layer: str) -> int:
 # robots.txt and crawler directives; noindex and sitemap membership; canonical
 # and hreflang SETS (a single self-canonical on a single-route file is NOT a
 # set, and is governed by blast radius instead); and any licence grant.
+# v0.4.0 adds seo.robots-sitemap.disallowed and seo.hreflang-noindex.alternate:
+# the first touches robots.txt AND sitemap membership, the second an hreflang
+# SET -- all three surfaces are already enumerated above, so both are
+# hard-capped for the same reason.
 PROTECTED_SURFACES: frozenset[str] = frozenset({
     "geo.ai-allowlist.missing",
     "geo.ai-allowlist.blocked",
@@ -206,6 +216,7 @@ PROTECTED_SURFACES: frozenset[str] = frozenset({
     "seo.hreflang.no-x-default",
     "seo.hreflang.not-reciprocal",
     "geo.citation-licence.missing",
+    "seo.robots-sitemap.disallowed",
 })
 
 # Capped at display-only permanently, at any tier, under any flag. Reversing a

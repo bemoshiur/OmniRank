@@ -151,3 +151,9 @@ def test_the_two_scoring_security_gates_are_accepted_in_fail_on():
     cfg = minimal()
     cfg["audit"] = {"failOn": ["mixed-content", "https-redirect"]}
     assert list(validator().iter_errors(cfg)) == []
+
+
+def test_the_contradiction_gates_are_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ["robots-sitemap"]}
+    assert list(validator().iter_errors(cfg)) == []
