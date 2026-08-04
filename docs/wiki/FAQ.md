@@ -29,12 +29,13 @@ or `fix` code paths.
 
 ### Will OmniRank edit my files?
 
-Not in v0.3.0, and not automatically ever from the `audit` skill. `omnirank fix` locates
+Not automatically, ever, from the `audit` skill. `omnirank fix` locates
 each finding, prints the unified diff it would apply, and stops — **there is no `--write`
-flag**, and passing one exits `2` with a message naming v0.4.0, before any network call.
-File modification is planned for v0.4.0, after the locator described in [[The-Locator]]
-has been proven in the field. See [[Fix-Preview]] for the full behaviour and a worked
-example of its output.
+flag**, and passing one exits `2` with an explanation, before any network call.
+File modification ships once the locator described in [[The-Locator]]
+has been proven against real repositories and the write guarantees it depends on are
+implemented and tested — not on a release number. See [[Fix-Preview]] for the full
+behaviour and a worked example of its output.
 
 ### Is `llms.txt` a real, established standard?
 

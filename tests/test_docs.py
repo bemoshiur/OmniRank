@@ -1,9 +1,11 @@
+import re
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
+WIKI = DOCS / "wiki"
 
 MIN_LENGTH = 1500
 
@@ -121,3 +123,27 @@ def test_readme_documents_the_fix_subcommand():
     body = (ROOT / "README.md").read_text()
     assert "omnirank fix" in body
     assert "v0.4.0" in body
+
+
+# B3: commit 32209f7 stopped `docs/` and `skills/` promising "--write arrives in
+# vX.Y.Z" -- a version-numbered promise that becomes a false statement the moment
+# that version ships without it, which is exactly what happened to v0.4.0's own
+# wiki copy. The replacement names the CONDITION writing ships under (the locator
+# proven, the write guarantees implemented and tested), never a version number.
+# This pattern-matches the phrasing that caused it, not just "v0.4.0" literally,
+# so a *future* version-numbered promise ("arrives in v0.5.0") trips it too.
+FUTURE_VERSION_PROMISE = re.compile(
+    r"(arrives in|targeted at|planned for|deferred to|wait(ing)? for|until) "
+    r"v\d+\.\d+(\.\d+)?",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize("path", sorted(WIKI.glob("*.md")), ids=lambda p: p.name)
+def test_no_wiki_page_promises_write_at_a_version_number(path):
+    body = path.read_text()
+    match = FUTURE_VERSION_PROMISE.search(body)
+    assert match is None, (
+        f"{path.relative_to(ROOT)} contains {match.group(0)!r} -- name the "
+        f"condition a feature ships under instead of a version number, which "
+        f"becomes a false statement the moment that version tags without it")

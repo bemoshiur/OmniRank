@@ -2,7 +2,7 @@
 
 `omnirank fix` answers the question no URL-keyed SEO tool can: which file is wrong? It
 audits a site, resolves each finding's URL to a source file, and prints the unified diff
-it would apply. It writes nothing — there is no `--write` flag in 0.3.0, and passing one
+it would apply. It writes nothing — there is no `--write` flag, and passing one
 exits before any network call runs.
 
 Verified against `scripts/py/omnirank/cli.py`, `scripts/py/omnirank/fixes/`, and a real
@@ -29,7 +29,7 @@ omnirank fix --config omnirank.config.json --json
 | `--root PATH` | Repository root to locate findings in. Default: `.` |
 | `--json` | Emit the fix plan as structured JSON, including an explicit `"wrote": []` |
 | `--top N` | Limit the grouped "NOT FIXED" summary to the top N groups (default: all) |
-| `--write` | **Not available in 0.3.0.** Exits `2` with an explanation, before any network call |
+| `--write` | **Not available.** Exits `2` with an explanation, before any network call |
 
 Exit codes: `0` nothing to fix · `1` at least one diff was produced (gate CI on this,
 distinct from `audit`'s own `--fail-on` exit code) · `2` usage or config error, including
@@ -97,7 +97,7 @@ OmniRank 0.3.0 — fix preview (writes nothing)
   [1×] pricing/index.html has no </head> to insert before
         e.g. seo.canonical.missing http://127.0.0.1:8791/pricing/
 
-  This release writes nothing. --write arrives in v0.4.0.
+  This release writes nothing; --write is not available.
 ```
 
 Exit code `1`, since two diffs were produced. Three real things happened here, worth
@@ -116,25 +116,27 @@ naming individually:
    rather than guessing where `<head>` was meant to end. This is the applicability model
    working as designed: a plausible insertion point is not the same as a correct one.
 
-## Does `omnirank fix` write anything, ever, in 0.3.0?
+## Does `omnirank fix` write anything, ever?
 
 No. Not with any flag, any config, or any combination of the two. Passing `--write`
 prints a refusal and exits `2` before `load_config()` or any network call runs:
 
 ```
 $ python3 -m omnirank.cli fix http://127.0.0.1:8791 --root scripts/fixtures/demo-site --write
-omnirank: omnirank fix has no --write path in 0.3.0. This release locates findings and
-prints the diff it would apply; it modifies nothing. File modification arrives
-in v0.4.0, behind the write guarantees in
-docs/research/2026-08-04-automation-architecture.md section 2.5. Shipping
---write as a no-op would be worse than not shipping it.
+omnirank: omnirank fix has no --write path. This release locates findings and prints
+the diff it would apply; it writes nothing. Writing ships once the locator has been
+proven against real repositories and the write guarantees in
+docs/research/2026-08-04-automation-architecture.md section 2.5 are implemented and
+tested -- not on a release number. Shipping --write as a no-op, or before those
+guarantees exist, would be worse than not shipping it.
 ```
 
 `fixes/base.py` states the same guarantee in its own module docstring: "NOTHING IN THIS
 PACKAGE OPENS A FILE FOR WRITING." A test in the repository's own suite asserts it
-directly. File modification is planned for v0.4.0, safe-tier only, behind the write
-guarantees (git-dirty checks, a journal, `omnirank undo`) described in
-`docs/research/2026-08-04-automation-architecture.md`.
+directly. File modification ships once the locator is proven against real repositories
+and the write guarantees (git-dirty checks, a journal, `omnirank undo`) described in
+`docs/research/2026-08-04-automation-architecture.md` are implemented and tested — not
+on a release number.
 
 ## What is fixable today, and why so little?
 

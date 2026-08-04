@@ -160,7 +160,7 @@ Full model and worked example: [[Fix-Preview]].
 |---|---|
 | `0` | Clean — no `--fail-on` gate had an error-severity finding (`audit`); nothing to fix (`fix`); artifacts written (`geo`) |
 | `1` | At least one gate in `--fail-on` had an error-severity finding (`audit`); at least one diff was produced (`fix`) |
-| `2` | Usage or configuration error, including passing `fix --write`, which does not exist in 0.3.0 |
+| `2` | Usage or configuration error, including passing `fix --write`, which does not exist |
 
 The run above returned `0` because no `--fail-on` gates were specified.
 
