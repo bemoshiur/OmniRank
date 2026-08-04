@@ -75,11 +75,56 @@ def test_route_groups_do_not_appear_in_the_url(tmp_path):
     assert found.confidence == "exact"
 
 
-def test_parallel_slots_and_private_folders_are_not_route_segments(tmp_path):
+def test_parallel_slots_are_not_route_segments(tmp_path):
+    # `_components/page.tsx` is a decoy here: it must not interfere with the
+    # `@modal` match. It is not itself routable -- see the private-folder
+    # tests below for that behaviour.
     root = app(tmp_path, {"@modal/settings/page.tsx": METADATA_PAGE,
                           "_components/page.tsx": BARE_PAGE})
     found = locate("https://x.example/settings", detection=NEXT, root=root)
     assert found.path == "app/@modal/settings/page.tsx"
+
+
+def test_a_private_folder_is_not_a_route_at_all(tmp_path):
+    # Next.js opts a `_`-prefixed folder -- and everything beneath it -- out
+    # of routing entirely. This is NOT route-group semantics: the page is
+    # unreachable by any URL, not merely reachable at a shorter one. A real
+    # deployment 404s on `/blog`; the locator must agree, not report `exact`.
+    root = app(tmp_path, {"_internal/blog/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/blog", detection=NEXT, root=root)
+    assert found == NOT_LOCATED
+    assert found.path is None
+    assert found.confidence == "none"
+
+
+def test_the_url_form_of_a_private_folder_is_also_not_routable(tmp_path):
+    # Requesting the literal `_`-prefixed path in the URL doesn't make the
+    # folder routable either -- there is no URL that reaches it.
+    root = app(tmp_path, {"_lib/page.tsx": BARE_PAGE})
+    assert locate("https://x.example/_lib", detection=NEXT, root=root) == NOT_LOCATED
+
+
+def test_a_private_folder_removes_everything_nested_beneath_it(tmp_path):
+    # The strongest reproduction: naive segment-stripping would match
+    # `blog/_drafts/secret/page.tsx` against `/blog/secret`, since dropping
+    # `_drafts` leaves exactly that pattern. The whole subtree is unroutable.
+    root = app(tmp_path, {"blog/_drafts/secret/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/blog/secret", detection=NEXT, root=root)
+    assert found == NOT_LOCATED
+
+
+def test_parallel_route_slots_still_resolve_after_the_private_folder_fix(tmp_path):
+    root = app(tmp_path, {"@modal/login/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/login", detection=NEXT, root=root)
+    assert found.path == "app/@modal/login/page.tsx"
+    assert found.confidence == "exact"
+
+
+def test_route_groups_still_resolve_after_the_private_folder_fix(tmp_path):
+    root = app(tmp_path, {"(marketing)/pricing/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/pricing", detection=NEXT, root=root)
+    assert found.path == "app/(marketing)/pricing/page.tsx"
+    assert found.confidence == "exact"
 
 
 def test_a_dynamic_segment_is_inferred_not_exact(tmp_path):
