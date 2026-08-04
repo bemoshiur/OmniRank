@@ -39,8 +39,10 @@ archive attached to every release.
 Beyond v1.0: framework adapters for WordPress, Jekyll, Shopify, Astro, Vue and Svelte
 gain their own locators, alongside `next-app-router`, `static`, `hugo` and `jekyll`,
 which the locator already resolves as of v0.3.0 — see [[The-Locator]]. File-write
-capability (`omnirank fix --write`) is targeted at v0.4.0, safe-tier only, described in
-`docs/research/2026-08-04-automation-architecture.md`.
+capability (`omnirank fix --write`), safe-tier only, ships once the locator is proven
+against real repositories and the write guarantees described in
+`docs/research/2026-08-04-automation-architecture.md` are implemented and tested — not
+on a release number.
 
 ## Why the targets above have already slipped
 

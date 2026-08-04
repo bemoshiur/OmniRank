@@ -58,7 +58,7 @@ ls ~/.claude/plugins/omnirank/skills/geo-artifacts/SKILL.md
 
 All three must exist. If `.claude-plugin/plugin.json` is missing, the ZIP was unzipped to
 the wrong location or the clone did not complete; if a `SKILL.md` is missing, re-download
-or re-clone. `plugin.json`'s `"version"` field reads `"0.3.0"` on a current checkout.
+or re-clone. `plugin.json`'s `"version"` field reads `"0.4.0"` on a current checkout.
 
 **Confirm each skill's identity by reading its frontmatter** (what Claude Code actually
 parses to register the skill and decide when to trigger it):

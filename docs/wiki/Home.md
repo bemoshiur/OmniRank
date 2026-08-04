@@ -92,9 +92,11 @@ Full walkthrough with real pasted output, exit codes, and what to do if a step f
   send, never dispatched automatically.
 - **It does not generate AI slop.** Every generated page expects a human edit pass before
   publishing.
-- **It does not edit your site, even in 0.3.0.** `audit` only diagnoses; `geo-artifacts`
+- **It does not edit your site.** `audit` only diagnoses; `geo-artifacts`
   writes only the three GEO artifacts it generates; `omnirank fix` prints a diff and
-  writes nothing — there is no `--write` flag until v0.4.0.
+  writes nothing — there is no `--write` flag. Writing ships once the locator is proven
+  against real repositories and the write guarantees it depends on are implemented and
+  tested, not on a release number.
 
 See the project README's ["What OmniRank does not do"](https://github.com/bemoshiur/OmniRank#what-omnirank-does-not-do)
 section for the complete list, and [[FAQ]] for the honest, uncomfortable questions

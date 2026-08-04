@@ -37,20 +37,21 @@ that interpreter.
 [[Quick-Start#2-create-a-virtual-environment]]. Do not add `--break-system-packages` to
 work around it — that flag disables the exact protection this error exists to provide.
 
-## `omnirank: <write> has no --write path in 0.3.0`
+## `omnirank: <write> has no --write path`
 
 ```
 $ python3 -m omnirank.cli fix https://example.com --write
-omnirank: omnirank fix has no --write path in 0.3.0. This release locates findings and
-prints the diff it would apply; it modifies nothing. File modification arrives
-in v0.4.0, behind the write guarantees in
-docs/research/2026-08-04-automation-architecture.md section 2.5. Shipping
---write as a no-op would be worse than not shipping it.
+omnirank: omnirank fix has no --write path. This release locates findings and prints
+the diff it would apply; it writes nothing. Writing ships once the locator has been
+proven against real repositories and the write guarantees in
+docs/research/2026-08-04-automation-architecture.md section 2.5 are implemented and
+tested -- not on a release number. Shipping --write as a no-op, or before those
+guarantees exist, would be worse than not shipping it.
 ```
 
 Exit code `2`, printed and refused **before any network call** — even before `load_config()`
 runs. There is nothing to fix in your setup here; `--write` genuinely does not exist yet.
-Drop the flag and read the printed diff, or wait for v0.4.0. See [[Fix-Preview]].
+Drop the flag and read the printed diff. See [[Fix-Preview]].
 
 ## `omnirank: Config not found: <path>`
 
@@ -246,7 +247,7 @@ just the four it could generate a diff for. Common reasons, verbatim from
 |---|---|
 | "no source file was located" | The locator returned `NOT_LOCATED` for this URL — see [[The-Locator]] |
 | "the located file serves N routes; a literal canonical there would make every one of them claim the same URL" | Blast radius exceeded 1 route — see [[Fix-Tiers-and-Applicability#what-is-blast-radius]] |
-| "editing a framework metadata export is not mechanical" | The file is a Next.js `page.tsx`; the correct edit needs `metadataBase` too, which is a two-file change deferred to v0.4.0 |
+| "editing a framework metadata export is not mechanical" | The file is a Next.js `page.tsx`; the correct edit needs `metadataBase` too, which is a two-file change deferred until the locator is proven against real repositories |
 | "N JSON-LD blocks ... are a single X object missing @context ... only exactly one is unambiguous" | More than one candidate node matched; the generator refuses rather than guess |
 
 None of these are bugs — they are the applicability model declining to guess. See
