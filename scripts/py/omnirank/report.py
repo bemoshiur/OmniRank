@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from . import __version__
+from .applicability import Applicability
 from .registry import FixTier, tier_for
 
 Severity = Literal["error", "warning", "info"]
@@ -66,7 +67,7 @@ class Finding:
     observed: str
     expected: str
     fix: str
-    applicability: str | None = None
+    applicability: Applicability | None = None
 
     @property
     def fix_tier(self) -> FixTier:
