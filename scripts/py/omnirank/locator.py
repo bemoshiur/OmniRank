@@ -88,25 +88,33 @@ def _route_segments_for(page: Path, app_root: Path) -> list[str] | None:
     """The route pattern a page file serves, as segments, or `None` if the
     file is not routable by any URL.
 
-    Route groups `(marketing)` and parallel slots `@modal` are non-routing:
-    they organise the tree without appearing in the URL, so they are dropped
-    here -- the page underneath is still reachable, just at a shorter path.
-    A `_`-prefixed folder is different in kind, not degree: Next.js opts the
-    folder *and everything beneath it* out of routing entirely, so a page
-    under `_internal/` is served by no URL at all. Stripping the segment and
-    matching on what's left -- treating it as merely invisible in the URL --
-    is route-group semantics applied to a folder that isn't a route group.
+    Route groups `(marketing)` are non-routing: they organise the tree
+    without appearing in the URL, so they are dropped here -- the page
+    underneath is still reachable, just at a shorter path.
+
+    A `_`-prefixed folder and an `@`-prefixed parallel-route slot are BOTH
+    different in kind, not degree, and neither is route-group semantics.
+    Next.js opts a `_`-prefixed folder *and everything beneath it* out of
+    routing entirely, so a page under `_internal/` is served by no URL at
+    all. A `@`-prefixed folder is a parallel-route SLOT, not a path segment:
+    per Next's own docs, "the `children` prop is an implicit slot ...
+    `app/page.js` is equivalent to `app/@children/page.js`", and a slot with
+    no matching sibling `page` at that level renders `default.js` or 404s --
+    it is never reached by stripping the `@name` and matching what's left,
+    the way a route group is. Stripping either prefix and matching on what
+    remains treats a folder that isn't a route group as if it were one.
     Getting this wrong is how a locator confidently reports a file a real
-    deployment 404s on.
+    deployment 404s on (an unmatched `@analytics/page.tsx` alone), or misses
+    the one it should have found (Next's own canonical shape, `app/page.tsx`
+    alongside `app/@auth/page.tsx`, where the un-prefixed sibling is exactly
+    the file that serves the route).
     """
     out: list[str] = []
     for part in page.parent.relative_to(app_root).parts:
         if part.startswith("(") and part.endswith(")"):
             continue
-        if part.startswith("_"):
+        if part.startswith(("_", "@")):
             return None
-        if part.startswith("@"):
-            continue
         out.append(part)
     return out
 
@@ -194,7 +202,7 @@ def _locate_next_app_router(route: str, root: Path) -> Location:
             continue
         segments = _route_segments_for(page, app_root)
         if segments is None:
-            continue                     # under a `_private` folder: no URL reaches it
+            continue          # under a `_private` folder or `@slot`: no URL reaches it
         result = _match(segments, target)
         if result is not None:
             matches.append((result[0], result[1], page))
