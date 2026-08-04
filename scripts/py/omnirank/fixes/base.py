@@ -3,9 +3,11 @@
 Kept out of the package `__init__` so a generator module can import it without
 importing the package that imports the generators.
 
-NOTHING IN THIS PACKAGE OPENS A FILE FOR WRITING. v0.3.0 produces diffs and
-prints them; file modification arrives in v0.4.0 behind the guarantees in
-docs/research/2026-08-04-automation-architecture.md SS2.5.
+NOTHING IN THIS PACKAGE OPENS A FILE FOR WRITING. This release produces diffs
+and prints them; file modification ships once the locator is proven against
+real repositories and the guarantees in
+docs/research/2026-08-04-automation-architecture.md SS2.5 are implemented and
+tested -- not on a release number.
 """
 from __future__ import annotations
 
@@ -25,8 +27,9 @@ _SELF_CLOSING_LINK = re.compile(r"<link\b[^>]*/>", re.IGNORECASE)
 TSX_DEFERRED = (
     "editing a framework metadata export is not mechanical -- the correct App "
     "Router canonical is a RELATIVE metadata.alternates.canonical plus a "
-    "metadataBase in the root layout, which is a two-file edit. It arrives in "
-    "v0.4.0; the generic <link rel=canonical> insertion is wrong here."
+    "metadataBase in the root layout, which is a two-file edit. That is deferred "
+    "until the locator is proven; the generic <link rel=canonical> insertion is "
+    "wrong here."
 )
 
 MARKDOWN_DEFERRED = (
@@ -34,15 +37,16 @@ MARKDOWN_DEFERRED = (
     "this fix would target does not exist in the source file at all; the tag "
     "comes from a layout template (Jekyll `_layouts/*.html`, Hugo's theme) "
     "that every other page on the site shares, and a template edit fans out "
-    "site-wide rather than to this one page. It arrives in v0.4.0; the "
-    "generic <link rel=canonical> / @context insertion is wrong here."
+    "site-wide rather than to this one page. That is deferred until the locator "
+    "is proven; the generic <link rel=canonical> / @context insertion is wrong "
+    "here."
 )
 
 MARKDOWN_SUFFIXES = (".md", ".markdown")
 
 
 def deferred_reason(path: Path) -> str:
-    """Why a non-HTML location's mechanical fix is deferred to v0.4.0.
+    """Why a non-HTML location's mechanical fix is deferred.
 
     `TSX_DEFERRED` talks about `metadata.alternates.canonical` and
     `metadataBase` -- Next.js App Router concepts. Showing that paragraph for

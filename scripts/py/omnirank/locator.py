@@ -240,8 +240,9 @@ def _resolve_candidate(root: Path, relative: str) -> Path | None:
     URL segments, so a `../` in the URL (or, after `.resolve()`, a symlink
     *inside* the repo whose target lives outside it) must not be allowed to
     walk out of the repository -- nothing writes through a `Location.path`
-    yet, but v0.4.0 opens `root / location.path` directly, and an escaped
-    candidate today is arbitrary-file-write the day that lands. Second,
+    yet, but the release that adds writing opens `root / location.path`
+    directly, and an escaped candidate today is arbitrary-file-write the day
+    that lands. Second,
     `Path.is_file()` follows the host filesystem's own case folding, which is
     on by default on macOS and Windows and off on Linux CI, so a naive check
     would match `/pricing` to an on-disk `Pricing.html` on a contributor's
@@ -316,7 +317,7 @@ def _locate_jekyll(route: str, root: Path) -> Location:
     front matter is a durable edit target and serves exactly one route.
     Following its `layout:` up to `_layouts/*.html` is a second hop whose
     fan-out is every post on the site; that arrives with the edit engine in
-    v0.4.0, not here.
+    a later release, not here.
     """
     if route == "/":
         names = ["index.html", "index.md", "index.markdown"]

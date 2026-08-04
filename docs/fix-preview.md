@@ -4,9 +4,14 @@
 wrong?** It runs an audit, resolves each finding's URL to a source file, and prints
 the unified diff it would apply.
 
-**It writes nothing.** There is no `--write` flag in 0.3.0. File modification arrives
-in v0.4.0, after the locator has been proven in the field. Passing `--write` today
-exits `2` with that message rather than silently doing nothing.
+`omnirank fix` writes nothing. There is no `--write` flag, and passing one exits 2
+with an explanation rather than silently doing nothing.
+
+Writing is gated on the locator being proven against real repositories and on the
+write guarantees in `docs/research/2026-08-04-automation-architecture.md` §2.5
+being implemented and tested — not on a release number. This release deliberately
+spends its budget on audit coverage instead: auditing better is zero-risk, and a
+richer audit is what earns the right to edit files later.
 
 ```bash
 omnirank fix https://example.com --root .
@@ -27,10 +32,10 @@ of the finding id, in every report:
 | tier | meaning | count |
 |---|---|---|
 | `mechanical` | a constant, or a pure function of data already in the finding | 4 |
-| `templated` | deterministic given config and repo facts the tool can read | 15 |
-| `drafted` | prose or judgement a human must author or approve | 12 |
-| `advisory` | two opposite correct answers exist; only the owner can choose | 11 |
-| `infrastructure` | no source edit exists; the fix lives in CDN, origin or build config | 6 |
+| `templated` | deterministic given config and repo facts the tool can read | 18 |
+| `drafted` | prose or judgement a human must author or approve | 16 |
+| `advisory` | two opposite correct answers exist; only the owner can choose | 16 |
+| `infrastructure` | no source edit exists; the fix lives in CDN, origin or build config | 12 |
 
 **`applicability` — whether THIS occurrence may be applied unattended.** Computed per
 finding-instance as the minimum of four ceilings:
