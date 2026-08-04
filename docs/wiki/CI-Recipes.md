@@ -101,17 +101,17 @@ run cleanup after a failure, as shown here.
 ## Which gates can actually fail a build with `--fail-on`?
 
 Not every gate name in the schema's `audit.failOn` enum can actually cause `--fail-on` to
-fail a build, and putting all 29 in the list creates false confidence rather than more
+fail a build, and putting all 28 in the list creates false confidence rather than more
 protection. Recounted directly against every gate's severity in
 `scripts/py/omnirank/gates/`, and against what `audit_site()` actually calls rather than
 just what the schema accepts:
 
 | Group | Gates | Effect on `--fail-on` |
 |---|---|---|
-| Warning-only (12) | `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`, `render-blocking` | Every finding these gates can produce is `severity: "warning"`; `has_failures()` only counts errors. Listing them has zero effect on the exit code, ever. |
-| Genuinely inert (1) | `crawl-hygiene` | Accepted by the schema, but `audit_site()` does not call the function that would produce it (`hygiene.check_removed()`). A plain `omnirank audit` run never produces a finding under this gate name. |
-| Looks inert, is not (1) | `sitemap-health` | Its own dedicated check, `hygiene.check_sitemap()`, is equally unwired — but `_collect()` in `audit.py` reports every unreachable target URL as an error under `gate: "sitemap-health"` through a different code path, so `--fail-on sitemap-health` **does** fail a build. Verify: `omnirank audit https://example.com/nope-xyz --fail-on sitemap-health` exits `1`; the otherwise-identical `--fail-on crawl-hygiene` exits `0`. |
-| Can actually fail a build (16) | `h1`, `canonical`, `title-length` (missing only), `description-length` (missing only), `answer-block`, `faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema`, `schema-fabrication`, `noindex-in-sitemap`, `response-time` (error only past `RESPONSE_ERROR_MS`), `sitemap-health` (via the code path above) | These can produce an error-severity finding and gate a build |
+| Warning-only (13) | `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`, `render-blocking` | Every finding these gates can produce is `severity: "warning"`; `has_failures()` only counts errors. Listing them has zero effect on the exit code, ever. |
+| No longer a `--fail-on` name (as of v0.2.1) | `crawl-hygiene` | Removed entirely from `schemas/omnirank.config.schema.json`. Its only source, `hygiene.check_removed()`, is real and tested, but needs an explicit removed-URL list no config field supplies, so `audit_site()` had no way to call it automatically — a config-accepted gate name that could never fire was its own kind of fabrication. |
+| Not inert, and covers more since v0.2.1 | `sitemap-health` | `_collect()` in `audit.py` reports every unreachable target URL as an error under `gate: "sitemap-health"` (the `seo.page.unreachable` finding). As of v0.2.1, `hygiene.check_sitemap()` is also wired into `audit_site()` — for sitemap URLs `_collect()` couldn't already confirm reachable, it further distinguishes a redirecting entry (warning) from a genuinely dead one (error). Verify: `omnirank audit https://example.com/nope-xyz --fail-on sitemap-health` exits `1`. |
+| Can actually fail a build (15) | `h1`, `canonical`, `title-length` (missing only), `description-length` (missing only), `answer-block`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema`, `schema-fabrication`, `noindex-in-sitemap`, `response-time` (error only past `RESPONSE_ERROR_MS`), `sitemap-health` (via the code paths above) | These can produce an error-severity finding and gate a build |
 
 **The practical guidance:** pick gates that map to problems severe enough to block a
 merge, not the full list. A reasonable starting set for most sites is `h1 canonical
@@ -119,10 +119,11 @@ schema` (structural SEO baseline) plus, once `geo-artifacts` is wired into your 
 `llms-txt llms-full facts-json ai-allowlist` (GEO artifacts actually being live in
 production — this is the check that would have caught the OpenNext/CloudFront 403 trap
 described in [[GEO-Artifacts-Skill#what-is-the-opennextcloudfront-403-trap]] before a
-human noticed). Add `answer-block faq` once you have deliberately built AEO-oriented
-pages — gating on them before you have any answer blocks just fails every build. Leave
-the 12 warning-only gates and the one genuinely inert gate (`crawl-hygiene`) out of
-`--fail-on` entirely.
+human noticed). Add `answer-block` once you have deliberately built AEO-oriented pages —
+gating on it before you have any answer blocks just fails every build (`faq` is
+warning-only as of v0.2.1, so it can no longer gate a build even if listed). Leave the 13
+warning-only gates out of `--fail-on` entirely; they add length to the command with no
+corresponding protection.
 
 Findings from gates you did **not** list in `--fail-on` are still computed and still land
 in the JSON report and terminal summary — they just do not fail the build. Nothing is

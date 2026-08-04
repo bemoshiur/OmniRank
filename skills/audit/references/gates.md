@@ -24,7 +24,7 @@ they diverge in a way that trips people up.
 | `answer-block` | Element matching the configured selector exists | error |
 | `answer-block` | 40–60 words, inclusive (exactly 40 or exactly 60 both pass) | error |
 | `answer-block` | No `<ul>`/`<ol>`/`<li>` inside | error |
-| `faq` | ≥3 pairs as `<dl>`/`<dt>`/`<dd>` or `<details>` | error |
+| `faq` | ≥3 pairs as `<dl>`/`<dt>`/`<dd>` or `<details>` | warning (downgraded from error in v0.2.1 — demanding an FAQ section on every page, including pricing and 404 pages, was not defensible advice) |
 | `speakable` | Every `speakable.cssSelector` resolves to real markup | error |
 
 The word range is not arbitrary. Answer engines lift whole blocks; under 40 words carries

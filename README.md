@@ -142,12 +142,12 @@ Google" will not trigger anything, because `aeo-onpage` and `indexing` are not b
 
 ## Every gate OmniRank checks, grouped by layer
 
-29 gate names exist in the config schema; 16 can fail a build, 12 are warning-only by
-design, and 1 (`crawl-hygiene`) is schema-accepted but its dedicated check is not wired
-into the automatic pipeline — `sitemap-health` looks like it belongs in that bucket too
-(its own dedicated check is equally unwired) but is not actually inert: an unreachable
-target reports its error under `gate: "sitemap-health"` through a different code path, so
-it can fail a build. Full detail, including which gates can never trip `--fail-on`, is in
+28 gate names exist in the config schema; 15 can fail a build and 13 are warning-only by
+design. (As of v0.2.1, `crawl-hygiene` — a gate name that could never actually fire,
+since its only source was never called from `audit_site()` — was removed from the schema
+rather than shipped as a config option that silently did nothing; `hygiene.check_sitemap()`
+was wired into `sitemap-health` instead, so a redirecting or dead sitemap URL now gets its
+own dedicated finding.) Full detail, including which gates can never trip `--fail-on`, is in
 [audit-guide.md](docs/audit-guide.md#gate-reference) and
 [ci-integration.md](docs/ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap).
 
@@ -168,7 +168,7 @@ it can fail a build. Full detail, including which gates can never trip `--fail-o
 | Gate | Rule | Severity |
 |---|---|---|
 | `answer-block` | 40–60 word plain-prose element exists, no lists inside | error |
-| `faq` | ≥3 pairs as `<dl>`/`<dt>`/`<dd>` or `<details>` | error |
+| `faq` | ≥3 pairs as `<dl>`/`<dt>`/`<dd>` or `<details>` | warning |
 | `speakable` | Every `speakable.cssSelector` resolves to real markup | error |
 
 **GEO**
@@ -275,10 +275,9 @@ jobs:
 ```
 
 Picking `--fail-on h1 canonical schema` (structural baseline) is a better starting point
-than listing all 29 gate names — 12 of them are warning-only and can never fail a build,
-and 1 more (`crawl-hygiene`) is schema-accepted but its dedicated check is not wired into
-the automatic pipeline. The full reasoning, plus a GitLab CI job and a generic shell
-script, is in [ci-integration.md](docs/ci-integration.md).
+than listing all 28 gate names — 13 of them are warning-only and can never fail a build.
+The full reasoning, plus a GitLab CI job and a generic shell script, is in
+[ci-integration.md](docs/ci-integration.md).
 
 ## Design principles
 
@@ -388,11 +387,14 @@ gating with a committed `audit.failOn`, first-party facts (`nap`, `identifiers`,
 <details>
 <summary>Why does my site score 0 on one layer?</summary>
 
-A layer scores 0 when its error and warning cost meets or exceeds 100 —
-`max(0, 100 - 10*errors - 3*warnings)` floors at zero. Ten or more error-severity findings
-in one layer is enough on its own. A brand-new site missing a `<title>`, canonical tag,
-JSON-LD, and `llms.txt` will commonly hit this on the GEO layer alone, since each missing
-artifact is a separate error.
+As of v0.2.1, each GATE's contribution to its layer is capped at `GATE_CAP = 15`
+(`min(15, 10*errors + 3*warnings)`), so one gate failing on every page of a large site
+can no longer alone drag a layer to 0 — that would conflate issue COUNT with issue
+SEVERITY (one broken template is one problem, not fifty). A layer still reaches 0 when
+enough DISTINCT gates are broken for their capped costs to sum past 100 — seven or more
+independently-broken gates is enough on its own. A brand-new site missing a `<title>`,
+canonical tag, JSON-LD, and `llms.txt` will commonly hit this on the GEO layer, since
+each missing artifact is a separate broken gate.
 </details>
 
 More questions, including secrets handling and where the JSON report schema lives, are

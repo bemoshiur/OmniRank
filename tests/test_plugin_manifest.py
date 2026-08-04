@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_plugin_manifest_is_valid():
     manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["name"] == "omnirank"
-    assert manifest["version"] == "0.2.0"
+    assert manifest["version"] == "0.2.1"
     assert manifest["skills"] == "./skills/"
     assert manifest["license"] == "MIT"
     assert manifest["homepage"] == "https://github.com/bemoshiur/OmniRank"

@@ -240,9 +240,12 @@ them — are fully disallowed.
 Crawl hygiene is the practice of keeping every URL a crawler might encounter — including
 old and removed ones — resolving to a live, correctly coded response: a redirect to a
 modern equivalent, a `410 Gone` for content that is genuinely gone, or a real `200`, never
-a bare `404` or a `5xx`. OmniRank's hygiene module implements this policy, though the
-automatic `omnirank audit` run currently evaluates only the `lastmod-inflation` check
-from it; the removed-URL and sitemap-health checks must be called directly.
+a bare `404` or a `5xx`. OmniRank's hygiene module implements this policy. As of v0.2.1,
+the automatic `omnirank audit` run evaluates both the `lastmod-inflation` check and, via
+`check_sitemap()`, the sitemap-URL-reachability check; only the removed-URL check
+(`check_removed()`) — which needs an explicit list of URLs your site used to serve and no
+longer does — must still be called directly, and `crawl-hygiene` is consequently no
+longer a selectable `--fail-on` gate name.
 
 ### 410 Gone
 

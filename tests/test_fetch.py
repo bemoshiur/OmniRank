@@ -16,7 +16,7 @@ def test_client_does_not_follow_redirects():
 
 
 def test_client_sets_user_agent():
-    assert "OmniRank/0.2.0" in make_client().headers["User-Agent"]
+    assert "OmniRank/0.2.1" in make_client().headers["User-Agent"]
 
 
 @respx.mock

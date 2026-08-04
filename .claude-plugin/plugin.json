@@ -1,6 +1,6 @@
 {
   "name": "omnirank",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Audit any website across SEO, answer-engine and generative-engine criteria, and generate llms.txt, llms-full.txt and facts.json so AI engines can ingest it as ground truth.",
   "author": { "name": "S M Moshiur Rahman", "email": "moshiur@publicpulse.com.bd" },
   "homepage": "https://github.com/bemoshiur/OmniRank",

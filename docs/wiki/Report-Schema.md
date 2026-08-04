@@ -19,6 +19,7 @@ Verified directly against `schemas/report.schema.json` and
 | `score` | object, requires `overall` | Per-layer integer score (0-100) plus `overall` |
 | `stats` | object, requires `urlsChecked`, `passed`, `failed`, `warned` | Run statistics |
 | `findings` | array of Finding objects | Every finding produced, not just what the terminal summary shows |
+| `notEvaluated` | array of `{gate, reason, url?, site?}` objects, optional | Gates OmniRank could not actually run — added in v0.2.1, additive/optional: a report generated before v0.2.1 has no `notEvaluated` key and still validates. See below. |
 
 ### The `stats` object
 
@@ -44,6 +45,25 @@ Verified directly against `schemas/report.schema.json` and
 | `autoFixable` | boolean | no | Present and `true` only on findings OmniRank could, in principle, patch itself (e.g. `seo.canonical.missing`); absence means false |
 
 `observed` and `expected` describe the current state; `fix` is the action to take.
+
+## What does `notEvaluated` look like? (added in v0.2.1)
+
+| Field | Type | Always present? | Description |
+|---|---|---|---|
+| `gate` | string | yes | The gate name that could not run |
+| `reason` | enum: `no-sitemap`, `page-unreachable`, `not-applicable`, `adapter-absent` | yes | Why the gate could not run |
+| `url` | string | no | Set for a per-page gate that could not run |
+| `site` | string | no | Set for a site-level gate that could not run |
+
+Populated in two situations: (a) no `sitemap.xml` is found — this also emits a new
+finding, `seo.sitemap.missing` (error, gate `sitemap-health`), alongside a `site`-scoped
+`notEvaluated` entry with reason `no-sitemap`; and (b) a page could not be fetched — its
+per-page gates (`seo`, `aeo`, `perf`) are each recorded as a `url`-scoped `notEvaluated`
+entry with reason `page-unreachable`, rather than silently skipped. This is additive and
+optional: a report generated before v0.2.1 has no `notEvaluated` key at all and still
+validates against `schemas/report.schema.json`. The `omnirank audit` console summary
+prints a "NOT EVALUATED" section listing these entries. See
+[[Audit-Skill#how-is-the-score-computed]] for a real example.
 
 ## The `<layer>.<gate>.<condition>` id convention
 
@@ -83,7 +103,7 @@ segment" pattern are worth knowing:
 | `seo.schema-fabrication.unbacked-rating` / `.anonymous-review` | `schema-fabrication` | seo | error |
 | `seo.page.unreachable` | — | seo | error |
 | `aeo.answer-block.missing` / `.length` / `.list-markup` | `answer-block` | aeo | error |
-| `aeo.faq.too-few` | `faq` | aeo | error |
+| `aeo.faq.too-few` | `faq` | aeo | warning (downgraded from error in v0.2.1) |
 | `aeo.speakable.unresolved` | `speakable` | aeo | error |
 | `geo.llms.missing` | `llms-txt` | geo | error |
 | `geo.llms-full.missing` / `.forbidden` | `llms-full` | geo | error |
@@ -112,9 +132,15 @@ site-level cross-URL pass, and the four `perf.*` ids from the `perf` layer — b
 
 | Severity | Score cost | Can trigger `--fail-on`? |
 |---|---|---|
-| `error` | 10 points | Yes — `has_failures()` only counts `severity == "error"` |
-| `warning` | 3 points | No, never — regardless of whether its gate is listed in `--fail-on` |
+| `error` | 10 points, before capping | Yes — `has_failures()` only counts `severity == "error"` |
+| `warning` | 3 points, before capping | No, never — regardless of whether its gate is listed in `--fail-on` |
 | `info` | 0 points | No — and no shipped gate currently emits `info` |
+
+As of v0.2.1, these per-finding costs are not simply summed and subtracted: each GATE's
+total contribution to its layer is capped first at `GATE_CAP = 15`
+(`min(GATE_CAP, 10*errors + 3*warnings)`), and only the capped, per-gate costs are summed
+against the layer's 100-point starting score. See
+[[Audit-Skill#how-is-the-score-computed]] for the full formula and worked examples.
 
 ## Layer values
 
