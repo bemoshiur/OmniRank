@@ -266,13 +266,55 @@ def test_a_missing_file_declines_rather_than_raising(tmp_path):
 
 
 def test_the_fixes_package_never_writes():
-    source = ""
+    """No call in omnirank/fixes may create, modify or delete a file.
+
+    Checked against the parsed AST rather than the raw text: a substring scan for
+    "open(" also rejects `path.open("r")`, which writes nothing, and would equally
+    have been satisfied by the word appearing in a comment. The invariant is about
+    what the code CALLS, so ask the syntax tree.
+    """
+    import ast
+
+    forbidden_attrs = {
+        "write_text", "write_bytes", "mkdir", "unlink", "rmdir", "rename",
+        "replace", "touch", "symlink_to", "hardlink_to", "chmod",
+    }
+    forbidden_names = {"rmtree", "copy", "copy2", "copyfile", "move", "remove"}
+    write_modes = set("wax+")
+
     package = Path(__file__).resolve().parents[1] / "scripts" / "py" / "omnirank" / "fixes"
+    offences: list[str] = []
+
     for path in sorted(package.glob("*.py")):
-        source += path.read_text()
-    for forbidden in ("write_text(", "open(", "shutil", "os.replace", "mkdir("):
-        assert forbidden not in source, (
-            f"{forbidden} appears in omnirank/fixes -- this release writes nothing")
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+
+            if name in forbidden_attrs or name in forbidden_names:
+                offences.append(f"{path.name}:{node.lineno} calls {name}()")
+
+            # open()/Path.open() are allowed, but only in a read mode.
+            # The mode is args[0] for `p.open(mode)` and args[1] for `open(path, mode)`
+            # -- getting that index wrong silently stops this check finding anything.
+            if name == "open":
+                mode = ""
+                index = 0 if isinstance(func, ast.Attribute) else 1
+                if len(node.args) > index:
+                    arg = node.args[index]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        mode = arg.value
+                for kw in node.keywords:
+                    if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                        mode = str(kw.value.value)
+                if write_modes & set(mode):
+                    offences.append(f"{path.name}:{node.lineno} opens with mode {mode!r}")
+
+    assert not offences, (
+        "omnirank/fixes must never write; this release only previews diffs:\n  "
+        + "\n  ".join(offences))
 
 
 from omnirank.fixes import GENERATORS, generate   # noqa: E402
