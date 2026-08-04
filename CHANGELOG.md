@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.4.0] - 2026-08-04
 
-**"OmniRank finds where your site contradicts itself."** 18 new finding ids, a new
+**"OmniRank finds where your site contradicts itself."** 19 new finding ids, a new
 `security` layer, and the scoring fix that had to land before any of them.
 
 This release writes nothing. `omnirank fix` still previews diffs and modifies no
