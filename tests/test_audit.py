@@ -34,7 +34,14 @@ def mock_site(page_status=200):
     # by their declared content-encoding and errors on a mismatched body.
     respx.get(f"{SITE}/").mock(return_value=httpx.Response(
         page_status, content=gzip.compress(PAGE.encode()),
-        headers={"content-encoding": "gzip"}))
+        headers={"content-encoding": "gzip",
+                 # v0.4.0: the clean fixture must be clean on the security layer
+                 # too, or every assertion of `report.findings == []` breaks on
+                 # four info findings.
+                 "strict-transport-security": "max-age=31536000",
+                 "x-content-type-options": "nosniff",
+                 "content-security-policy": "default-src 'self'",
+                 "referrer-policy": "strict-origin-when-cross-origin"}))
     respx.get(f"{SITE}/llms.txt").mock(
         return_value=httpx.Response(200, text="# X\n## How to cite us\nCC BY 4.0."))
     respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(200, text="full"))
@@ -140,7 +147,7 @@ def test_unreachable_page_flags_its_per_page_gates_as_not_evaluated():
     report = audit_site(default_config(SITE), make_client())
     unreachable_url = f"{SITE}/"
     gates = {e.gate for e in report.not_evaluated if e.url == unreachable_url}
-    assert gates == {"seo", "aeo", "perf"}
+    assert gates == {"seo", "aeo", "perf", "security"}
     assert all(e.reason == "page-unreachable"
                for e in report.not_evaluated if e.url == unreachable_url)
 

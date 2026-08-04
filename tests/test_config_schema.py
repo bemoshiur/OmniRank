@@ -136,3 +136,12 @@ def test_the_original_framework_values_still_validate():
         cfg = minimal()
         cfg["stack"] = {"framework": name}
         assert list(validator().iter_errors(cfg)) == [], name
+
+
+SECURITY_GATES = ["hsts", "nosniff", "csp", "referrer-policy"]
+
+
+def test_security_gates_are_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": SECURITY_GATES}
+    assert list(validator().iter_errors(cfg)) == []

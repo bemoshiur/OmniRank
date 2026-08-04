@@ -58,7 +58,10 @@ def test_every_registered_id_is_emitted_by_some_gate():
 
 
 def test_registry_covers_all_forty_eight_findings():
-    assert len(REGISTRY) == 48
+    # v0.4.0 Task 3: +5 for gates/security.py's four response-header gates
+    # (hsts fires two distinct ids). Task 12 retitles/rebases this once the
+    # full v0.4.0 gate set has landed.
+    assert len(REGISTRY) == 53
 
 
 def test_tier_distribution_matches_the_fixability_classification():
@@ -66,8 +69,10 @@ def test_tier_distribution_matches_the_fixability_classification():
               ("mechanical", "templated", "drafted", "advisory", "infrastructure")}
     for entry in REGISTRY.values():
         counts[entry.tier] += 1
+    # v0.4.0 Task 3: +5 infrastructure (all five security header gates are
+    # infrastructure -- the fix is an origin/CDN response-header change).
     assert counts == {"mechanical": 4, "templated": 15, "drafted": 12,
-                      "advisory": 11, "infrastructure": 6}
+                      "advisory": 11, "infrastructure": 11}
 
 
 def test_mechanical_tier_is_exactly_the_four_documented_ids():

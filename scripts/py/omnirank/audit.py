@@ -5,16 +5,16 @@ import httpx
 from .bands import resolve_band
 from .config import Config
 from .fetch import fetch, make_client, read_sitemap
-from .gates import aeo, geo, hygiene, jsonld, perf, seo, site
+from .gates import aeo, geo, hygiene, jsonld, perf, security, seo, site
 from .page import PageData
 from .report import Finding, NotEvaluated, Report
 
 # The per-page gate modules whose findings all carry layer="seo" (seo.py AND
-# jsonld.py -- schema findings are seo.* too), plus aeo and perf. When a page
-# cannot be fetched, none of these ran for it, and each is recorded as its own
+# jsonld.py -- schema findings are seo.* too), plus aeo, perf and security. When a
+# page cannot be fetched, none of these ran for it, and each is recorded as its own
 # notEvaluated entry rather than merged into one -- a caller filtering
 # notEvaluated by gate (e.g. "did aeo run for this URL?") needs them distinct.
-PER_PAGE_GATES = ("seo", "aeo", "perf")
+PER_PAGE_GATES = ("seo", "aeo", "perf", "security")
 
 
 def default_config(url: str) -> Config:
@@ -92,7 +92,11 @@ def audit_site(config: Config, client: httpx.Client | None = None,
 
         pages = _collect(client, targets, report)
         if pages:
-            report.layers_run.update({"aeo", "perf"})
+            # security joins aeo and perf here for the same reason: it is a per-page
+            # gate set, and a site where zero pages parsed must not be scored 100 on
+            # a layer that never ran. Task 4 widens this when the site-level
+            # https-redirect probe lands.
+            report.layers_run.update({"aeo", "perf", "security"})
 
         if urls is None and sitemap_urls:
             # hygiene.check_sitemap() distinguishes a redirecting sitemap entry
@@ -113,6 +117,7 @@ def audit_site(config: Config, client: httpx.Client | None = None,
                                   resolve_band(page.lang, config)))
             report.extend(jsonld.run(page.html, page.url))
             report.extend(perf.run(page))
+            report.extend(security.run_page(page))
 
         report.extend(site.run(pages, sitemap_urls))
 
