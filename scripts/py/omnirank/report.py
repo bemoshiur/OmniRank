@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from . import __version__
+from .registry import FixTier, tier_for
 
 Severity = Literal["error", "warning", "info"]
 Layer = Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]
@@ -41,6 +42,22 @@ GATE_CAP = 15
 
 @dataclass(frozen=True)
 class Finding:
+    """One gate failure on one URL.
+
+    `fix_tier` is a derived property rather than a field: the tier is a static
+    property of the finding ID, so the registry is its single source of truth
+    and no gate module can declare a tier that disagrees with it. This replaces
+    `auto_fixable`, which only `gates/seo.py` could ever set and which therefore
+    described which module a finding lived in rather than whether applying it
+    unattended was safe.
+
+    `applicability` is the orthogonal SAFETY axis and is per-instance, not
+    per-id: it is computed by `applicability.compute_applicability()` from the
+    tier, the locator's confidence, the edit's blast radius and any protected
+    surface involved. `omnirank audit` never sets it -- an audit does no
+    locating -- so it stays None there and is omitted from the JSON.
+    """
+
     id: str
     severity: Severity
     layer: Layer
@@ -49,10 +66,14 @@ class Finding:
     observed: str
     expected: str
     fix: str
-    auto_fixable: bool = False
+    applicability: str | None = None
+
+    @property
+    def fix_tier(self) -> FixTier:
+        return tier_for(self.id)
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "id": self.id,
             "severity": self.severity,
             "layer": self.layer,
@@ -61,8 +82,11 @@ class Finding:
             "observed": self.observed,
             "expected": self.expected,
             "fix": self.fix,
-            "autoFixable": self.auto_fixable,
+            "fixTier": self.fix_tier,
         }
+        if self.applicability is not None:
+            d["applicability"] = self.applicability
+        return d
 
 
 @dataclass(frozen=True)

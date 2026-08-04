@@ -48,7 +48,19 @@
           "observed": { "type": "string" },
           "expected": { "type": "string" },
           "fix": { "type": "string" },
-          "autoFixable": { "type": "boolean" }
+          "autoFixable": {
+            "type": "boolean",
+            "deprecated": true,
+            "description": "Never emitted since 0.3.0. It described which gate module a finding lived in, not whether applying it unattended was safe -- honouring it would have auto-applied seo.h1.multiple and seo.description.long. Retained here, and only here, so reports written before 0.3.0 still validate against this schema (a finding sets additionalProperties: false). Use fixTier instead."
+          },
+          "fixTier": {
+            "enum": ["mechanical", "templated", "drafted", "advisory", "infrastructure"],
+            "description": "The EPISTEMIC axis: what kind of information the correct edit requires. A static property of the finding id. Additive and optional -- a report written before 0.3.0 has no fixTier and still validates."
+          },
+          "applicability": {
+            "enum": ["safe", "unsafe", "display-only"],
+            "description": "The SAFETY axis, computed per finding-instance as the minimum of the tier ceiling, the locator's confidence, the edit's blast radius and any protected-surface ceiling. Every input can demote; none can promote. Absent from an `omnirank audit` report, which does no locating."
+          }
         }
       }
     },
