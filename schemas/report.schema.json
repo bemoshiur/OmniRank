@@ -42,7 +42,7 @@
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$" },
           "severity": { "enum": ["error", "warning", "info"] },
-          "layer": { "enum": ["seo", "aeo", "geo", "offsite", "smm", "perf"] },
+          "layer": { "enum": ["seo", "aeo", "geo", "offsite", "smm", "perf", "security"] },
           "url": { "type": "string" },
           "gate": { "type": "string" },
           "observed": { "type": "string" },
@@ -74,7 +74,9 @@
         "properties": {
           "gate": { "type": "string" },
           "reason": {
-            "enum": ["no-sitemap", "page-unreachable", "not-applicable", "adapter-absent"]
+            "enum": ["no-sitemap", "page-unreachable", "not-applicable",
+                     "adapter-absent", "matcher-unsupported", "budget-exceeded"],
+            "description": "Why the gate could not run. Additive: matcher-unsupported and budget-exceeded arrive in 0.4.0, so a report written earlier contains neither and still validates. matcher-unsupported means the check needed a stdlib capability this interpreter lacks (urllib.robotparser is RFC 9309 compliant only on Python 3.14+); OmniRank refuses to judge rather than answer from a matcher it knows is wrong."
           },
           "url": { "type": "string", "description": "Set for a per-page gate that could not run." },
           "site": { "type": "string", "description": "Set for a site-level gate that could not run." }
