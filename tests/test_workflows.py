@@ -36,6 +36,19 @@ def test_ci_lints():
     assert "ruff" in CI.read_text()
 
 
+def test_ci_python_matrix_includes_3_14():
+    # S7 (final v0.4.0 review): the robots-sitemap contradiction gate's matcher
+    # probe (omnirank/robots.py) has two behaviourally different code paths --
+    # `evaluated is True` on 3.14 (RFC 9309 compliant) and `evaluated is False`
+    # on 3.11-3.13 (matcher-unsupported). A matrix that stops at 3.13 never
+    # exercises the firing path at all, so a regression there would go green on
+    # every CI leg.
+    matrix = load(CI)["jobs"]["python"]["strategy"]["matrix"]["python-version"]
+    assert "3.14" in matrix, (
+        "the CI matrix must include 3.14 so the robots matcher's RFC "
+        "9309-compliant `evaluated is True` path is actually exercised")
+
+
 def test_dependabot_configured():
     config = load(ROOT / ".github" / "dependabot.yml")
     ecosystems = {u["package-ecosystem"] for u in config["updates"]}
