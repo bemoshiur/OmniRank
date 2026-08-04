@@ -128,6 +128,39 @@ def test_pathologically_nested_jsonld_is_reported_not_crashed():
     assert "seo.schema.malformed" in {f.id for f in findings}
 
 
+
+# --- v0.2.1: MIME type tokens are case-insensitive, and a ;charset parameter is
+# not part of the type -- neither may cause a real JSON-LD block to be reported as
+# absent. Each pair below reproduces one confirmed false positive, then a companion
+# proving a genuinely non-JSON-LD script (same case quirk, wrong type) is still
+# correctly reported absent. ---
+
+def test_uppercase_ldjson_type_is_not_flagged_absent():
+    html = (f'<html><head><script type="application/LD+JSON">{json.dumps(ORG)}'
+            f"</script></head><body></body></html>")
+    assert "seo.schema.absent" not in ids(jsonld.run(html, URL))
+
+
+def test_non_ldjson_type_regardless_of_case_is_still_flagged_absent():
+    html = (f'<html><head><script type="application/JSON">{json.dumps(ORG)}'
+            f"</script></head><body></body></html>")
+    found = jsonld.run(html, URL)
+    assert found[0].id == "seo.schema.absent"
+
+
+def test_ldjson_type_with_charset_parameter_is_not_flagged_absent():
+    html = (f'<html><head><script type="application/ld+json; charset=utf-8">'
+            f"{json.dumps(ORG)}</script></head><body></body></html>")
+    assert "seo.schema.absent" not in ids(jsonld.run(html, URL))
+
+
+def test_non_ldjson_type_with_charset_parameter_is_still_flagged_absent():
+    html = (f'<html><head><script type="application/json; charset=utf-8">'
+            f"{json.dumps(ORG)}</script></head><body></body></html>")
+    found = jsonld.run(html, URL)
+    assert found[0].id == "seo.schema.absent"
+
+
 def test_malformed_block_does_not_hide_other_blocks():
     html = ('<html><head>'
             '<script type="application/ld+json">{not json</script>'

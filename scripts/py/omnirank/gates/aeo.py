@@ -5,6 +5,7 @@ import json
 from bs4 import BeautifulSoup
 
 from ..bands import DEFAULT_BAND, Band, measure
+from ..html import find_ldjson_scripts
 from ..report import Finding
 
 MIN_FAQS = 3
@@ -59,7 +60,7 @@ def _faq(soup: BeautifulSoup, url: str) -> list[Finding]:
 
 def _speakable(soup: BeautifulSoup, url: str) -> list[Finding]:
     findings: list[Finding] = []
-    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+    for script in find_ldjson_scripts(soup):
         try:
             data = json.loads(script.string or "{}")
         except json.JSONDecodeError:
