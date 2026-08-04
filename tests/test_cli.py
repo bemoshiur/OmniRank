@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import httpx
 import respx
@@ -286,3 +287,146 @@ def test_report_json_unaffected_by_detail_flag(tmp_path):
     b.pop("generatedAt")
     assert a == b, "the JSON report must not change shape based on console formatting flags"
     assert len(a["findings"]) > 0
+
+
+# --- v0.3.0: `omnirank fix` -----------------------------------------------
+
+from omnirank.cli import WRITE_UNAVAILABLE
+
+FIXABLE_PAGE = """<!doctype html>
+<html lang="en">
+  <head>
+    <title>A Good Title</title>
+    <meta name="description" content="A good description of this page.">
+    <meta property="og:title" content="A Good Title">
+    <meta property="og:image" content="https://x.example/og.png">
+    <script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Organization","name":"X"}
+    </script>
+  </head>
+  <body><h1>A Good Title</h1>
+  <div class="answer-block">%s</div>
+  <dl><dt>Q1</dt><dd>A1</dd><dt>Q2</dt><dd>A2</dd><dt>Q3</dt><dd>A3</dd></dl>
+  </body>
+</html>
+""" % (" ".join(["word"] * 45))
+
+
+def fixable_repo(tmp_path: Path) -> Path:
+    """A single-route repo the locator can resolve with `exact` confidence.
+
+    NOT a bare `index.html` (the brief's original `static_repo`): `static`
+    framework detection is always `medium` confidence (framework.py::_static
+    has no `high` branch -- see the "medium detection caps at inferred"
+    assertion in tests/test_locator.py::test_static_root_resolves_to_index_html,
+    already committed and load-bearing behaviour from Task 4/5). `medium`
+    caps locate() at `inferred`, and CONFIDENCE_CEILING["inferred"] is
+    "unsafe" -- so a bare-index.html fixture can NEVER reach `applicability
+    == "safe"` and `generate()` would decline rather than emit a diff,
+    contradicting this file's own assertions below (diff text present,
+    applicability == "safe", exit code 1).
+
+    A Jekyll project with both `_config.yml` and `_layouts/` reaches `high`
+    confidence detection (framework.py::_jekyll), which locate() does not
+    demote, and jekyll is in locator.py's `_SINGLE_ROUTE_FRAMEWORKS`, so
+    blast_radius is 1. That combination genuinely lands on `safe`, which is
+    verified directly (not merely asserted) in this session's report.
+    """
+    (tmp_path / "_config.yml").write_text("title: X\n")
+    (tmp_path / "_layouts").mkdir()
+    (tmp_path / "index.html").write_text(FIXABLE_PAGE)
+    return tmp_path
+
+
+def mock_fixable_site():
+    mock_site()
+    respx.get(f"{SITE}/").mock(return_value=httpx.Response(200, text=FIXABLE_PAGE))
+
+
+def test_fix_rejects_write_before_touching_the_network(tmp_path, capsys):
+    # No respx.mock decorator on purpose: if this reached audit_site() the test
+    # would error on an unmocked request instead of passing.
+    assert main(["fix", SITE, "--root", str(tmp_path), "--write"]) == 2
+    assert "v0.4.0" in capsys.readouterr().err
+
+
+def test_write_unavailable_message_names_the_release_and_the_reason():
+    assert "v0.4.0" in WRITE_UNAVAILABLE
+    assert "--write" in WRITE_UNAVAILABLE
+
+
+@respx.mock
+def test_fix_prints_a_diff_and_exits_one(tmp_path, capsys):
+    mock_fixable_site()
+    code = main(["fix", SITE, "--root", str(fixable_repo(tmp_path))])
+    out = capsys.readouterr().out
+    assert code == 1, out
+    assert "--- a/index.html" in out
+    assert '+    <link rel="canonical" href="https://x.example/">' in out
+    assert "framework: jekyll" in out
+    assert "writes nothing" in out.lower()
+
+
+@respx.mock
+def test_fix_exits_zero_when_there_is_nothing_to_fix(tmp_path, capsys):
+    mock_site()                       # the clean fixture already self-canonicalises
+    assert main(["fix", SITE, "--root", str(fixable_repo(tmp_path))]) == 0
+    assert "0 diff(s) ready" in capsys.readouterr().out
+
+
+@respx.mock
+def test_fix_reports_what_it_could_not_fix_and_why(tmp_path, capsys):
+    mock_fixable_site()
+    main(["fix", SITE, "--root", str(tmp_path)])   # empty dir -> unknown framework
+    out = capsys.readouterr().out
+    assert "framework: unknown" in out
+    assert "NOT FIXED" in out
+    assert "seo.canonical.missing" in out
+    assert "display-only" in out
+
+
+@respx.mock
+def test_fix_json_is_structured_and_states_that_nothing_was_written(tmp_path, capsys):
+    mock_fixable_site()
+    code = main(["fix", SITE, "--root", str(fixable_repo(tmp_path)), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["tool"]["name"] == "omnirank"
+    assert payload["wrote"] == []
+    assert payload["framework"]["name"] == "jekyll"
+    assert payload["framework"]["confidence"] == "high"
+    assert payload["framework"]["evidence"] == ["_config.yml", "_layouts"]
+    entry = next(f for f in payload["fixes"] if f["id"] == "seo.canonical.missing")
+    assert entry["applicability"] == "safe"
+    assert entry["fixTier"] == "mechanical"
+    assert entry["path"] == "index.html"
+    assert entry["diff"].startswith("--- a/index.html")
+
+
+@respx.mock
+def test_fix_json_records_every_skip_with_a_reason(tmp_path, capsys):
+    mock_fixable_site()
+    main(["fix", SITE, "--root", str(tmp_path), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["fixes"] == []
+    assert payload["skipped"], "a finding OmniRank could not fix must still be reported"
+    assert all("reason" in entry for entry in payload["skipped"])
+    assert all("diff" not in entry for entry in payload["skipped"])
+
+
+@respx.mock
+def test_fix_only_considers_mechanical_findings(tmp_path, capsys):
+    mock_fixable_site()
+    main(["fix", SITE, "--root", str(fixable_repo(tmp_path)), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    reported = {entry["id"] for entry in payload["fixes"] + payload["skipped"]}
+    assert reported <= {"seo.canonical.missing", "seo.canonical.relative",
+                        "seo.canonical.chained", "seo.schema.no-context"}
+
+
+def test_fix_without_a_url_or_config_exits_two():
+    assert main(["fix"]) == 2
+
+
+def test_fix_with_a_missing_config_exits_two(tmp_path):
+    assert main(["fix", "--config", str(tmp_path / "nope.json")]) == 2

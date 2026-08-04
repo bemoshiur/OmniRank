@@ -1,18 +1,31 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import UTC, datetime
 
 from . import __version__
 from .audit import audit_site, default_config
-from .config import ConfigError, load_config
+from .config import Config, ConfigError, load_config
+from .fixes import FixOutcome, generate
+from .framework import Detection, detect
+from .locator import blast_radius, locate
 from .report import Report
 
 SEVERITY_MARK = {"error": "FAIL", "warning": "WARN", "info": "INFO"}
 SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
 SEVERITY_SECTION = {"error": "ERRORS", "warning": "WARNINGS", "info": "INFO"}
 MAX_EXAMPLE_URLS = 3
+
+WRITE_UNAVAILABLE = (
+    "omnirank fix has no --write path in 0.3.0. This release locates findings and "
+    "prints the diff it would apply; it modifies nothing. File modification arrives "
+    "in v0.4.0, behind the write guarantees in "
+    "docs/research/2026-08-04-automation-architecture.md section 2.5. Shipping "
+    "--write as a no-op would be worse than not shipping it."
+)
+NOTHING_WRITTEN = "This release writes nothing. --write arrives in v0.4.0."
 
 
 def _group_findings(findings: list) -> list[dict]:
@@ -137,6 +150,68 @@ def _summarise(report: Report, fail_on: list[str], *,
     return "\n".join(lines)
 
 
+def fix_plan(config: Config, root: str) -> tuple[Detection, list[FixOutcome]]:
+    """Audit, locate, and generate a diff per mechanical finding. Writes nothing.
+
+    Only MECHANICAL findings are even considered: every other tier ceilings at
+    unsafe or display-only, so calling a generator for one could not produce an
+    applicable fix and would only add noise to the skip list.
+    """
+    report = audit_site(config)
+    detection = detect(root)
+    outcomes: list[FixOutcome] = []
+    for finding in report.findings:
+        if finding.fix_tier != "mechanical":
+            continue
+        location = locate(finding.url, detection=detection, root=root)
+        outcomes.append(generate(
+            finding, location, root=root,
+            routes_served=blast_radius(location, detection=detection, root=root),
+            findings=report.findings))
+    return detection, outcomes
+
+
+def _format_fix(detection: Detection, outcomes: list[FixOutcome]) -> str:
+    fixed = [o for o in outcomes if o.fixed]
+    skipped = [o for o in outcomes if not o.fixed]
+    lines = [
+        f"OmniRank {__version__} — fix preview (writes nothing)",
+        (f"  framework: {detection.framework} (confidence {detection.confidence}; "
+         f"evidence: {', '.join(detection.evidence)})"),
+        f"  {len(fixed)} diff(s) ready · {len(skipped)} finding(s) not fixable here",
+    ]
+    for outcome in fixed:
+        lines.append("")
+        lines.append(outcome.diff.rstrip("\n"))
+    if skipped:
+        lines.append("")
+        lines.append("  NOT FIXED")
+        for outcome in skipped:
+            where = outcome.path or "no source file located"
+            lines.append(f"    {outcome.finding_id}  {outcome.url}")
+            lines.append(f"        {where} — {outcome.reason}")
+    lines.append("")
+    lines.append(f"  {NOTHING_WRITTEN}")
+    return "\n".join(lines)
+
+
+def _fix_json(config: Config, detection: Detection,
+              outcomes: list[FixOutcome]) -> dict:
+    return {
+        "tool": {"name": "omnirank", "version": __version__},
+        "site": config.site_url,
+        "framework": {
+            "name": detection.framework,
+            "confidence": detection.confidence,
+            "evidence": list(detection.evidence),
+        },
+        # Machine-readable proof, not prose: this release wrote no files.
+        "wrote": [],
+        "fixes": [o.to_dict() for o in outcomes if o.fixed],
+        "skipped": [o.to_dict() for o in outcomes if not o.fixed],
+    }
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="omnirank")
     parser.add_argument("--version", action="version", version=f"omnirank {__version__}")
@@ -159,13 +234,31 @@ def _build_parser() -> argparse.ArgumentParser:
     geo.add_argument("url", nargs="?", help="Site root. Omit when using --config.")
     geo.add_argument("--config", help="Path to omnirank.config.json")
     geo.add_argument("--out", default="public", help="Output directory (default: public)")
+
+    fix = sub.add_parser(
+        "fix", help="Show the diffs OmniRank could apply. Writes nothing.")
+    fix.add_argument("url", nargs="?", help="Site root. Omit when using --config.")
+    fix.add_argument("--config", help="Path to omnirank.config.json")
+    fix.add_argument("--root", default=".",
+                     help="Repository root to locate findings in (default: .)")
+    fix.add_argument("--json", action="store_true",
+                     help="Emit the fix plan as JSON instead of a unified diff")
+    fix.add_argument("--write", action="store_true",
+                     help="Not available in 0.3.0: exits 2 with an explanation. "
+                          "File modification arrives in v0.4.0.")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    if args.command not in {"audit", "geo"}:
+    if args.command not in {"audit", "geo", "fix"}:
+        return 2
+
+    # Before load_config and before any network call, so the refusal is instant
+    # and cannot be mistaken for a failure part-way through a run.
+    if args.command == "fix" and args.write:
+        print(f"omnirank: {WRITE_UNAVAILABLE}", file=sys.stderr)
         return 2
 
     try:
@@ -199,6 +292,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  wrote {path}")
         print("  These must be physical files. Never serve them from a dynamic route.")
         return 0
+
+    if args.command == "fix":
+        detection, outcomes = fix_plan(config, args.root)
+        if args.json:
+            print(json.dumps(_fix_json(config, detection, outcomes), indent=2))
+        else:
+            print(_format_fix(detection, outcomes))
+        # Exit 1 when a diff exists so CI can gate on "there is an outstanding
+        # mechanical fix". This is NOT audit's exit 1 (a failOn gate tripped) --
+        # the two subcommands answer different questions.
+        return 1 if any(o.fixed for o in outcomes) else 0
 
     report = audit_site(config)
     fail_on = args.fail_on if args.fail_on is not None else config.fail_on
