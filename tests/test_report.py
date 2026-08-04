@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
+from omnirank.registry import SCORING_GATES_BY_LAYER, scoring_gate_count
 from omnirank.report import Finding, NotEvaluated, Report
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,38 +24,12 @@ def test_empty_report_scores_100_overall():
     assert r.score()["overall"] == 100
 
 
-def test_error_costs_ten_points():
-    r = Report(site="https://x.example", kind="audit")
-    r.add(f())
-    assert r.score()["seo"] == 90
-
-
-def test_warning_costs_three_points():
-    r = Report(site="https://x.example", kind="audit")
-    r.add(f(severity="warning"))
-    assert r.score()["seo"] == 97
-
-
-def test_score_floors_at_zero():
-    # v0.2.1: under the old flat-per-finding model, 20 findings from the SAME gate
-    # were enough to floor a layer (20*10=200). Under the capped model that same
-    # gate now maxes out at GATE_CAP (15) no matter how many times it fires, so
-    # flooring requires enough DISTINCT broken gates for their capped costs to sum
-    # past 100: ceil(100/15) = 7 gates, each firing twice (10*2=20, capped to 15).
-    r = Report(site="https://x.example", kind="audit")
-    for gate_n in range(7):
-        for i in range(2):
-            r.add(f(url=f"https://x.example/{gate_n}-{i}",
-                    id=f"seo.issue-{gate_n}.broken", gate=f"gate-{gate_n}"))
-    assert r.score()["seo"] == 0
-
-
 def test_overall_is_mean_of_layers_that_ran():
     r = Report(site="https://x.example", kind="audit")
-    r.add(f())                                  # seo -> 90
-    r.add(f(layer="aeo", id="aeo.faq.missing", gate="faq"))  # aeo -> 90
+    r.add(f(layer="smm", id="smm.alpha.broken", gate="alpha"))      # -> 33
+    r.add(f(layer="offsite", id="offsite.beta.broken", gate="beta"))  # -> 33
     s = r.score()
-    assert s["overall"] == 90
+    assert s["overall"] == 33
     assert "geo" not in s
 
 
@@ -180,7 +155,7 @@ def test_clean_layer_that_ran_scores_100():
     r.layers_run.update({"seo", "aeo", "geo"})
     r.add(f())                       # one seo error
     s = r.score()
-    assert s["seo"] == 90
+    assert s["seo"] < 100, "a real finding must cost something"
     assert s["aeo"] == 100, "a layer that ran with no findings scored 100"
     assert s["geo"] == 100
 
@@ -211,14 +186,6 @@ def test_layer_that_did_not_run_is_absent():
 # --- v0.2.1: GATE_CAP -- one gate's contribution to its layer is capped, so a
 # systemic issue (one gate firing on every URL of a real site) cannot alone zero
 # the layer and drown out every other signal. ---
-
-def test_one_gate_firing_fifty_seven_times_does_not_zero_its_layer():
-    r = Report(site="https://x.example", kind="audit")
-    for i in range(57):
-        r.add(f(url=f"https://x.example/{i}"))          # all id=seo.h1.multiple, gate=h1
-    assert r.score()["seo"] > 0
-    assert r.score()["seo"] == 85, "100 - GATE_CAP(15), regardless of the 57 URLs"
-
 
 def test_two_distinct_gates_cost_more_than_one_gate_firing_twice_as_often():
     one_gate_twice = Report(site="https://x.example", kind="audit")
@@ -285,3 +252,89 @@ def test_a_report_without_not_evaluated_key_still_validates():
     del d["notEvaluated"]
     validator = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
     assert list(validator.iter_errors(d)) == []
+
+
+# --- v0.4.0: the layer budget is normalised by the layer's own gate count, so
+# adding gates can never make saturation cheaper. `smm` and `offsite` have no
+# registered gates, so their surface is exactly the number of gates the test
+# itself creates -- an exact, registry-independent denominator that stays
+# correct as seo grows from 16 gates to 24. ---
+
+def test_an_error_costs_ten_raw_points_normalised_by_a_one_gate_surface():
+    # One gate seen, none registered -> surface 1, denominator 15*1 = 15.
+    # penalty = (100*10 + 7) // 15 = 1007 // 15 = 67.
+    r = Report(site="https://x.example", kind="audit")
+    r.add(f(layer="smm", id="smm.alpha.broken", gate="alpha"))
+    assert r.score()["smm"] == 33
+
+
+def test_a_warning_costs_three_raw_points_normalised_by_a_one_gate_surface():
+    # penalty = (100*3 + 7) // 15 = 307 // 15 = 20.
+    r = Report(site="https://x.example", kind="audit")
+    r.add(f(layer="smm", id="smm.alpha.broken", gate="alpha", severity="warning"))
+    assert r.score()["smm"] == 80
+
+
+def test_info_severity_never_moves_the_score():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.add("smm")
+    r.add(f(layer="smm", id="smm.alpha.noted", gate="alpha", severity="info"))
+    assert r.score()["smm"] == 100
+
+
+def test_one_maxed_gate_costs_exactly_one_gates_worth_of_its_layer():
+    # Two gates seen -> surface 2, denominator 30. Gate `alpha` is maxed
+    # (2 errors = 20 raw, capped to 15); `beta` contributes nothing.
+    # penalty = (100*15 + 15) // 30 = 1515 // 30 = 50.
+    r = Report(site="https://x.example", kind="audit")
+    for i in range(2):
+        r.add(f(layer="smm", id="smm.alpha.broken", gate="alpha",
+                url=f"https://x.example/{i}"))
+    r.add(f(layer="smm", id="smm.beta.noted", gate="beta", severity="info"))
+    assert r.score()["smm"] == 50
+
+
+def test_zeroing_a_layer_requires_every_one_of_its_registered_gates():
+    """The whole point of v0.4.0's score change, asserted against the live registry.
+
+    Reads the gate list from the registry rather than hardcoding a count, so it
+    stays true as Tasks 3-10 add gates instead of needing an edit per task.
+    """
+    gates = sorted(SCORING_GATES_BY_LAYER["seo"])
+    assert len(gates) >= 16, "sanity: the seo layer has gates to enumerate"
+
+    r = Report(site="https://x.example", kind="audit")
+    for n, gate in enumerate(gates[:-1]):          # every gate but the last, maxed
+        for i in range(2):                          # 2 errors = 20 raw -> capped 15
+            r.add(f(id=f"seo.{gate}.x", gate=gate, url=f"https://x.example/{n}-{i}"))
+    assert r.score()["seo"] > 0, (
+        "one clean gate must keep the layer off the floor, however many gates exist")
+
+    last = gates[-1]
+    for i in range(2):
+        r.add(f(id=f"seo.{last}.x", gate=last, url=f"https://x.example/last-{i}"))
+    assert r.score()["seo"] == 0, "a layer floors only when every gate is maxed"
+
+
+def test_one_gate_firing_fifty_seven_times_costs_the_same_as_firing_twice():
+    # GATE_CAP, preserved verbatim from v0.2.1: repetition of the SAME gate stops
+    # compounding. Asserted as an equality against the 2-firing case rather than a
+    # magic number, so it survives the seo surface growing from 16 to 24.
+    many = Report(site="https://x.example", kind="audit")
+    for i in range(57):
+        many.add(f(url=f"https://x.example/{i}"))       # all id=seo.h1.multiple, gate=h1
+
+    twice = Report(site="https://x.example", kind="audit")
+    for i in range(2):
+        twice.add(f(url=f"https://x.example/{i}"))
+
+    assert many.score()["seo"] == twice.score()["seo"]
+    assert many.score()["seo"] > 0
+
+
+def test_scoring_gate_count_excludes_unreachable_and_info_only_gates():
+    assert "crawl-hygiene" not in SCORING_GATES_BY_LAYER["seo"], (
+        "crawl-hygiene is reachable=False; a gate that can never fire must not "
+        "sit in the denominator inflating every score")
+    assert scoring_gate_count("seo") == len(SCORING_GATES_BY_LAYER["seo"])
+    assert scoring_gate_count("not-a-layer") == 0
