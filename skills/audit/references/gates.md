@@ -70,6 +70,30 @@ id `geo.facts-json.invalid` (gate `facts-json`) — this one keeps the gate's fu
 | `schema` | Every top-level node has `@context` | warning |
 | `schema-fabrication` | `AggregateRating` has a non-zero `ratingCount` (or `reviewCount`) | error |
 | `schema-fabrication` | Every `Review` has an `author` | error |
+| `schema-required` | Google's documented rich-result properties are present for Article/NewsArticle/BlogPosting, Product, FAQPage, BreadcrumbList, Organization and LocalBusiness — see below | warning |
+
+**`schema-required` (v0.4.0) checks GOOGLE's requirement, not schema.org's.**
+schema.org marks no property required at all, so a node can be perfectly valid
+schema.org and still miss a Google rich result — every `seo.schema-required.missing-property`
+finding says so explicitly, and names both `RICH_RESULT_RULES` and the date the
+table was transcribed (`RICH_RESULT_RULES_AS_OF` in `gates/jsonld.py`). It is
+`warning`, not `error`, for the same reason: the table is a hand-transcribed
+snapshot with no freshness test yet, and a stale required-property table produces
+fabricated errors. One finding per node, listing every missing property — not one
+finding per property, and not one id per type: the fix (author the missing value)
+is identical regardless of which type is short a property.
+
+| Type | Required (each item is one requirement; a tuple means "any one of") |
+|---|---|
+| Article / NewsArticle / BlogPosting | `headline`, `image`, `datePublished` |
+| Product | `name`, and one of (`offers`, `aggregateRating`, `review`) |
+| FAQPage | `mainEntity`, and every `Question` needs an `acceptedAnswer` |
+| BreadcrumbList | `itemListElement`, and every item needs `position` and a `name` (top-level or nested under `item`) |
+| Organization | `name`, `url` |
+| LocalBusiness | `name`, `address` |
+
+A node that is only `@id` + `@type` (+ `@context`) is a reference to an entity
+declared elsewhere, not a declaration missing its properties, and is never checked.
 
 "Top-level node" means each `<script type="application/ld+json">` payload, or each
 child of a `@graph` array — **a `@graph` container's `@context` is propagated down to
@@ -82,6 +106,42 @@ hostile payload degrades instead of crashing the scan), so a `Review` or
 
 The fabrication gates are not style preferences. Unbacked ratings are a manual-action risk,
 and they corrode the trust the markup exists to build.
+
+## Security (v0.4.0)
+
+`security.run_page(page)` derives four gates from the already-fetched response's headers
+(plus a CSP `<meta http-equiv>` fallback), and `security.check_https_redirect()` makes one
+extra request per audit against the site's `http://` origin. All findings carry
+`layer: "security"`, a layer that did not exist before v0.4.0.
+
+Scope is deliberately narrow — `docs/research/2026-08-04-competitive-gap-analysis.md` §4
+draws the line at "security checked only where insecurity demonstrably breaks crawling,
+indexing or rendering". Mozilla Observatory and testssl.sh already grade headers properly;
+an SEO tool scoring CSP strength would be doing a job it cannot do well.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `hsts` | `security.hsts.missing` | An `https://` response carries no `Strict-Transport-Security` header | info |
+| `hsts` | `security.hsts.short-max-age` | `Strict-Transport-Security` present but `max-age` below `HSTS_MIN_MAX_AGE` (15,552,000 seconds / 180 days — OmniRank's own floor, not a vendor requirement) | info |
+| `nosniff` | `security.nosniff.missing` | `X-Content-Type-Options` is not exactly `nosniff` | info |
+| `csp` | `security.csp.absent` | No `Content-Security-Policy`, by header or `<meta http-equiv>` | info |
+| `referrer-policy` | `security.referrer-policy.missing` | No `Referrer-Policy` header | info |
+| `mixed-content` | `security.mixed-content.subresource` | An `https://` page requests a `script`/`link`/`img`/`iframe` subresource over literal `http://` | **error** |
+| `https-redirect` | `security.https-redirect.missing` | The site's `http://` origin does not 3xx-redirect to `https://` | **error** |
+
+**Four of the six gates are `info` and cost zero points — they can never fail a build.**
+They are reported as inventory facts, not graded: whether a given HSTS `max-age` or CSP is
+*adequate* is a judgement about your threat model that an SEO auditor has no business
+making. Only `mixed-content` and `https-redirect` are `error`, because only those two break
+something OmniRank can observe — browsers block mixed active content outright, and a
+non-redirecting `http://` origin gives every page a live duplicate that splits canonical
+signal between two URLs. `security` enters the report's `layersRun` only when at least one
+of its gates actually ran (a per-page header check, or a reachable `https-redirect` probe).
+
+CSP is parsed for exactly one thing beyond noting its total absence:
+`upgrade-insecure-requests`, which browsers use to rewrite `http://` subresources before
+requesting them, and which therefore suppresses `mixed-content` — this module never grades
+a policy's contents.
 
 ## Site-level (cross-URL)
 
@@ -109,6 +169,39 @@ Two things worth knowing before wiring these into `--fail-on`:
   pages OmniRank fetched. A canonical or hreflang alternate pointing outside the
   crawled set produces no finding either way — OmniRank never reports on a gate it
   could not actually evaluate.
+
+## Indexability contradictions (v0.4.0)
+
+`gates/contradictions.py` — defects provable from the site's own declarations, with no
+external truth required: a URL submitted for crawling in the sitemap and forbidden in
+`robots.txt`; a canonical pointing at a page that is noindexed, redirects, or 404s; a page
+declared as an `hreflang` alternate while forbidding its own indexing. Every finding here
+is 100% precision because both halves of the contradiction come from the site itself, and
+every one carries `layer: "seo"`.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `robots-sitemap` | `seo.robots-sitemap.disallowed` | A URL listed in `sitemap.xml` is also `Disallow`-ed to `*` in `robots.txt` | **error** |
+| `canonical-target` | `seo.canonical-target.noindexed` | A page's canonical points at a URL that carries a `noindex` directive | **error** |
+| `canonical-target` | `seo.canonical-target.not-found` | A canonical target returns `404` or `410` | **error** |
+| `canonical-target` | `seo.canonical-target.redirects` | A canonical target itself 3xx-redirects | warning |
+| `hreflang-noindex` | `seo.hreflang-noindex.alternate` | A page declares an `hreflang` alternate at a page that carries `noindex` (attached to the *declaring* page, not the noindexed target; `x-default` is exempt) | **error** |
+
+Two rules govern every check in this module:
+
+- **Never judge a URL OmniRank did not see.** A canonical target already in the crawled
+  set is judged from the `PageData` already held — no second fetch. A target outside it is
+  probed once, deduplicated across every page pointing at it, up to `MAX_CANONICAL_PROBES`
+  (25 per audit); anything past that budget is `budget-exceeded` in `notEvaluated`, never
+  silently skipped. A 5xx or transport failure on a probe is `page-unreachable`, not
+  `.not-found` — a transient origin error is not a missing page, and calling it one would
+  be a guess dressed as a finding.
+- **A gate that could not run reports why, never silently.** `robots-sitemap` returns
+  `no-sitemap`, `page-unreachable`, or `matcher-unsupported` in `notEvaluated` rather than
+  a pass when it cannot reach a verdict. `matcher-unsupported` is real on Python 3.11–3.13:
+  `urllib.robotparser` only became RFC 9309 compliant in Python 3.14, so on earlier
+  interpreters OmniRank refuses to answer rather than trust a matcher it knows may ignore
+  wildcards or mis-order `Allow`/`Disallow` overlaps — see `omnirank/robots.py`.
 
 ## Performance
 
@@ -142,6 +235,39 @@ depend on `brotli` or `zstandard`, so it never requests `br` or `zstd` via
 `Accept-Encoding` — an origin will not choose to send either back in response to a
 request that never asked for them.
 
+## On-page (v0.4.0)
+
+`gates/onpage.py` — body markup that search engines and assistive technology both read.
+Kept out of `seo.py`, which owns only the `<head>`'s indexing signals: canonical, title,
+description, OpenGraph, hreflang. Every finding carries `layer: "seo"`.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `image-alt` | `seo.image-alt.missing` | An `<img>` has no `alt` attribute at all | warning |
+| `heading-order` | `seo.heading-order.skipped` | The outline jumps more than one level deeper (e.g. `h1` straight to `h3`) — only the first skip on the page is reported | warning |
+| `link-text` | `seo.link-text.empty` | An `<a href>` has no accessible name (no text, `aria-label`, `title`, or `alt` on a contained `<img>`) | warning |
+| `link-text` | `seo.link-text.generic` | An `<a href>`'s accessible name is a generic phrase ("click here", "read more", …) that conveys nothing on its own | info |
+| `lang` | `seo.lang.missing` | `<html>` has no non-empty `lang` attribute | **error** |
+
+**`alt=""` is never flagged, under any circumstance.** An empty `alt` is the spec's own
+way to mark an image decorative, and a check that fires on it would tell users to make
+correct markup worse. `role="presentation"`, `role="none"` and `aria-hidden="true"` are
+honoured the same way. Only a *missing* `alt` attribute — not an empty one — is a finding.
+
+**`lang` is `error`, the strongest severity in this group, because a missing `lang` makes
+a DIFFERENT gate lie.** `page.lang` feeds `bands.resolve_band()`; with no `lang`, a page
+written in a script with no word separators (Japanese, Thai, …) is measured against the
+space-delimited English word band it structurally cannot meet, and
+`aeo.answer-block.length` reports a length problem that does not exist. A missing check
+here is not silence — it is a wrong finding somewhere else.
+
+**`link-text.generic` is `info`, and must never fail a build,** because the word list
+behind it (`GENERIC_ANCHORS` in `gates/onpage.py`) is English-only by construction: on a
+Bengali or Japanese page it matches nothing and the gate is silent by design, not because
+the page is clean. Links inside `<nav>` are exempt from both `link-text` findings —
+navigation labels are terse on purpose and take their meaning from the nav itself, and
+flagging them is the kind of noise that trains users to ignore the report.
+
 ## Fix tiers
 
 Every finding id carries a static `fixTier` in the report. Only `mechanical` findings
@@ -156,4 +282,5 @@ agree:
 | `seo.schema.no-context` | mechanical | Adds `"@context": "https://schema.org"` to an unambiguous node |
 
 Everything else is `templated`, `drafted`, `advisory` or `infrastructure`, and is
-reported rather than patched. `omnirank fix` writes nothing in 0.3.0.
+reported rather than patched. `omnirank fix` writes nothing — see
+[fix-preview.md](../../../docs/fix-preview.md) for the condition writing ships under.

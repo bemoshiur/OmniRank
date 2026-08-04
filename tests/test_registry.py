@@ -57,16 +57,10 @@ def test_every_registered_id_is_emitted_by_some_gate():
     assert not orphans, f"registered but never emitted: {orphans}"
 
 
-def test_registry_covers_all_forty_eight_findings():
-    # v0.4.0 Task 3: +5 for gates/security.py's four response-header gates
-    # (hsts fires two distinct ids). Task 4: +2 for mixed-content and
-    # https-redirect. Task 6: +1 for seo.robots-sitemap.disallowed. Task 7: +3
-    # for the three canonical-target ids. Task 8: +1 for
-    # seo.hreflang-noindex.alternate. Task 9: +1 for
-    # seo.schema-required.missing-property. Task 10: +5 for gates/onpage.py
-    # (image-alt, heading-order, link-text x2, lang). Task 12 retitles/rebases
-    # this once the full v0.4.0 gate set has landed.
-    assert len(REGISTRY) == 66
+def test_registry_covers_all_sixty_six_findings():
+    assert len(REGISTRY) == 66, (
+        "48 through v0.3.0, plus 18 in v0.4.0: 7 security, 5 contradictions, "
+        "1 schema-required, 5 onpage")
 
 
 def test_tier_distribution_matches_the_fixability_classification():
@@ -74,19 +68,25 @@ def test_tier_distribution_matches_the_fixability_classification():
               ("mechanical", "templated", "drafted", "advisory", "infrastructure")}
     for entry in REGISTRY.values():
         counts[entry.tier] += 1
-    # v0.4.0 Task 3: +5 infrastructure (all five security header gates are
-    # infrastructure -- the fix is an origin/CDN response-header change).
-    # Task 4: +1 templated (mixed-content, a markup scheme rewrite) and +1
-    # infrastructure (https-redirect, an origin-level redirect). Task 6: +1
-    # advisory (seo.robots-sitemap.disallowed). Task 7: +2 advisory
-    # (canonical-target .noindexed/.not-found) and +1 templated
-    # (canonical-target .redirects). Task 8: +1 advisory
-    # (seo.hreflang-noindex.alternate). Task 9: +1 drafted
-    # (seo.schema-required.missing-property). Task 10: +3 drafted (image-alt,
-    # link-text.empty, link-text.generic), +1 advisory (heading-order), +1
-    # templated (lang).
+    # mechanical stays at exactly 4: a new mechanical id would need a new fix
+    # generator (test_generators_cover_exactly_the_mechanical_tier), and v0.4.0
+    # deliberately adds no fix surface.
     assert counts == {"mechanical": 4, "templated": 18, "drafted": 16,
                       "advisory": 16, "infrastructure": 12}
+    assert sum(counts.values()) == 66
+
+
+def test_the_seo_layer_has_twenty_four_scoring_gates_after_v0_4_0():
+    from omnirank.registry import SCORING_GATES_BY_LAYER
+
+    assert len(SCORING_GATES_BY_LAYER["seo"]) == 24, (
+        "16 through v0.3.0 plus 8 in v0.4.0. This number is the denominator "
+        "Report.score() divides the seo layer's cost by -- if it changes, the "
+        "scoring arithmetic in the v0.4.0 plan needs redoing, not the assertion "
+        "loosening")
+    assert len(SCORING_GATES_BY_LAYER["security"]) == 2, (
+        "only mixed-content and https-redirect can move the score; the four "
+        "header gates are info and must not sit in the denominator")
 
 
 def test_mechanical_tier_is_exactly_the_four_documented_ids():

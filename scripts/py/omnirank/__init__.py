@@ -11,4 +11,4 @@ from bs4 import XMLParsedAsHTMLWarning
 # rather than at every call site.
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

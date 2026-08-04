@@ -23,7 +23,7 @@ pre-deploy verification, or "why doesn't ChatGPT cite us?"
 Audit only diagnoses. It never edits the site.
 
 `omnirank fix` shows the diff it would apply for the four `mechanical` findings and
-writes nothing — there is no `--write` flag in 0.3.0. Run it to answer "which file is
+writes nothing — there is no `--write` flag. Run it to answer "which file is
 wrong?", then hand the diff to a human.
 
 ## How to run it

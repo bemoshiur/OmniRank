@@ -6,6 +6,82 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-04
+
+**"OmniRank finds where your site contradicts itself."** 18 new finding ids, a new
+`security` layer, and the scoring fix that had to land before any of them.
+
+This release writes nothing. `omnirank fix` still previews diffs and modifies no
+file — v0.3.0's strings promising `--write` "in v0.4.0" were corrected rather than
+honoured, because auditing better is zero-risk and a richer audit is what earns
+the right to edit files later.
+
+### Changed — scoring (behavioural)
+
+- Each layer's 100-point budget is now divided by the number of gates that layer
+  actually has, instead of being a flat constant. One maximally-broken gate costs
+  its layer exactly `1/N`, and a layer reaches 0 only when **every** one of its
+  gates is maxed. Under the old model, seven broken gates zeroed a layer whether
+  it had seven gates or thirty — so each of this release's eight new `seo` gates
+  would have made saturation cheaper (44% of the layer to floor it at 16 gates,
+  29% at 24). `GATE_CAP` is unchanged and still caps any single gate.
+  **Scores from 0.3.0 and 0.4.0 are not comparable.**
+
+### Added — `security` layer
+
+`security.hsts.missing`, `security.hsts.short-max-age`, `security.nosniff.missing`,
+`security.csp.absent`, `security.referrer-policy.missing` — all `info`, all costing
+zero points. The gap analysis puts header grading out of scope by identity, so
+these are reported as inventory facts and never graded. `HSTS_MIN_MAX_AGE` is
+OmniRank's own floor and the finding says so; no claim is made about any browser
+preload list. CSP **absence** is reported; CSP **contents** deliberately are not.
+
+`security.mixed-content.subresource` (error) and `security.https-redirect.missing`
+(error) are the two that break something observable. Mixed content is suppressed by
+`upgrade-insecure-requests` and ignores `<link>` rels that are not subresources.
+The layer enters `layersRun` only when it actually ran.
+
+### Added — indexability contradictions
+
+`seo.robots-sitemap.disallowed`, `seo.canonical-target.noindexed`,
+`seo.canonical-target.not-found`, `seo.canonical-target.redirects`,
+`seo.hreflang-noindex.alternate`. Every one is provable from the site's own
+declarations. Canonical targets outside the crawled set are probed once each,
+deduplicated, capped at 25 per audit; anything past the cap is `budget-exceeded`
+in `notEvaluated`, never skipped silently.
+
+### Added — structured data
+
+`seo.schema-required.missing-property` validates Google's required rich-result
+properties for Article/NewsArticle/BlogPosting, Product, FAQPage, BreadcrumbList,
+Organization and LocalBusiness. `warning`, not `error`: the table is a transcription
+on a fixed date with no freshness test, and a stale required-property table
+fabricates errors. Every finding states that the markup is valid schema.org and
+that what is unmet is Google's requirement — two different claims.
+
+### Added — on-page
+
+`seo.image-alt.missing` (never fires on `alt=""`, which is the spec's decorative
+marker), `seo.heading-order.skipped`, `seo.link-text.empty`, `seo.link-text.generic`
+(info, English-only word list), `seo.lang.missing` (error — a missing `lang` makes
+`bands.resolve_band()` measure a non-Latin page against the Latin word band, so
+`aeo.answer-block.length` reports a problem that does not exist).
+
+### Added — report schema (additive)
+
+`"security"` in the layer enum; `"matcher-unsupported"` and `"budget-exceeded"` in
+the `notEvaluated` reason enum. Reports written before 0.4.0 still validate.
+
+### Notes on Python version
+
+`urllib.robotparser` became RFC 9309 compliant in **Python 3.14**. On 3.11–3.13 it
+ignores path wildcards and matches rules in file order, so it can report a URL as
+disallowed that RFC 9309 says is allowed. `seo.robots-sitemap.disallowed` probes
+the interpreter's actual behaviour and, when the site's published rules need a
+capability this interpreter lacks, records `matcher-unsupported` in `notEvaluated`
+rather than answering. Coverage of that one gate is therefore broader on Python
+3.14+ than on 3.11–3.13; correctness is identical on both.
+
 ## [0.3.0] - 2026-08-04
 
 "The locator." OmniRank can now say which file is wrong and show the diff that would
@@ -233,7 +309,8 @@ against a real 57-URL site.
   path and a Node in-repo path producing identical output.
 - `omnirank` CLI with a zero-config URL mode and CI-usable exit codes.
 
-[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/bemoshiur/OmniRank/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bemoshiur/OmniRank/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/bemoshiur/OmniRank/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bemoshiur/OmniRank/compare/v0.1.1...v0.2.0
