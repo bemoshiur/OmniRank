@@ -215,6 +215,21 @@ def test_no_context_declines_on_a_tsx_location(tmp_path):
         finding(), Location(path="page.tsx", confidence="exact"), tmp_path, 1, [])
     assert not made.fixed
     assert "v0.4.0" in made.reason
+    assert "metadataBase" in made.reason
+
+
+def test_no_context_declines_on_a_markdown_location_with_markdown_specific_wording(tmp_path):
+    # S3: showing the Next.js `metadata.alternates.canonical` / `metadataBase`
+    # paragraph for a Jekyll/Hugo `.md` source page is actively misleading --
+    # neither concept exists there. The located file's suffix decides which
+    # explanation is shown.
+    (tmp_path / "pricing.md").write_text("---\nlayout: page\n---\n# Pricing\n")
+    made = schema.no_context(
+        finding(), Location(path="pricing.md", confidence="exact"), tmp_path, 1, [])
+    assert not made.fixed
+    assert "v0.4.0" in made.reason
+    assert "metadataBase" not in made.reason
+    assert "markdown" in made.reason.lower()
 
 
 def test_no_context_preserves_every_other_byte(tmp_path):

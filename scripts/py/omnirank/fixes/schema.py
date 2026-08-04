@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 from ..html import find_ldjson_scripts
 from ..locator import Location
 from ..report import Finding
-from .base import TSX_DEFERRED, FixOutcome, is_html, outcome, read_text, unified_diff
+from .base import FixOutcome, deferred_reason, is_html, outcome, read_text, unified_diff
 
 SCHEMA_CONTEXT = "https://schema.org"
 
@@ -75,7 +75,7 @@ def no_context(finding: Finding, location: Location, root: Path,
         return outcome(finding, location, reason="no source file was located")
     path = root / location.path
     if not is_html(path):
-        return outcome(finding, location, reason=TSX_DEFERRED)
+        return outcome(finding, location, reason=deferred_reason(path))
     text = read_text(path)
     if text is None:
         return outcome(finding, location,

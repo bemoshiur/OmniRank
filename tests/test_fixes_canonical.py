@@ -151,6 +151,21 @@ def test_canonical_missing_refuses_a_tsx_location(tmp_path):
     made = canonical.missing(finding(), location, tmp_path, 1, [])
     assert not made.fixed
     assert "v0.4.0" in made.reason
+    assert "metadataBase" in made.reason
+
+
+def test_canonical_missing_refuses_a_markdown_location_with_markdown_specific_wording(tmp_path):
+    # S3: the TSX paragraph talks about `metadata.alternates.canonical` and
+    # `metadataBase` -- Next.js App Router concepts that do not exist for a
+    # Jekyll/Hugo `.md` source page. Showing it there is actively misleading,
+    # not merely irrelevant to the framework actually in play.
+    location = write(tmp_path, "pricing.md", "---\nlayout: page\n---\n# Pricing\n")
+    made = canonical.missing(finding(), location, tmp_path, 1, [])
+    assert not made.fixed
+    assert "v0.4.0" in made.reason
+    assert "metadataBase" not in made.reason
+    assert "metadata.alternates.canonical" not in made.reason
+    assert "markdown" in made.reason.lower()
 
 
 def test_canonical_missing_refuses_a_file_with_no_head(tmp_path):
@@ -201,6 +216,46 @@ def test_canonical_relative_declines_when_there_is_no_canonical(tmp_path):
     made = canonical.relative(
         finding(id="seo.canonical.relative"), location, tmp_path, 1, [])
     assert not made.fixed
+
+
+def test_canonical_relative_ignores_a_decoy_canonical_inside_an_html_comment(tmp_path):
+    # S2: BeautifulSoup parses a commented-out <link> as a Comment node, never
+    # a Tag -- it correctly picks the REAL tag. The old `_replace_href` used a
+    # raw regex search that matched the textually-first <link rel=canonical>,
+    # comment or not, so a decoy sitting in a comment BEFORE the real tag got
+    # rewritten while the real tag was left untouched -- and the tool still
+    # reported success.
+    body = PAGE.replace(
+        "    <title>Home</title>\n",
+        '    <title>Home</title>\n'
+        '    <!-- <link rel="canonical" href="/decoy/"> -->\n'
+        '    <link rel="canonical" href="/p/">\n')
+    location = write(tmp_path, "pricing.html", body)
+    made = canonical.relative(
+        finding(id="seo.canonical.relative", url="https://x.example/pricing",
+                observed="relative canonical '/p/'"),
+        location, tmp_path, 1, [])
+    assert made.fixed, made.reason
+    changed = [line for line in made.diff.splitlines()
+               if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))]
+    assert changed == ['-    <link rel="canonical" href="/p/">',
+                       '+    <link rel="canonical" href="https://x.example/p/">']
+    assert not any("decoy" in line for line in changed)
+
+
+def test_canonical_chained_ignores_a_decoy_canonical_inside_an_html_comment(tmp_path):
+    body = CHAINED_PAGE.replace(
+        '    <link rel="canonical" href="https://x.example/b">\n',
+        '    <!-- <link rel="canonical" href="https://x.example/decoy"> -->\n'
+        '    <link rel="canonical" href="https://x.example/b">\n')
+    location = write(tmp_path, "a.html", body)
+    made = canonical.chained(chained_finding(), location, tmp_path, 1, [])
+    assert made.fixed, made.reason
+    changed = [line for line in made.diff.splitlines()
+               if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))]
+    assert changed == ['-    <link rel="canonical" href="https://x.example/b">',
+                       '+    <link rel="canonical" href="https://x.example/c">']
+    assert not any("decoy" in line for line in changed)
 
 
 def test_a_missing_file_declines_rather_than_raising(tmp_path):

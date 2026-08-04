@@ -29,6 +29,29 @@ TSX_DEFERRED = (
     "v0.4.0; the generic <link rel=canonical> insertion is wrong here."
 )
 
+MARKDOWN_DEFERRED = (
+    "editing a Markdown source page is not mechanical -- the rendered <head> "
+    "this fix would target does not exist in the source file at all; the tag "
+    "comes from a layout template (Jekyll `_layouts/*.html`, Hugo's theme) "
+    "that every other page on the site shares, and a template edit fans out "
+    "site-wide rather than to this one page. It arrives in v0.4.0; the "
+    "generic <link rel=canonical> / @context insertion is wrong here."
+)
+
+MARKDOWN_SUFFIXES = (".md", ".markdown")
+
+
+def deferred_reason(path: Path) -> str:
+    """Why a non-HTML location's mechanical fix is deferred to v0.4.0.
+
+    `TSX_DEFERRED` talks about `metadata.alternates.canonical` and
+    `metadataBase` -- Next.js App Router concepts. Showing that paragraph for
+    a Jekyll or Hugo `.md` source page (neither concept exists there) is
+    actively misleading, not merely irrelevant. The located file's own suffix
+    decides which explanation applies.
+    """
+    return MARKDOWN_DEFERRED if path.suffix.lower() in MARKDOWN_SUFFIXES else TSX_DEFERRED
+
 
 @dataclass(frozen=True)
 class FixOutcome:
