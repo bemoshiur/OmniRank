@@ -97,6 +97,45 @@ def test_the_matcher_unsupported_finding_names_the_interpreter_limitation():
 
 
 @respx.mock
+def test_a_cross_host_sitemap_url_is_not_judged_and_is_not_applicable():
+    # B1: a sitemap index legitimately listing a different host's URLs (blog.,
+    # cdn., ...) must never have those URLs judged against THIS host's robots.txt --
+    # RobotFileParser.can_fetch() discards the host and matches on path alone, so
+    # without this filter a cross-host URL that happens to share a disallowed path
+    # produces a fabricated finding.
+    robots_txt("User-agent: *\nDisallow: /p/\n")
+    findings, not_evaluated = contradictions.check_sitemap_vs_robots(
+        make_client(), SITE, [f"{SITE}/ok", "https://blog.example/p/x"])
+    assert findings == [], "a cross-host URL must never be judged by this host's robots.txt"
+    assert [(e.gate, e.reason, e.url) for e in not_evaluated] == [
+        ("robots-sitemap", "not-applicable", "https://blog.example/p/x")]
+
+
+@respx.mock
+def test_same_host_urls_still_evaluate_normally_alongside_cross_host_ones():
+    robots_txt("User-agent: *\nDisallow: /p/\n")
+    findings, not_evaluated = contradictions.check_sitemap_vs_robots(
+        make_client(), SITE,
+        [f"{SITE}/p/a", f"{SITE}/ok", "https://cdn.example/p/a"])
+    assert [f.url for f in findings] == [f"{SITE}/p/a"]
+    assert [(e.reason, e.url) for e in not_evaluated] == [
+        ("not-applicable", "https://cdn.example/p/a")]
+
+
+@respx.mock
+def test_a_sitemap_entirely_off_host_yields_zero_findings():
+    robots_txt("User-agent: *\nDisallow: /p/\n")
+    findings, not_evaluated = contradictions.check_sitemap_vs_robots(
+        make_client(), SITE,
+        ["https://blog.example/p/a", "https://shop.example/p/b"])
+    assert findings == [], "with nothing on this host to judge, nothing can be flagged"
+    assert len(not_evaluated) == 2
+    assert {e.reason for e in not_evaluated} == {"not-applicable"}
+    assert {e.url for e in not_evaluated} == {
+        "https://blog.example/p/a", "https://shop.example/p/b"}
+
+
+@respx.mock
 def test_the_finding_says_both_ways_to_resolve_the_contradiction():
     robots_txt("User-agent: *\nDisallow: /p/\n")
     findings, _ = contradictions.check_sitemap_vs_robots(

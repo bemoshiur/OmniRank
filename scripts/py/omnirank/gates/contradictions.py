@@ -21,6 +21,8 @@ entry point would have to take all of them.
 """
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 import httpx
 
 from .. import robots
@@ -67,6 +69,14 @@ def check_sitemap_vs_robots(
     Returns no verdict at all when robots.txt is unreachable, when there is no
     sitemap, or when this interpreter's matcher cannot evaluate the rules the site
     actually published -- see omnirank/robots.py for why the last one is real.
+
+    Only sitemap URLs on robots.txt's OWN host are judged against it.
+    `RobotFileParser.can_fetch()` discards the host and matches on path alone, so
+    passing it a cross-host URL would judge that URL by a robots.txt that never
+    governed it -- a sitemap index legitimately listing `blog.`/`cdn.` URLs would
+    otherwise get those paths judged by the audited host's rules and produce a
+    fabricated finding. Off-host URLs are reported `not-applicable` instead of
+    silently dropped.
     """
     site_url = site_url.rstrip("/")
     if not sitemap_urls:
@@ -79,10 +89,19 @@ def check_sitemap_vs_robots(
         return [], [NotEvaluated(gate=GATE_ROBOTS_SITEMAP, url=robots_url,
                                  reason="page-unreachable")]
 
-    verdict = robots.disallowed_urls(result.text, sitemap_urls)
+    host = urlsplit(robots_url).netloc
+    same_host = [u for u in sitemap_urls if urlsplit(u).netloc == host]
+    off_host_not_evaluated = [
+        NotEvaluated(gate=GATE_ROBOTS_SITEMAP, url=u, reason="not-applicable")
+        for u in sitemap_urls if urlsplit(u).netloc != host
+    ]
+    if not same_host:
+        return [], off_host_not_evaluated
+
+    verdict = robots.disallowed_urls(result.text, same_host)
     if not verdict.evaluated:
-        return [], [NotEvaluated(gate=GATE_ROBOTS_SITEMAP, url=robots_url,
-                                 reason="matcher-unsupported")]
+        return [], off_host_not_evaluated + [NotEvaluated(
+            gate=GATE_ROBOTS_SITEMAP, url=robots_url, reason="matcher-unsupported")]
 
     findings = [
         _f("seo.robots-sitemap.disallowed", GATE_ROBOTS_SITEMAP, url, "error",
@@ -96,7 +115,7 @@ def check_sitemap_vs_robots(
            "which of the two declarations is the intended one.")
         for url in verdict.disallowed
     ]
-    return findings, []
+    return findings, off_host_not_evaluated
 
 
 def matcher_limitation(reason: str) -> str:
