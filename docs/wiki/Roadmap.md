@@ -1,6 +1,6 @@
 # Roadmap
 
-OmniRank version 0.3.0 ships two working Claude Code skills, `audit` and `geo-artifacts`,
+OmniRank version 0.4.0 ships two working Claude Code skills, `audit` and `geo-artifacts`,
 plus the `omnirank fix` CLI diff preview. Six further skills are designed and specified
 but not yet built. This page separates what exists today from what is planned, so nobody
 adopts the project expecting capability that has not been written yet.
@@ -10,13 +10,13 @@ dates. It changes in response to what people actually ask for in
 [Discussions](https://github.com/bemoshiur/OmniRank/discussions), and has already changed
 once — see "Why the targets below have already slipped" below.
 
-## Shipped in v0.3.0
+## Shipped in v0.4.0
 
 | Skill / command | What it does |
 |---|---|
-| **`audit`** | Scores a site's SEO, AEO, GEO and perf gates against its real HTML — including a site-level cross-URL pass since v0.2.0 — and emits a prioritised fix list with `observed` / `expected` / `fix` / `fixTier` per finding. Runs with no configuration beyond a URL. See [[Audit-Skill]]. |
+| **`audit`** | Scores a site's SEO, AEO, GEO, perf and security gates against its real HTML — including a site-level cross-URL pass and an indexability-contradictions pass — and emits a prioritised fix list with `observed` / `expected` / `fix` / `fixTier` per finding. Runs with no configuration beyond a URL. See [[Audit-Skill]], [[Security-Layer]], [[Contradictions]]. |
 | **`geo-artifacts`** | Generates `llms.txt`, `llms-full.txt` and `facts.json`, each carrying an explicit citation licence (no licence granted by default as of v0.2.1). Python crawl path works on any stack; Node path imports a site's own content layer. See [[GEO-Artifacts-Skill]]. |
-| **`omnirank fix`** *(CLI, not a registered skill)* | Resolves a finding's URL to its source file and prints the diff for the 4 `mechanical` finding ids, when locator confidence and blast radius both allow it. Writes nothing — no `--write` flag exists in 0.3.0. See [[Fix-Preview]]. |
+| **`omnirank fix`** *(CLI, not a registered skill)* | Resolves a finding's URL to its source file and prints the diff for the 4 `mechanical` finding ids, when locator confidence and blast radius both allow it. Writes nothing — no `--write` flag exists. See [[Fix-Preview]]. |
 
 Supporting surface that also ships: the `omnirank.config.json` schema
 ([[Configuration-Reference]]), the shared report format including `fixTier` and
@@ -24,6 +24,16 @@ Supporting surface that also ships: the `omnirank.config.json` schema
 ([[Finding-Reference]], [[Fix-Tiers-and-Applicability]]), the framework-aware locator
 ([[The-Locator]]), a CI-usable exit-code contract ([[CI-Recipes]]), and a packaged skill
 archive attached to every release.
+
+**What v0.4.0 added, specifically:** a `security` layer (8 new finding ids: four
+inventory-only header gates, mixed content split by blockability, an http→https redirect
+check); five indexability-contradiction gates provable from a site's own declarations;
+Google rich-result required-property validation, distinct from schema.org validity; four
+on-page accessibility-overlap gates; and a corrected per-layer scoring model where a
+layer's budget scales with its own gate count instead of a flat constant. 67 finding ids
+total (up from 48), across 42 `--fail-on` gate names (up from 28). See the [0.4.0
+changelog entry](https://github.com/bemoshiur/OmniRank/blob/main/CHANGELOG.md) for the
+complete list.
 
 ## Planned
 
@@ -39,27 +49,32 @@ archive attached to every release.
 Beyond v1.0: framework adapters for WordPress, Jekyll, Shopify, Astro, Vue and Svelte
 gain their own locators, alongside `next-app-router`, `static`, `hugo` and `jekyll`,
 which the locator already resolves as of v0.3.0 — see [[The-Locator]]. File-write
-capability (`omnirank fix --write`), safe-tier only, ships once the locator is proven
-against real repositories and the write guarantees described in
-`docs/research/2026-08-04-automation-architecture.md` are implemented and tested — not
-on a release number.
+capability (`omnirank fix --write`) ships once the locator is proven against real
+repositories and the write guarantees described in
+`docs/research/2026-08-04-automation-architecture.md` §2.5 are implemented and tested —
+not on a release number. v0.4.0 deliberately spent its budget on broadening what `audit`
+covers instead: auditing better is zero-risk, and a richer audit earns the right to edit
+files later.
 
 ## Why the targets above have already slipped
 
-`aeo-onpage`'s "v0.2" target predates this table and has already slipped once: 0.2.0
-shipped as a site-level-gates / script-aware-AnswerBlock-bands / `perf`-layer release
-instead, folded into the existing `audit` skill rather than shipped as a new one. v0.3.0
-then shipped the locator and `omnirank fix` — also not on this table when it was first
-written. Treat every target version here as directional, not a commitment; none has a
-firm date, and the project has twice shipped work that wasn't on this table ahead of work
-that was.
+Three targets have slipped so far, not one. `aeo-onpage`'s "v0.2" target predates this
+table: 0.2.0 shipped as a site-level-gates / script-aware-AnswerBlock-bands / `perf`-layer
+release instead, folded into the existing `audit` skill rather than shipped as a new one.
+v0.3.0 then shipped the locator and `omnirank fix` — also not on this table when it was
+first written. `offsite-entity`'s "v0.4" target has now slipped too: v0.4.0 shipped, and
+none of `offsite-entity`'s `sameAs` gap analysis or peer mention-gap detection is built —
+the release spent its budget on the `security` layer, the contradiction gates, and the
+scoring fix instead. Treat every target version here as directional, not a commitment;
+none has a firm date, and the project has repeatedly shipped work that wasn't on this
+table ahead of work that was.
 
 ## Why the order
 
 `aeo-onpage` still comes first, though its job is narrower than it once was:
 `omnirank fix` already closes the loop mechanically for `seo.canonical.missing`,
 `seo.canonical.relative`, `seo.canonical.chained` and `seo.schema.no-context` — 4 of the
-48 finding ids, all `mechanical`-tier. `aeo-onpage`'s remaining job is the `drafted`-tier
+67 finding ids, all `mechanical`-tier. `aeo-onpage`'s remaining job is the `drafted`-tier
 surfaces no mechanical generator can touch responsibly: titles, descriptions, H1 text,
 and AnswerBlock/FAQ content, all of which need judgement a human must approve per item.
 See [[Fix-Tiers-and-Applicability]] for why that's a hard boundary, not a temporary gap.

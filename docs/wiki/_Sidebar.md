@@ -13,9 +13,11 @@
 **Skills**
 
 - [[Audit-Skill]]
+- [[Security-Layer]]
+- [[Contradictions]]
 - [[GEO-Artifacts-Skill]]
 
-**Fix preview (v0.3.0)**
+**Fix preview**
 
 - [[Fix-Preview]]
 - [[Fix-Tiers-and-Applicability]]

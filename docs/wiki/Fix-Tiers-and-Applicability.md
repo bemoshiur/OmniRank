@@ -3,7 +3,7 @@
 OmniRank decides whether to fix something using two independent axes. `fixTier` states
 what kind of information the correct edit needs, as a fixed property of a finding's id.
 `applicability` states whether this one occurrence may be applied unattended, computed
-per instance as the minimum of four ceilings. Only 4 of 48 finding ids currently have a
+per instance as the minimum of four ceilings. Only 4 of 67 finding ids currently have a
 generator, deliberately.
 
 This replaced `Finding.auto_fixable`, a single boolean only `gates/seo.py` ever set. Honouring
@@ -17,16 +17,24 @@ fixing it was safe. Verified against `scripts/py/omnirank/registry.py`,
 ## What is `fixTier`?
 
 `fixTier` is the epistemic axis: what kind of information does the correct edit require?
-It is a static property of the finding *id*, declared once for all 48 ids in
+It is a static property of the finding *id*, declared once for all 67 ids in
 `registry.py`, and never varies between occurrences of the same id.
 
 | Tier | Information source | Count | Example id |
 |---|---|---|---|
 | `mechanical` | The finding itself; the edit is a constant or a pure function of data already captured | 4 | `seo.canonical.missing` |
-| `templated` | Config plus repo facts the tool can read; deterministic given those inputs | 15 | `seo.og.missing` |
-| `drafted` | Prose or judgement a human must author or approve | 12 | `seo.description.missing` |
-| `advisory` | Two opposite correct answers exist; only the owner can choose | 11 | `seo.h1.multiple` |
-| `infrastructure` | No source edit exists at all; the fix lives in CDN, origin or build config | 6 | `perf.response-time.critical` |
+| `templated` | Config plus repo facts the tool can read; deterministic given those inputs | 19 | `seo.og.missing` |
+| `drafted` | Prose or judgement a human must author or approve | 16 | `seo.description.missing` |
+| `advisory` | Two opposite correct answers exist; only the owner can choose | 16 | `seo.h1.multiple` |
+| `infrastructure` | No source edit exists at all; the fix lives in CDN, origin or build config | 12 | `perf.response-time.critical` |
+
+All 19 finding ids v0.4.0 added land in `templated`, `drafted`, `advisory` or
+`infrastructure` — none is `mechanical`. Every `security` header/mixed-content/redirect id
+is `infrastructure` (a CDN or origin config change, not a source edit) except
+`mixed-content`, which is `templated` (a scheme rewrite in markup the repo owns). Every
+contradiction-gate id is `advisory`: `seo.robots-sitemap.disallowed` has two opposite
+correct fixes (unblock it in `robots.txt`, or drop it from the sitemap), and only the
+site owner knows which was intended — exactly parallel to `seo.noindex.in-sitemap`.
 
 `seo.h1.multiple` is `advisory`, not `mechanical`, because "keep the first `<h1>` and
 demote the rest" is a rule that is deterministic and *frequently wrong* — most reliably
@@ -104,14 +112,19 @@ prove it is exactly the kind of confident wrong answer this design refuses to gi
 
 Four categories of edit are hard-capped at `unsafe` regardless of tier, locator
 confidence, or blast radius, and are never reachable by an unattended write at any point
-on the roadmap — they can only ever arrive as a change a human reviews:
+on the roadmap — they can only ever arrive as a change a human reviews. Eight finding ids
+sit on one of these surfaces today, up from six before v0.4.0:
 
 - **robots.txt and any crawler directive** (`geo.ai-allowlist.missing`,
-  `geo.ai-allowlist.blocked`). A malformed `robots.txt` can de-index an entire site.
+  `geo.ai-allowlist.blocked`, and — **new in v0.4.0** —
+  `seo.robots-sitemap.disallowed`, which touches both robots.txt AND sitemap membership).
+  A malformed `robots.txt` can de-index an entire site.
 - **`noindex` and sitemap membership** (`seo.noindex.in-sitemap`).
 - **Canonical and hreflang *sets*** (`seo.hreflang.no-x-default`,
-  `seo.hreflang.not-reciprocal`) — as distinct from a single self-referencing canonical on
-  a single-route file, which is governed by blast radius instead, not this cap.
+  `seo.hreflang.not-reciprocal`, and — **new in v0.4.0** —
+  `seo.hreflang-noindex.alternate`, which touches an hreflang set) — as distinct from a
+  single self-referencing canonical on a single-route file, which is governed by blast
+  radius instead, not this cap.
 - **Any licence grant** (`geo.citation-licence.missing`) — the same class of defect
   v0.2.1 fixed when `geo.license` stopped silently defaulting to `CC-BY-4.0`; see
   [[GEO-Artifacts-Skill#what-does-the-citation-licence-block-say-and-what-changed-in-v021]].
@@ -121,7 +134,7 @@ any tier, under any flag — see `NEVER_APPLICABLE` in `registry.py`. Reversing 
 deliberate AI-training opt-out is an editorial and licensing decision, not a defect fix;
 the gate's own finding text is an opinion about strategy, not a bug report.
 
-## Why do only 4 of 48 finding ids have a generator?
+## Why do only 4 of 67 finding ids have a generator?
 
 Because a fix generator only exists for ids whose tier ceilings at `safe` in the first
 place — `mechanical` — and only four ids are `mechanical`: `seo.canonical.missing`,

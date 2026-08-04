@@ -14,7 +14,7 @@ being silently ignored.
 
 ## What does "Consumed" vs "Schema-only" mean?
 
-Not every field the schema accepts is read by v0.3.0's shipped code. **Consumed** means a
+Not every field the schema accepts is read by v0.4.0's shipped code. **Consumed** means a
 shipped code path reads the field. **Schema-only** means the field is validated, stored,
 and forward-compatible with a roadmap skill, but nothing in `audit`, `geo-artifacts`, or
 `fix` reads it yet. Writing a schema-only field is not wasted — validation still checks
@@ -186,28 +186,29 @@ Free-form string map. **Schema-only** — validated, not read.
 | `sampleSize` | integer, minimum `0` | no | `200` | Maximum URLs pulled from the sitemap for a crawl. `0` means no limit. |
 | `failOn` | array of gate-name enum values | no | `[]` | Gate names that make `omnirank audit` exit `1` when they carry an error-severity finding. Overridden by `--fail-on` whenever that flag is present at all, even with zero names. |
 
-`failOn`'s allowed values grew to **42 gate names** as of v0.4.0: `h1`,
-`canonical`, `title-length`, `description-length`, `hreflang`, `og`, `image-dims`,
-`answer-block`, `faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`,
+`failOn`'s allowed values grew to **42 gate names** as of v0.4.0 (up from 28 at
+v0.2.0/v0.2.1): `h1`, `canonical`, `title-length`, `description-length`, `hreflang`, `og`,
+`image-dims`, `answer-block`, `faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`,
 `ai-allowlist`, `citation-licence`, `sitemap-health`, `lastmod-inflation`, `schema`,
 `schema-fabrication`, `duplicate-title`, `duplicate-description`, `noindex-in-sitemap`,
 `canonical-cluster`, `hreflang-reciprocity`, `response-time`, `page-weight`,
-`compression`, `render-blocking` (28 through v0.3.0), plus 14 in v0.4.0: `hsts`,
-`nosniff`, `csp`, `referrer-policy`, `mixed-content`, `https-redirect` (`security`),
-`robots-sitemap`, `canonical-target`, `hreflang-noindex` (indexability contradictions),
-`schema-required` (structured data), and `image-alt`, `heading-order`, `link-text`,
-`lang` (on-page).
+`compression`, `render-blocking`, `hsts`, `nosniff`, `csp`, `referrer-policy`,
+`mixed-content`, `https-redirect`, `robots-sitemap`, `canonical-target`,
+`hreflang-noindex`, `schema-required`, `image-alt`, `heading-order`, `link-text`, `lang`.
+The last 14 are new in v0.4.0 (`hsts` through `lang`) — six from the new `security` layer,
+three indexability-contradiction gates, one structured-data gate, and four on-page
+accessibility gates. See [[Security-Layer]] and [[Contradictions]].
+
+Of those 42, **21 can actually produce an error-severity finding and trip `--fail-on`; 21
+cannot** — 16 are warning-only, 4 (the `security` response-header gates) are info-only and
+can never fail a build under any circumstance, and one (`link-text`) mixes warning and
+info. Full breakdown: [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]].
 
 **`crawl-hygiene` was removed from this enum in v0.2.1** — it validated successfully but
 matched no finding a plain `omnirank audit` run could ever produce, since the check that
 would emit it needs an explicit removed-URL list no config field supplies. `sitemap-health`
 is not inert: `hygiene.check_sitemap()` is wired in as of v0.2.1, distinguishing a
 redirecting sitemap entry (warning) from a dead one (error).
-
-Only **21 of the 42** can actually produce an error-severity finding and gate a build —
-see [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]] for the full
-breakdown, including the four v0.4.0 security gates that are `info`-severity and can
-never fail a build regardless of what you list.
 
 ## `smm`
 

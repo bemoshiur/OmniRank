@@ -1,7 +1,7 @@
 # Troubleshooting
 
 This page collects real error text from likely OmniRank failures, each reproduced against
-v0.3.0: the PEP 668 externally-managed-environment error, a missing environment variable
+v0.4.0: the PEP 668 externally-managed-environment error, a missing environment variable
 for a secrets pointer, a 403 on `llms-full.txt` or `facts.json` in production, a site
 with no reachable sitemap, and `omnirank fix --write`, which does not exist. Every fix
 below was verified, not guessed.
@@ -37,7 +37,7 @@ that interpreter.
 [[Quick-Start#2-create-a-virtual-environment]]. Do not add `--break-system-packages` to
 work around it — that flag disables the exact protection this error exists to provide.
 
-## `omnirank: <write> has no --write path`
+## `omnirank: omnirank fix has no --write path`
 
 ```
 $ python3 -m omnirank.cli fix https://example.com --write
@@ -116,7 +116,7 @@ ConfigError: Environment variable SERPAPI_KEY is not set (required for secret 's
 ```
 
 This raises when Python code calls `Config.secret(name)` and the environment variable the
-config points at is unset. No shipped skill in v0.3.0 calls `secret()` on the automatic
+config points at is unset. No shipped skill calls `secret()` on the automatic
 path — this surfaces only if you or a roadmap skill calls it directly. Fix: `export
 SERPAPI_KEY=...` (or whatever variable your `secrets` block points at) before running.
 
@@ -164,12 +164,14 @@ Exit code `1`. Read the finding lines above `failOn gates:` — every group whos
 matches one of the listed names is a candidate cause; open the full JSON report (the path
 on the last line) to see every finding, not just the terminal's grouped summary. Apply the
 `fix` text for the flagged gate(s) and re-run — or run `omnirank fix` to see whether any
-of them already has a ready-made diff (only 4 of 48 finding ids do; see
+of them already has a ready-made diff (only 4 of 67 finding ids do; see
 [[Fix-Tiers-and-Applicability]]).
 
 If a gate you listed in `--fail-on` never seems to go red no matter what you do, check
-whether it is one of the 13 gates that only ever produce warning-severity findings, or
-`crawl-hygiene`, which no longer exists as a `--fail-on` value at all as of v0.2.1 — see
+whether it is one of the 21 gates that can never produce an error-severity finding (16
+warning-only, 4 info-only — the `security` header gates, new in v0.4.0 — and 1 that mixes
+warning and info), or `crawl-hygiene`, which no longer exists as a `--fail-on` value at
+all as of v0.2.1 — see
 [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]] for the full breakdown.
 
 ## No sitemap found
@@ -183,9 +185,9 @@ against `example.com`, which has no sitemap:
 $ curl -s -o /dev/null -w "%{http_code}\n" https://example.com/sitemap.xml
 404
 $ python3 -m omnirank.cli audit https://example.com
-OmniRank 0.3.0 — https://example.com
-  overall 76/100  aeo 87  geo 60  perf 100  seo 57
-  1 URLs checked · 11 findings in 11 groups
+OmniRank 0.4.0 — https://example.com
+  overall 74/100  aeo 71  geo 47  perf 100  security 67  seo 88
+  1 URLs checked · 17 findings in 17 groups
 
   ERRORS
   [1×] seo.canonical.missing — expected: one absolute self-referencing canonical
@@ -193,9 +195,10 @@ OmniRank 0.3.0 — https://example.com
   [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
         fix: Publish a sitemap.xml so OmniRank -- and search engines -- can discover every page. Without one, this audit only sees the homepage.
         e.g. https://example.com/sitemap.xml
+  ...
 
-  NOT EVALUATED (1 gate(s) across 1 target(s) — see the JSON report for the reason enum)
-    site — https://example.com  [no-sitemap]
+  NOT EVALUATED (2 gate(s) across 1 target(s) — see the JSON report for the reason enum)
+    robots-sitemap, site — https://example.com  [no-sitemap]
 ```
 
 `1 URLs checked` confirms only the root page was audited — `read_sitemap()` returns an
@@ -209,15 +212,15 @@ site root.
 `fetch()` uses a 15-second `httpx` client timeout and there is currently no `--timeout`
 CLI flag to change it. Any network failure — DNS resolution failure, connection refused,
 or a timeout — is caught and reported as `status: 0`, with the underlying exception's
-message as the finding's `observed` text. As of v0.2.1 the per-page gates that could not
-run for an unreachable URL (`seo`, `aeo`, `perf`) are also recorded in `notEvaluated`
-(reason `page-unreachable`), and a short "NOT EVALUATED" section prints in the console.
-Reproduced against a non-existent domain:
+message as the finding's `observed` text. The per-page gates that could not run for an
+unreachable URL (`seo`, `aeo`, `perf`, `security`, and — new in v0.4.0 — `onpage`) are
+also recorded in `notEvaluated` (reason `page-unreachable`), and a short "NOT EVALUATED"
+section prints in the console. Reproduced against a non-existent domain:
 
 ```
 $ python3 -m omnirank.cli audit https://this-domain-does-not-exist.invalid
-OmniRank 0.3.0 — https://this-domain-does-not-exist.invalid
-  overall 72/100  geo 60  seo 85
+OmniRank 0.4.0 — https://this-domain-does-not-exist.invalid
+  overall 71/100  geo 47  seo 96
   1 URLs checked · 6 findings in 6 groups
 
   ERRORS
@@ -227,14 +230,15 @@ OmniRank 0.3.0 — https://this-domain-does-not-exist.invalid
   [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
         ...
 
-  NOT EVALUATED (4 gate(s) across 2 target(s) — see the JSON report for the reason enum)
-    site — https://this-domain-does-not-exist.invalid  [no-sitemap]
-    aeo, perf, seo — https://this-domain-does-not-exist.invalid/  [page-unreachable]
+  NOT EVALUATED (8 gate(s) across 3 target(s) — see the JSON report for the reason enum)
+    robots-sitemap, site — https://this-domain-does-not-exist.invalid  [no-sitemap]
+    aeo, onpage, perf, security, seo — https://this-domain-does-not-exist.invalid/  [page-unreachable]
+    https-redirect — http://this-domain-does-not-exist.invalid/  [page-unreachable]
 ```
 
 `HTTP 0` is the tell — it means the request never got an HTTP response at all (DNS,
-connection, or timeout failure). `aeo` and `perf` are **absent** from the score map here,
-not a false `100` — see [[Audit-Skill#how-is-the-score-computed]]. Treat
+connection, or timeout failure). `aeo`, `perf` and `security` are all **absent** from the
+score map here, not a false `100` — see [[Audit-Skill#how-is-the-score-computed]]. Treat
 `seo.page.unreachable` as the signal that the whole run is unreliable.
 
 ## `omnirank fix` says a finding is "not fixable here"
@@ -247,7 +251,7 @@ just the four it could generate a diff for. Common reasons, verbatim from
 |---|---|
 | "no source file was located" | The locator returned `NOT_LOCATED` for this URL — see [[The-Locator]] |
 | "the located file serves N routes; a literal canonical there would make every one of them claim the same URL" | Blast radius exceeded 1 route — see [[Fix-Tiers-and-Applicability#what-is-blast-radius]] |
-| "editing a framework metadata export is not mechanical" | The file is a Next.js `page.tsx`; the correct edit needs `metadataBase` too, which is a two-file change deferred until the locator is proven against real repositories |
+| "editing a framework metadata export is not mechanical" | The file is a Next.js `page.tsx`; the correct App Router canonical is a relative `metadata.alternates.canonical` plus a `metadataBase` in the root layout — a two-file edit, deferred until the locator is proven, not tied to any release number |
 | "N JSON-LD blocks ... are a single X object missing @context ... only exactly one is unambiguous" | More than one candidate node matched; the generator refuses rather than guess |
 
 None of these are bugs — they are the applicability model declining to guess. See

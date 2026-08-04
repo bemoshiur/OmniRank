@@ -11,8 +11,8 @@ datasets, and several results come from models that have since been replaced. A 
 cited these figures as guarantees would be doing exactly what OmniRank refuses to do
 elsewhere.
 
-**A note on what "uses it" means as of v0.3.0.** OmniRank now *acts* on some findings —
-`omnirank fix` prints a real diff for 4 mechanical finding ids (see [[Fix-Preview]]) —
+**A note on what "uses it" means.** OmniRank *acts* on some findings — `omnirank fix`
+prints a real diff for 4 mechanical finding ids out of 67 total (see [[Fix-Preview]]) —
 but every citation on this page still describes research the *content* of a page needs to
 satisfy (statistics, quotations, primary-source citations, entity mentions), not the
 structural edits `fix` makes today. `fix` never drafts prose; it only ever splices a
