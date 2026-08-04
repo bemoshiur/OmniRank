@@ -22,6 +22,7 @@ from .base import (
     FixOutcome,
     is_html,
     link_close,
+    newline_style,
     outcome,
     quote_char,
     read_text,
@@ -106,10 +107,24 @@ def missing(finding: Finding, location: Location, root: Path,
 
     quote = quote_char(text)
     tag = (f"{indent}<link rel={quote}canonical{quote} "
-           f"href={quote}{finding.url}{quote}{link_close(text)}\n")
+           f"href={quote}{finding.url}{quote}{link_close(text)}{newline_style(text)}")
 
+    # `rfind` returns -1 -- so `line_start` lands on 0 -- whenever there is no
+    # "\n" before `</head>` at all, which is exactly the single-line/minified
+    # case. Treating 0 as "the start of `</head>`'s own line" then splices the
+    # tag in front of EVERYTHING, including `<!doctype html>`, which forces the
+    # whole document into quirks mode. The same thing happens on a milder scale
+    # whenever `</head>` merely shares its line with other content (e.g.
+    # `<head><title>T</title></head>` on one line): `line_start` still lands
+    # before that content, not inside <head>. `text[line_start:close.start()]`
+    # is real, non-whitespace content in both cases, never just indentation --
+    # that is the signal to splice inline, immediately before `</head>`,
+    # instead of inserting a whole new line at `line_start`.
     line_start = text.rfind("\n", 0, close.start()) + 1
-    after = text[:line_start] + tag + text[line_start:]
+    if text[line_start:close.start()].strip():
+        after = text[:close.start()] + tag.strip() + text[close.start():]
+    else:
+        after = text[:line_start] + tag + text[line_start:]
     return outcome(finding, location,
                    diff=unified_diff(location.path, text, after))
 

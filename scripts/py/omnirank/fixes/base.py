@@ -86,25 +86,73 @@ def outcome(finding: Finding, location: Location, *, diff: str | None = None,
                       path=location.path, diff=diff, reason=reason)
 
 
+def _diff_lines(text: str) -> list[str]:
+    """Split `text` into lines the way git's OWN patch machinery does: only
+    "\\n" ends a line, never a lone "\\r".
+
+    `str.splitlines()` is more permissive than git -- it also breaks on a bare
+    "\\r", which is what a classic-Mac-style file uses throughout and has ZERO
+    "\\n" bytes in. Diffing on that split produces a patch shaped as many short
+    hunk lines each internally delimited only by "\\r"; git's own patch parser
+    scans for "\\n" to find where one patch line ends and the next begins, finds
+    none inside those "\\r"-only lines, and rejects the whole thing as a
+    corrupt patch before it ever gets to matching content -- confirmed against
+    real `git apply`, not assumed. Splitting on "\\n" only, exactly as `git
+    diff` itself does, makes a lone-CR file exactly ONE "line" with no "\\n" of
+    its own -- which is precisely what the "no newline at end of file" handling
+    below is for.
+    """
+    if text == "":
+        return []
+    parts = text.split("\n")
+    lines = [part + "\n" for part in parts[:-1]]
+    if parts[-1]:
+        lines.append(parts[-1])
+    return lines
+
+
 def unified_diff(path: str, before: str, after: str) -> str:
     """A git-style unified diff, or "" when the two texts are identical.
 
-    Every emitted line is newline-terminated: difflib does not add one for a
-    file lacking a trailing newline, which would otherwise splice two diff
-    lines together and produce a patch that does not apply.
+    Every emitted line is newline-terminated -- EXCEPT the one case git itself
+    leaves bare: a hunk line that is the file's actual last line and has no
+    trailing "\\n" on disk (whether because the file is LF/CRLF with no final
+    newline, or because it uses lone-CR line endings throughout, which makes
+    the ENTIRE file exactly one such line -- see `_diff_lines`). difflib does
+    not mark that case at all, which silently fabricates a trailing newline
+    that is not there; git reads that fabrication as a claim the file ends in
+    "\\n" and rejects the hunk the moment its context has to reach that far.
+    `\\ No newline at end of file` is git's own marker for exactly this, on its
+    own line immediately following -- required whenever a line does not end in
+    "\\n", full stop: a line ending in a bare "\\r" still needs it, verified
+    against real `git apply`, which rejects the patch without it.
     """
     if before == after:
         return ""
     lines = difflib.unified_diff(
-        before.splitlines(keepends=True), after.splitlines(keepends=True),
+        _diff_lines(before), _diff_lines(after),
         fromfile=f"a/{path}", tofile=f"b/{path}", n=3)
-    return "".join(line if line.endswith("\n") else line + "\n" for line in lines)
+    out: list[str] = []
+    for line in lines:
+        if line.endswith("\n"):
+            out.append(line)
+        else:
+            out.append(line + "\n\\ No newline at end of file\n")
+    return "".join(out)
 
 
 def read_text(path: Path) -> str | None:
-    """The file's text, or None if it cannot be read. Never raises."""
+    """The file's text, or None if it cannot be read. Never raises.
+
+    `newline=""` disables universal-newline translation: without it,
+    `Path.read_text()` silently rewrites every "\\r\\n" and lone "\\r" on disk
+    to "\\n" before this module ever sees the text, so the diff computed here is
+    against a string that is not the bytes on disk -- and git rejects the
+    result the moment a context or "-" line has to match the real file byte for
+    byte. Reading raw keeps CRLF and lone-CR files diffable at all.
+    """
     try:
-        return path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8", newline="")
     except (OSError, UnicodeDecodeError):
         return None
 
@@ -121,3 +169,18 @@ def quote_char(text: str) -> str:
 def link_close(text: str) -> str:
     """` />` when the file self-closes its <link> tags, else `>`."""
     return " />" if _SELF_CLOSING_LINK.search(text) else ">"
+
+
+def newline_style(text: str) -> str:
+    """The line ending this file already uses, so an inserted line matches it.
+
+    Checked most-specific first: "\\r\\n" must be recognised as CRLF, not as a
+    bare CR that happens to be followed by an unrelated LF. A file with no line
+    break at all (a single physical line) has no convention to match and
+    defaults to "\\n", same as `read_text` would produce for a brand-new file.
+    """
+    if "\r\n" in text:
+        return "\r\n"
+    if "\r" in text:
+        return "\r"
+    return "\n"
