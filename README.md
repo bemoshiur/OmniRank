@@ -153,13 +153,15 @@ Google" will not trigger anything, because `aeo-onpage` and `indexing` are not b
 
 ## Every gate OmniRank checks, grouped by layer
 
-28 gate names exist in the config schema; 15 can fail a build and 13 are warning-only by
-design. (As of v0.2.1, `crawl-hygiene` — a gate name that could never actually fire,
-since its only source was never called from `audit_site()` — was removed from the schema
-rather than shipped as a config option that silently did nothing; `hygiene.check_sitemap()`
-was wired into `sitemap-health` instead, so a redirecting or dead sitemap URL now gets its
-own dedicated finding.) Full detail, including which gates can never trip `--fail-on`, is in
-[audit-guide.md](docs/audit-guide.md#gate-reference) and
+42 gate names exist in the config schema; 21 can fail a build (error-capable) and 21
+cannot — 16 are warning-only, 4 (the security header gates) are info-only, and one mixes
+warning and info. (As of v0.2.1, `crawl-hygiene` — a gate name that could never actually
+fire, since its only source was never called from `audit_site()` — was removed from the
+schema rather than shipped as a config option that silently did nothing;
+`hygiene.check_sitemap()` was wired into `sitemap-health` instead, so a redirecting or
+dead sitemap URL now gets its own dedicated finding.) Full detail, including which gates
+can never trip `--fail-on`, is in [audit-guide.md](docs/audit-guide.md#gate-reference)
+and
 [ci-integration.md](docs/ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap).
 
 **SEO**
@@ -198,6 +200,19 @@ own dedicated finding.) Full detail, including which gates can never trip `--fai
 |---|---|---|
 | `schema` | At least one valid `application/ld+json` block with `@type` | error |
 | `schema-fabrication` | `AggregateRating` has a real `ratingCount`; every `Review` has an `author` | error |
+| `schema-required` | Google's rich-result properties (headline/image/datePublished, offers, mainEntity, …) are present for the types that need them | warning |
+
+**Security** — new in v0.4.0; four header gates are info-only inventory, never graded
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `hsts` | `Strict-Transport-Security` present, `max-age` ≥ 180 days | info |
+| `nosniff` | `X-Content-Type-Options: nosniff` present | info |
+| `csp` | A `Content-Security-Policy` exists, by header or meta | info |
+| `referrer-policy` | A `Referrer-Policy` header exists | info |
+| `mixed-content` | An `https://` page requests a blockable subresource (`script`, `iframe`, stylesheet/preload) over `http://` | error |
+| `mixed-content` | An `https://` page requests a passive subresource (`img`, favicon) over `http://` — browsers auto-upgrade these | warning |
+| `https-redirect` | The site's `http://` origin 3xx-redirects to `https://` | error |
 
 **Site-level (cross-URL)** — new in 0.2.0; needs the whole crawled set, not one page
 
@@ -208,6 +223,15 @@ own dedicated finding.) Full detail, including which gates can never trip `--fai
 | `noindex-in-sitemap` | A crawled `noindex` page is also listed in `sitemap.xml` | error |
 | `canonical-cluster` | A canonical points at a page that itself canonicalises elsewhere | warning |
 | `hreflang-reciprocity` | An `hreflang` alternate does not link back | warning |
+
+**Indexability contradictions** — new in v0.4.0; 100% precision, both halves of every
+contradiction come from the site's own declarations
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `robots-sitemap` | A sitemap URL is `Disallow`-ed by the site's own `robots.txt` | error |
+| `canonical-target` | A canonical points at a page that is noindexed, 404s/410s, or redirects | error / warning |
+| `hreflang-noindex` | An `hreflang` alternate points at a page that is noindexed | error |
 
 **Performance** — new in 0.2.0; derived from one HTTP response, no browser involved
 
@@ -223,6 +247,15 @@ Next Paint, or a Lighthouse score — OmniRank has no browser. See
 [audit-guide.md](docs/audit-guide.md#performance-perf-layer) for the named threshold
 constants and [faq.md](docs/faq.md#does-omnirank-measure-core-web-vitals) for the full
 answer.
+
+**On-page** — new in v0.4.0; body markup, not the `<head>` indexing signals above
+
+| Gate | Rule | Severity |
+|---|---|---|
+| `image-alt` | Every `<img>` has an `alt` attribute (an empty `alt=""` is never flagged) | warning |
+| `heading-order` | The heading outline never skips more than one level | warning |
+| `link-text` | Every link has an accessible name, and it isn't a generic phrase like "click here" | warning / info |
+| `lang` | `<html>` declares a non-empty `lang` | error |
 
 ## Download and install OmniRank
 
@@ -291,7 +324,8 @@ python3 -m omnirank.cli fix --config omnirank.config.json --root .
 ```
 
 Picking `--fail-on h1 canonical schema` (structural baseline) is a better starting point
-than listing all 28 gate names — 13 of them are warning-only and can never fail a build.
+than listing all 42 gate names — 21 of them are warning- or info-only and can never fail
+a build.
 The full reasoning, plus a GitLab CI job and a generic shell script, is in
 [ci-integration.md](docs/ci-integration.md).
 
@@ -412,14 +446,18 @@ will eventually read from `secrets`.
 <details>
 <summary>Why does my site score 0 on one layer?</summary>
 
-As of v0.2.1, each GATE's contribution to its layer is capped at `GATE_CAP = 15`
+Each GATE's contribution to its layer is capped at `GATE_CAP = 15`
 (`min(15, 10*errors + 3*warnings)`), so one gate failing on every page of a large site
 can no longer alone drag a layer to 0 — that would conflate issue COUNT with issue
-SEVERITY (one broken template is one problem, not fifty). A layer still reaches 0 when
-enough DISTINCT gates are broken for their capped costs to sum past 100 — seven or more
-independently-broken gates is enough on its own. A brand-new site missing a `<title>`,
-canonical tag, JSON-LD, and `llms.txt` will commonly hit this on the GEO layer, since
-each missing artifact is a separate broken gate.
+SEVERITY (one broken template is one problem, not fifty). As of v0.4.0, the summed capped
+cost is then divided by the layer's own scoring SURFACE — how many distinct gates could
+move that layer's score — so a layer reaches 0 only when **every one of its registered
+gates** is maxed, not after a fixed number of them. `seo` ships 24 scoring gates, and
+measured directly: 7 maxed gates score `71`, 12 score `50`, 16 score `33`, and only all
+24 reach `0`. A small layer still floors easily — `security` ships only 2 scoring gates
+(`mixed-content`, `https-redirect`; its four header gates are `info` and excluded from
+the surface entirely) — but a big layer like `seo` no longer floors on a handful of
+broken gates the way it used to.
 </details>
 
 More questions, including secrets handling and where the JSON report schema lives, are

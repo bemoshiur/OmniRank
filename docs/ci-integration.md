@@ -107,21 +107,28 @@ run cleanup after a failure, as shown here.
 ## Choosing `--fail-on` gates — and why "gate on everything" is a trap
 
 Not every gate name in the schema's `audit.failOn` enum can actually cause `--fail-on` to
-fail a build, and putting all 29 in the list creates false confidence rather than more
+fail a build, and putting all 42 in the list creates false confidence rather than more
 protection. Recounted directly against every gate's severity in
 `scripts/py/omnirank/gates/` and against what `audit_site()` actually calls (not just what
 the schema accepts):
 
-**13 gates are warning-only — listing them in `--fail-on` has zero effect on the exit
-code, ever:** `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`,
-`faq` (downgraded from error in v0.2.1 — demanding 3+ FAQs on every page, including
-pricing and 404 pages, was not defensible advice) from the original gate set, plus the
-site-level gates `duplicate-title`, `duplicate-description`, `canonical-cluster`,
-`hreflang-reciprocity`, and the `perf` gates `page-weight`, `compression`,
-`render-blocking`. Every finding these gates can produce is `severity: "warning"`, and
-`has_failures()` only counts `severity == "error"` findings. A CI job gating on `og` will
-never fail because of a missing OpenGraph tag — not because your OpenGraph tags are fine,
-but because that gate structurally cannot trigger a failure.
+**16 gates are warning-only and 4 more are info-only — listing any of these 20 in
+`--fail-on` has zero effect on the exit code, ever:** `og`, `hreflang`, `image-dims`,
+`citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1 —
+demanding 3+ FAQs on every page, including pricing and 404 pages, was not defensible
+advice) from the original gate set, the site-level gates `duplicate-title`,
+`duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, the `perf` gates
+`page-weight`, `compression`, `render-blocking`, and — new in v0.4.0 — `heading-order`,
+`image-alt`, `schema-required` (all warning-only), plus `hsts`, `nosniff`, `csp`,
+`referrer-policy` (all info-only: OmniRank reports these as inventory facts about your
+security headers, never grades them, and `info` severity costs nothing — see
+[audit-guide.md#security-v040](audit-guide.md#security-v040)). `link-text` is the one
+exception that mixes: its `.empty` id is `warning` and its `.generic` id is `info`, but
+neither is ever `error`, so the gate as a whole still cannot fail a build. Every finding
+these 21 gates can produce is `severity: "warning"` or `"info"`, and `has_failures()`
+only counts `severity == "error"` findings. A CI job gating on `og` will never fail
+because of a missing OpenGraph tag — not because your OpenGraph tags are fine, but
+because that gate structurally cannot trigger a failure.
 
 **As of v0.2.1, `crawl-hygiene` no longer exists as a `--fail-on` gate name at all.**
 The check that would have produced it, `hygiene.check_removed()`, is real and tested, but
@@ -140,14 +147,18 @@ config-accepted gate name that can never fire, v0.2.1 removed it from
 entry (warning) from a genuinely dead one (error). Verify this yourself: `omnirank audit
 https://example.com/nope-xyz --fail-on sitemap-health` exits `1`.
 
-**That leaves 15 gates that can actually produce an error-severity finding and gate a
+**That leaves 21 gates that can actually produce an error-severity finding and gate a
 build:** `h1`, `canonical`, `title-length` (only when the title is *missing*, not when
 it's over-length), `description-length` (same — missing only), `answer-block`,
 `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema` (most of its
 checks are errors; a missing `@context` inside a non-`@graph` block is a warning),
 `schema-fabrication`, `noindex-in-sitemap`, `response-time` (error only once response
-time crosses `RESPONSE_ERROR_MS`; its `.slow` finding below that is a warning), and
-`sitemap-health` via the code paths above.
+time crosses `RESPONSE_ERROR_MS`; its `.slow` finding below that is a warning),
+`sitemap-health` via the code paths above, and — new in v0.4.0 —
+`lang`, `robots-sitemap`, `canonical-target` (its `.redirects` id is a warning, but
+`.noindexed` and `.not-found` are errors), `hreflang-noindex`, `mixed-content` (its
+active-subresource id only — the passive-subresource id is a warning, see
+[audit-guide.md#security-v040](audit-guide.md#security-v040)), and `https-redirect`.
 
 **The practical guidance:** pick gates that map to problems severe enough to block a
 merge, not the full list. A reasonable starting set for most sites is `h1 canonical
@@ -157,10 +168,10 @@ production — this is the check that would have caught the OpenNext/CloudFront 
 described in [geo-artifacts-guide.md](geo-artifacts-guide.md#the-opennextcloudfront-403-trap)
 before a human noticed). Add `answer-block` once you have deliberately built AEO-oriented
 pages — gating on it before you have any answer blocks just fails every build (`faq` is
-warning-only as of v0.2.1, so it can no longer gate a build even if listed). Leave the 13
-warning-only gates out of `--fail-on` entirely; they add length to the command with no
-corresponding protection, and a reviewer skimming a long `--fail-on` list may reasonably
-(and incorrectly) assume every listed category is actually enforced.
+warning-only as of v0.2.1, so it can no longer gate a build even if listed). Leave the 21
+warning- or info-only gates out of `--fail-on` entirely; they add length to the command
+with no corresponding protection, and a reviewer skimming a long `--fail-on` list may
+reasonably (and incorrectly) assume every listed category is actually enforced.
 
 Findings from gates you did **not** list in `--fail-on` are still computed and still land
 in the JSON report and terminal summary — they just do not fail the build. Nothing is
