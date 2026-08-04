@@ -160,11 +160,16 @@ check which layers are actually present in the score line, before trusting a rep
 
 ### Can I run OmniRank without a config file?
 
-Yes, for both commands. `omnirank audit <url>` and `omnirank geo <url>` both work with
-just a URL — `default_config()` builds a minimal in-memory config (`entityType:
-"Organization"`, the URL as both name and site URL). A config file is required only for
-CI gating with a committed `audit.failOn`, first-party facts (`nap`, `identifiers`,
-`statistics`), and anything the roadmap skills will need from `secrets`.
+For `audit`, yes — `omnirank audit <url>` works with just a URL, using a minimal
+in-memory config from `default_config()` (`entityType: "Organization"`, the URL as both
+name and site URL). `geo` is different as of v0.2.1: it refuses to generate artifacts
+unless `geo.license` is explicitly set, and `default_config()` has no `geo` section at
+all, so a bare `omnirank geo <url>` always exits `2`. This is deliberate — the generated
+files are published to your site, and OmniRank will not choose their licence text for
+you. Write a config with `geo.license` set (a real licence, or `"none"` to grant none)
+and pass it with `--config`. Beyond that, a config file is also required for CI gating
+with a committed `audit.failOn`, first-party facts (`nap`, `identifiers`, `statistics`),
+and anything the roadmap skills will need from `secrets`.
 
 ### Is OmniRank on PyPI or npm?
 

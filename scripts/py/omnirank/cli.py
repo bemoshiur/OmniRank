@@ -183,7 +183,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "geo":
         from .geo_artifacts import generate
 
-        written = generate(config, args.out)
+        try:
+            written = generate(config, args.out)
+        except ConfigError as exc:
+            print(f"omnirank: {exc}", file=sys.stderr)
+            return 2
         for path in written:
             print(f"  wrote {path}")
         print("  These must be physical files. Never serve them from a dynamic route.")

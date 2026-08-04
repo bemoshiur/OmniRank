@@ -46,6 +46,62 @@ def test_no_url_and_no_config_exits_two():
     assert main(["audit"]) == 2
 
 
+# --- v0.2.1: `omnirank geo` must never silently grant a licence ------------------
+
+@respx.mock
+def test_geo_command_without_config_exits_two_and_explains(tmp_path, capsys):
+    # A bare URL invocation has no `geo` section at all (default_config carries only
+    # `site`), so this must fail loudly instead of silently publishing CC-BY-4.0.
+    mock_site()
+    assert main(["geo", SITE, "--out", str(tmp_path / "public")]) == 2
+    err = capsys.readouterr().err
+    assert "geo.license" in err
+
+
+@respx.mock
+def test_geo_command_with_config_missing_license_exits_two(tmp_path, capsys):
+    mock_site()
+    config_path = tmp_path / "omnirank.config.json"
+    config_path.write_text(json.dumps({
+        "site": {"name": "X", "url": SITE, "entityType": "Organization"},
+        "geo": {"answerBlockSelector": ".answer-block"},
+    }))
+    assert main(["geo", "--config", str(config_path),
+                 "--out", str(tmp_path / "public")]) == 2
+    assert "geo.license" in capsys.readouterr().err
+
+
+@respx.mock
+def test_geo_command_with_license_none_writes_artifacts_with_no_grant(tmp_path):
+    mock_site()
+    config_path = tmp_path / "omnirank.config.json"
+    config_path.write_text(json.dumps({
+        "site": {"name": "X", "url": SITE, "entityType": "Organization"},
+        "geo": {"license": "none"},
+    }))
+    out_dir = tmp_path / "public"
+    assert main(["geo", "--config", str(config_path), "--out", str(out_dir)]) == 0
+    facts = json.loads((out_dir / "facts.json").read_text())
+    assert facts["license"] == "none"
+    llms = (out_dir / "llms.txt").read_text()
+    assert "licensed" not in llms
+    assert "No reuse licence is granted" in llms
+
+
+@respx.mock
+def test_geo_command_with_real_license_unchanged(tmp_path):
+    mock_site()
+    config_path = tmp_path / "omnirank.config.json"
+    config_path.write_text(json.dumps({
+        "site": {"name": "X", "url": SITE, "entityType": "Organization"},
+        "geo": {"license": "CC-BY-4.0"},
+    }))
+    out_dir = tmp_path / "public"
+    assert main(["geo", "--config", str(config_path), "--out", str(out_dir)]) == 0
+    facts = json.loads((out_dir / "facts.json").read_text())
+    assert facts["license"] == "CC-BY-4.0"
+
+
 # --- grouped console summary -------------------------------------------------
 
 def _finding(**kw):

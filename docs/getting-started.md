@@ -171,14 +171,19 @@ first 25 the terminal view truncates to — validated against `schemas/report.sc
 
 | Code | Meaning |
 |---|---|
-| `0` | Clean — no `--fail-on` gate had an error-severity finding. (The `geo` subcommand always returns `0`.) |
+| `0` | Clean — no `--fail-on` gate had an error-severity finding, or `geo` finished writing its three artifacts |
 | `1` | At least one gate named in `--fail-on` (or your config's `audit.failOn`) had an error-severity finding |
-| `2` | Usage or configuration error — missing/invalid config file, or neither a URL nor `--config` given |
+| `2` | Usage or configuration error — missing/invalid config file, neither a URL nor `--config` given, or (as of v0.2.1) `geo` refusing to run because `geo.license` is unset — see [geo-artifacts-guide.md](geo-artifacts-guide.md#the-citation-licence-block) |
 
 The run above returned `0` because no `--fail-on` gates were specified — findings were
 reported, but nothing was configured to fail the build on them. This makes exit code `1`
 opt-in and safe to wire into CI once you decide which gates matter; see
 [ci-integration.md](ci-integration.md).
+
+**`geo` needs a config file in practice.** `omnirank geo <url>` with no `--config` uses an
+in-memory default config that has no `geo` section, so `geo.license` is always unset and
+the command always exits `2`. Write a config with `geo.license` set (a real licence, or
+`"none"` to grant none) and pass it with `--config` to actually generate artifacts.
 
 ## If this went wrong
 
