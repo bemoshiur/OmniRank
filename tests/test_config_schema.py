@@ -169,3 +169,9 @@ def test_hreflang_noindex_is_accepted_in_fail_on():
     cfg = minimal()
     cfg["audit"] = {"failOn": ["hreflang-noindex"]}
     assert list(validator().iter_errors(cfg)) == []
+
+
+def test_schema_required_is_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ["schema-required"]}
+    assert list(validator().iter_errors(cfg)) == []
