@@ -1,9 +1,24 @@
 # Roadmap
 
-OmniRank version 0.1.1 ships two working Claude Code skills, `audit` and `geo-artifacts`.
-Six further skills are designed and specified but not yet built. This page separates what
+OmniRank version 0.3.0 ships two working Claude Code skills, `audit` and `geo-artifacts`,
+plus `omnirank fix` — a diff *preview* that resolves a finding's URL to its source file
+and prints the unified diff for the four `mechanical` findings, writing nothing. Six
+further skills are designed and specified but not yet built. This page separates what
 exists today from what is planned, so nobody adopts the project expecting capability that
 has not been written yet.
+
+## Shipped in v0.3.0: the locator
+
+`scripts/py/omnirank/locator.py` resolves a finding's URL to `{path, line, confidence}` —
+the entire competitive moat, and the riskiest component in the product, so it ships and
+gets proven in the field before anything gains write access. `omnirank fix` uses it to
+print (never apply) the diff for `seo.canonical.missing`, `seo.canonical.relative`,
+`seo.canonical.chained` and `seo.schema.no-context`. See [[Report-Schema]] for the
+`fixTier`/`applicability` model and `docs/fix-preview.md` for the full writeup.
+
+**v0.4.0** carries the edit engine and the first real `--write` path: applying the diffs
+`omnirank fix` already knows how to compute, once the locator has been proven safe on
+real repositories rather than only in this release's test suite.
 
 The ordering below reflects one maintainer's judgement about sequence, not a commitment to
 dates. It changes in response to what people actually ask for in

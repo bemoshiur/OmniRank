@@ -42,7 +42,9 @@ Verified directly against `schemas/report.schema.json` and
 | `observed` | string | yes | What OmniRank actually found — the raw fact |
 | `expected` | string | yes | What the gate requires |
 | `fix` | string | yes | A concrete, specific instruction for closing the gap |
-| `autoFixable` | boolean | no | Present and `true` only on findings OmniRank could, in principle, patch itself (e.g. `seo.canonical.missing`); absence means false |
+| `fixTier` | enum: `mechanical`, `templated`, `drafted`, `advisory`, `infrastructure` | yes, since 0.3.0 | What kind of information the correct edit requires. A static property of the id, declared for all 48 ids in `omnirank/registry.py`. Additive and optional in the schema: a report written before 0.3.0 has no `fixTier` and still validates |
+| `applicability` | enum: `safe`, `unsafe`, `display-only` | no | Whether THIS occurrence may be applied unattended — the minimum of the tier ceiling, the locator's confidence, the edit's blast radius, and any protected-surface ceiling. Absent from an `omnirank audit` report, which does no locating; populated by `omnirank fix` |
+| `autoFixable` | boolean | Never emitted since 0.3.0 | **Retired.** It recorded which gate module a finding lived in — only `gates/seo.py` could set it — not whether applying it unattended was safe, so it marked `seo.h1.multiple` and `seo.description.long` as fixable and missed `seo.schema.no-context` and `seo.canonical.chained`. Retained in `schemas/report.schema.json` only so reports written before 0.3.0 still validate. Use `fixTier` |
 
 `observed` and `expected` describe the current state; `fix` is the action to take.
 

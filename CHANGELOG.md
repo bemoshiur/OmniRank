@@ -6,6 +6,75 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-04
+
+"The locator." OmniRank can now say which file is wrong and show the diff that would
+fix it — while writing nothing. Actual file modification is v0.4.0. The split is
+deliberate: the locator is the entire competitive moat and the riskiest component, so
+it ships and gets proven before anything gains write access.
+
+### Added
+
+- `scripts/py/omnirank/registry.py` — all 48 finding ids mapped to a `fixTier`
+  (`mechanical` / `templated` / `drafted` / `advisory` / `infrastructure`) plus their
+  severity, layer and gate. Two coverage tests assert the registry and the emitting
+  code cannot drift apart in either direction, so a new finding id cannot ship
+  untiered. `seo.crawl-hygiene.not-found` and `seo.crawl-hygiene.server-error` are
+  registered as `reachable=False`: their emitting function still exists and is still
+  tested, but `audit_site()` never calls it, which is why v0.2.1 removed the gate from
+  `audit.failOn`.
+- `scripts/py/omnirank/applicability.py` — a per-occurrence `safe` / `unsafe` /
+  `display-only` verdict, computed as the minimum of the tier ceiling, the locator's
+  confidence, the edit's blast radius and any protected-surface ceiling. Every input
+  can demote; none can promote. Protected surfaces (robots.txt and crawler directives,
+  `noindex` and sitemap membership, canonical and hreflang sets, any licence grant)
+  cap at `unsafe`; `geo.ai-allowlist.blocked` caps at `display-only` permanently,
+  because reversing a deliberate AI-training opt-out is an editorial decision, not a
+  defect fix.
+- `scripts/py/omnirank/framework.py` — detects `next-app-router`, `next-pages-router`,
+  `astro`, `nuxt`, `sveltekit`, `hugo`, `jekyll`, `eleventy`, `wordpress`, `static` or
+  `unknown` from files on disk, with a confidence and the evidence that decided it.
+  `unknown` is a first-class outcome: a bespoke project is the common case and a
+  confident wrong answer is worse than an admitted absence.
+- `scripts/py/omnirank/locator.py` — resolves a finding's URL to `{path, line,
+  confidence}`. `next-app-router` is implemented properly: route groups `(marketing)`,
+  parallel slots `@modal`, private folders `_components`, `[slug]`, `[...slug]` and
+  `[[...slug]]`, and the line of the `metadata` export. A page exporting
+  `generateMetadata` instead is named but refused — the value is computed at request
+  time and this tool does not rewrite function bodies. `static`, `jekyll` and `hugo`
+  resolve by path convention, to source pages rather than to built output a rebuild
+  would erase. Every other framework returns `none`, honestly. Two equally specific
+  matches return `none` rather than a guess.
+- `scripts/py/omnirank/fixes/` — diff generators for the four `mechanical` findings:
+  `seo.canonical.missing` (single-route files only), `seo.canonical.relative`,
+  `seo.canonical.chained` (only when the onward target is provably terminal) and
+  `seo.schema.no-context` (only when exactly one JSON-LD node is unambiguous). Edits
+  are byte splices matching the file's own quote and self-closing style; idempotency
+  comes from detecting the existing tag, never from a marker comment. Nothing in the
+  package opens a file for writing, and a test asserts it.
+- `omnirank fix` — audits, locates, prints the unified diff and a reasoned list of
+  what it could not fix. Exits `1` when a diff exists so CI can gate on it, `0` when
+  there is nothing to fix. `--json` emits the plan as structured data, including
+  `"wrote": []`. **There is no `--write` flag**: passing one exits `2` with a message
+  naming v0.4.0, before any network call. Shipping it as a no-op would be worse than
+  not shipping it.
+- `fixTier` and `applicability` in `schemas/report.schema.json`, both additive and
+  optional, and `docs/fix-preview.md`.
+- `stack.framework` accepts `next-pages-router`, `hugo` and `eleventy`. Additive:
+  every previously valid value still validates, and `next-pages` remains the
+  historical spelling of `next-pages-router`.
+
+### Removed
+
+- `Finding.auto_fixable` and the `autoFixable` key in report output. Only
+  `gates/seo.py` could ever set it, so it described which module a finding lived in
+  rather than whether applying it unattended was safe: it marked `seo.h1.multiple`
+  (reorders headings, and "keep the first" is wrong on any banner-`h1` layout) and
+  `seo.description.long` (truncates public SERP copy) as fixable, while missing
+  `seo.schema.no-context` and `seo.canonical.chained`, which are genuinely mechanical.
+  The `autoFixable` property remains in `schemas/report.schema.json`, unemitted, so
+  reports written before 0.3.0 still validate.
+
 ## [0.2.1] - 2026-08-04
 
 "Stop the silent passes." OmniRank's stated promise is that it never fabricates and
@@ -161,7 +230,8 @@ against a real 57-URL site.
   path and a Node in-repo path producing identical output.
 - `omnirank` CLI with a zero-config URL mode and CI-usable exit codes.
 
-[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bemoshiur/OmniRank/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/bemoshiur/OmniRank/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bemoshiur/OmniRank/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bemoshiur/OmniRank/compare/v0.1.0...v0.1.1

@@ -110,16 +110,18 @@ Exit codes: `0` clean · `1` a `--fail-on` gate failed · `2` usage or config er
 non-zero exit is what makes it a CI gate, not just a report — see
 [Use OmniRank as a CI gate](#use-omnirank-as-a-ci-gate) below.
 
-## What ships in v0.2.0
+## What ships in v0.3.0
 
 | Skill | Status | What it does |
 |---|---|---|
 | `audit` | **Shipped** | Scores SEO, AEO, GEO, perf and structured-data gates against a site's real HTML — including a cross-URL pass over the whole crawled set — and reports `observed` / `expected` / `fix` for every gap |
 | `geo-artifacts` | **Shipped** | Generates `llms.txt`, `llms-full.txt` and `facts.json`, each with an explicit citation licence |
+| `fix` *(preview)* | **Shipped** | Resolves a finding's URL to the source file that owns it and prints the unified diff it would apply for the four `mechanical` findings. Writes nothing — there is no `--write` flag in 0.3.0 |
 
-That is the entire shipped surface — still exactly two skills. 0.2.0 added gates and a
-`perf` layer to the existing `audit` skill; it did not ship a new skill. Everything below
-is roadmap, not present in v0.2.0.
+Still exactly two skills. 0.3.0 added the locator — URL to source file — plus a
+`fixTier` on every finding and the `omnirank fix` diff preview. **This release writes
+nothing to your project.** File modification arrives in v0.4.0, deliberately after the
+locator has been proven. Everything under Roadmap below is not present in v0.3.0.
 
 ## Roadmap
 
@@ -272,6 +274,11 @@ jobs:
         run: |
           omnirank audit --config omnirank.config.json --out omnirank-report.json \
             --fail-on h1 canonical schema llms-txt llms-full facts-json ai-allowlist
+```
+
+```bash
+# Fail the build while a mechanical fix is outstanding. Writes nothing.
+python3 -m omnirank.cli fix --config omnirank.config.json --root .
 ```
 
 Picking `--fail-on h1 canonical schema` (structural baseline) is a better starting point

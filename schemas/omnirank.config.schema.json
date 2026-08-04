@@ -63,8 +63,10 @@
       "additionalProperties": false,
       "properties": {
         "framework": {
-          "enum": ["next-app-router", "next-pages", "astro", "nuxt", "sveltekit",
-                   "wordpress", "jekyll", "shopify", "static", "other"]
+          "enum": ["next-app-router", "next-pages", "next-pages-router", "astro",
+                   "nuxt", "sveltekit", "wordpress", "jekyll", "hugo", "eleventy",
+                   "shopify", "static", "other"],
+          "description": "Routing convention. `next-pages` is the historical spelling of `next-pages-router` and both remain valid. `shopify` and `other` have no locator implementation, so findings on those projects are display-only. omnirank fix detects this from disk when it is unset."
         },
         "srcDir": { "type": "string" },
         "publicDir": { "type": "string" },

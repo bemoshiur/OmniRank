@@ -2,6 +2,7 @@ import httpx
 import pytest
 import respx
 
+from omnirank import __version__
 from omnirank.fetch import Fetched, fetch, make_client, read_sitemap
 
 SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
@@ -16,7 +17,11 @@ def test_client_does_not_follow_redirects():
 
 
 def test_client_sets_user_agent():
-    assert "OmniRank/0.2.1" in make_client().headers["User-Agent"]
+    # Derived from __version__ rather than a literal, so this does not go stale on
+    # every version bump the way a hardcoded "OmniRank/0.2.1" did for this release --
+    # see tests/test_repo_docs.py::test_every_version_declaration_agrees for the same
+    # principle applied to the version declarations themselves.
+    assert f"OmniRank/{__version__}" in make_client().headers["User-Agent"]
 
 
 @respx.mock

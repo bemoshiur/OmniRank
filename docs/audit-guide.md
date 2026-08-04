@@ -454,6 +454,19 @@ finding — a drop-in signal for a CI step to fail on. See
 [ci-integration.md](ci-integration.md) for full workflow examples and guidance on which
 gates are safe to gate a build on.
 
+## Fix tiers
+
+Every finding carries a `fixTier` in the JSON report — `mechanical`, `templated`,
+`drafted`, `advisory` or `infrastructure` — describing what kind of information the
+correct edit requires. It is a static property of the finding id and is declared for
+all 48 ids in `scripts/py/omnirank/registry.py`. It replaces `autoFixable`, which
+recorded which module a finding lived in rather than whether fixing it was safe.
+
+Only the four `mechanical` ids can produce a diff today: `seo.canonical.missing`,
+`seo.canonical.relative`, `seo.canonical.chained` and `seo.schema.no-context`. See
+[fix-preview.md](fix-preview.md) for the full model, including the per-occurrence
+`applicability` calculation and the protected surfaces no flag ever unlocks.
+
 ## See also
 
 - [Getting started](getting-started.md) — install and run your first audit
