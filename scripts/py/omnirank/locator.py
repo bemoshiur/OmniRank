@@ -84,19 +84,28 @@ def _app_root(root: Path) -> Path | None:
     return None
 
 
-def _route_segments_for(page: Path, app_root: Path) -> list[str]:
-    """The route pattern a page file serves, as segments.
+def _route_segments_for(page: Path, app_root: Path) -> list[str] | None:
+    """The route pattern a page file serves, as segments, or `None` if the
+    file is not routable by any URL.
 
-    Route groups `(marketing)`, parallel slots `@modal` and private folders
-    `_components` are all non-routing in Next's App Router: they organise the
-    tree without appearing in the URL, so they are dropped here. Getting this
-    wrong is how a locator confidently reports the wrong file.
+    Route groups `(marketing)` and parallel slots `@modal` are non-routing:
+    they organise the tree without appearing in the URL, so they are dropped
+    here -- the page underneath is still reachable, just at a shorter path.
+    A `_`-prefixed folder is different in kind, not degree: Next.js opts the
+    folder *and everything beneath it* out of routing entirely, so a page
+    under `_internal/` is served by no URL at all. Stripping the segment and
+    matching on what's left -- treating it as merely invisible in the URL --
+    is route-group semantics applied to a folder that isn't a route group.
+    Getting this wrong is how a locator confidently reports a file a real
+    deployment 404s on.
     """
     out: list[str] = []
     for part in page.parent.relative_to(app_root).parts:
         if part.startswith("(") and part.endswith(")"):
             continue
-        if part.startswith(("@", "_")):
+        if part.startswith("_"):
+            return None
+        if part.startswith("@"):
             continue
         out.append(part)
     return out
@@ -183,7 +192,10 @@ def _locate_next_app_router(route: str, root: Path) -> Location:
     for page in sorted(app_root.rglob("*")):
         if page.name not in PAGE_FILES or not page.is_file():
             continue
-        result = _match(_route_segments_for(page, app_root), target)
+        segments = _route_segments_for(page, app_root)
+        if segments is None:
+            continue                     # under a `_private` folder: no URL reaches it
+        result = _match(segments, target)
         if result is not None:
             matches.append((result[0], result[1], page))
 
@@ -323,6 +335,8 @@ def blast_radius(location: Location, *, detection: Detection,
         segments = _route_segments_for(base / location.path, app_root)
     except ValueError:
         return None                      # located outside the app directory
+    if segments is None:
+        return None                      # not a routable page at all
     dynamic = any(_DYNAMIC.match(segment) or _OPTIONAL_CATCH_ALL.match(segment)
                   for segment in segments)
     return None if dynamic else 1
