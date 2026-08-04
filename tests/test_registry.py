@@ -63,9 +63,10 @@ def test_registry_covers_all_forty_eight_findings():
     # https-redirect. Task 6: +1 for seo.robots-sitemap.disallowed. Task 7: +3
     # for the three canonical-target ids. Task 8: +1 for
     # seo.hreflang-noindex.alternate. Task 9: +1 for
-    # seo.schema-required.missing-property. Task 12 retitles/rebases this once
-    # the full v0.4.0 gate set has landed.
-    assert len(REGISTRY) == 61
+    # seo.schema-required.missing-property. Task 10: +5 for gates/onpage.py
+    # (image-alt, heading-order, link-text x2, lang). Task 12 retitles/rebases
+    # this once the full v0.4.0 gate set has landed.
+    assert len(REGISTRY) == 66
 
 
 def test_tier_distribution_matches_the_fixability_classification():
@@ -81,9 +82,11 @@ def test_tier_distribution_matches_the_fixability_classification():
     # (canonical-target .noindexed/.not-found) and +1 templated
     # (canonical-target .redirects). Task 8: +1 advisory
     # (seo.hreflang-noindex.alternate). Task 9: +1 drafted
-    # (seo.schema-required.missing-property).
-    assert counts == {"mechanical": 4, "templated": 17, "drafted": 13,
-                      "advisory": 15, "infrastructure": 12}
+    # (seo.schema-required.missing-property). Task 10: +3 drafted (image-alt,
+    # link-text.empty, link-text.generic), +1 advisory (heading-order), +1
+    # templated (lang).
+    assert counts == {"mechanical": 4, "templated": 18, "drafted": 16,
+                      "advisory": 16, "infrastructure": 12}
 
 
 def test_mechanical_tier_is_exactly_the_four_documented_ids():

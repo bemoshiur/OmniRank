@@ -175,3 +175,12 @@ def test_schema_required_is_accepted_in_fail_on():
     cfg = minimal()
     cfg["audit"] = {"failOn": ["schema-required"]}
     assert list(validator().iter_errors(cfg)) == []
+
+
+ONPAGE_GATES = ["image-alt", "heading-order", "link-text", "lang"]
+
+
+def test_onpage_gates_are_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ONPAGE_GATES}
+    assert list(validator().iter_errors(cfg)) == []

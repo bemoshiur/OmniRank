@@ -176,6 +176,15 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     # SET is an enumerated protected surface (see PROTECTED_SURFACES below).
     _r("seo.hreflang-noindex.alternate", "advisory", "error", "seo",
        "hreflang-noindex"),
+    # --- gates/onpage.py (v0.4.0) -----------------------------------------
+    # `drafted` for the three that need authored content; `advisory` for the
+    # outline, where inserting a level and demoting one are opposite correct
+    # answers; `templated` for lang, whose value comes from config site.locales.
+    _r("seo.image-alt.missing", "drafted", "warning", "seo", "image-alt"),
+    _r("seo.heading-order.skipped", "advisory", "warning", "seo", "heading-order"),
+    _r("seo.link-text.empty", "drafted", "warning", "seo", "link-text"),
+    _r("seo.link-text.generic", "drafted", "info", "seo", "link-text"),
+    _r("seo.lang.missing", "templated", "error", "seo", "lang"),
 )
 
 REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}

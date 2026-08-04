@@ -156,7 +156,7 @@ def test_unreachable_page_flags_its_per_page_gates_as_not_evaluated():
     report = audit_site(default_config(SITE), make_client())
     unreachable_url = f"{SITE}/"
     gates = {e.gate for e in report.not_evaluated if e.url == unreachable_url}
-    assert gates == {"seo", "aeo", "perf", "security"}
+    assert gates == {"seo", "aeo", "perf", "security", "onpage"}
     assert all(e.reason == "page-unreachable"
                for e in report.not_evaluated if e.url == unreachable_url)
 

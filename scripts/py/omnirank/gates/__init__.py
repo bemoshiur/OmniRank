@@ -39,4 +39,9 @@ sitemap_urls) -> tuple[list[Finding], list[NotEvaluated]]`,
 `check_canonical_targets(client, pages) -> tuple[list[Finding], list[NotEvaluated]]`
 and `check_hreflang_noindex(pages) -> list[Finding]`. The first two return
 notEvaluated entries because they depend on network I/O that can fail.
+
+`onpage` exposes `run(html: str, url: str) -> list[Finding]`, the same shape as
+`seo` and `jsonld`. It is separate from `seo` because that module owns the <head>'s
+indexing signals while this one owns body markup engines and assistive technology
+both read.
 """
