@@ -337,6 +337,97 @@ def test_hugo_page_bundle(tmp_path):
                   root=root).path == "content/pricing/index.md"
 
 
+# -- containment: the convention resolvers must never escape `root` ---------
+#
+# `root` lives one level inside `tmp_path` for every case below, so an
+# "outside" marker planted directly in `tmp_path` sits one directory above
+# the project root -- exactly the shape of the adversarial reproduction.
+
+def test_static_url_traversal_cannot_escape_root(tmp_path):
+    root = files(tmp_path / "site", {"index.html": PAGE_HTML})
+    (tmp_path / "OUTSIDE_MARKER.html").write_text(PAGE_HTML)
+    assert locate("https://x.example/../OUTSIDE_MARKER", detection=STATIC,
+                  root=root) == NOT_LOCATED
+
+
+def test_jekyll_url_traversal_cannot_escape_root(tmp_path):
+    root = files(tmp_path / "site", {"index.html": PAGE_HTML})
+    (tmp_path / "OUTSIDE_MARKER.md").write_text("# outside\n")
+    assert locate("https://x.example/../OUTSIDE_MARKER", detection=JEKYLL,
+                  root=root) == NOT_LOCATED
+
+
+def test_hugo_url_traversal_cannot_escape_root(tmp_path):
+    root = files(tmp_path / "site", {"content/_index.md": "---\ntitle: Home\n---\n"})
+    (tmp_path / "OUTSIDE_MARKER.md").write_text("---\ntitle: Outside\n---\n")
+    assert locate("https://x.example/../OUTSIDE_MARKER", detection=HUGO,
+                  root=root) == NOT_LOCATED
+
+
+def test_a_bare_path_without_a_scheme_cannot_traverse_either(tmp_path):
+    # `locate()` is documented to accept a URL, but `route_of` never requires
+    # a scheme -- a bare path must be just as contained as a full URL.
+    root = files(tmp_path / "site", {"index.html": PAGE_HTML})
+    (tmp_path / "OUTSIDE_MARKER.html").write_text(PAGE_HTML)
+    assert locate("../OUTSIDE_MARKER", detection=STATIC, root=root) == NOT_LOCATED
+
+
+def test_a_symlink_inside_the_repo_pointing_outside_it_is_rejected(tmp_path):
+    root = tmp_path / "site"
+    root.mkdir()
+    outside = tmp_path / "OUTSIDE_MARKER.html"
+    outside.write_text(PAGE_HTML)
+    (root / "pricing.html").symlink_to(outside)
+    assert locate("https://x.example/pricing", detection=STATIC,
+                  root=root) == NOT_LOCATED
+
+
+def test_normal_convention_resolution_still_works_after_the_containment_guard(tmp_path):
+    static_root = files(tmp_path / "static-site", {"pricing/index.html": PAGE_HTML})
+    assert locate("https://x.example/pricing", detection=STATIC,
+                  root=static_root).path == "pricing/index.html"
+
+    jekyll_root = files(tmp_path / "jekyll-site",
+                        {"pricing.md": "---\nlayout: page\n---\n# Pricing\n"})
+    assert locate("https://x.example/pricing", detection=JEKYLL,
+                  root=jekyll_root).path == "pricing.md"
+
+    hugo_root = files(tmp_path / "hugo-site", {"content/pricing.md": "---\ntitle: P\n---\n"})
+    assert locate("https://x.example/pricing", detection=HUGO,
+                  root=hugo_root).path == "content/pricing.md"
+
+
+def test_every_located_result_stays_inside_root(tmp_path):
+    # Property-style guard, not tied to one resolver: whatever a resolver
+    # returns, `root / result.path` must resolve to a descendant of `root`.
+    # This is meant to also catch a *future* resolver that reintroduces the
+    # hole, not just the three fixed here.
+    cases = [
+        (STATIC, files(tmp_path / "s1", {"index.html": PAGE_HTML}), "/"),
+        (STATIC, files(tmp_path / "s2", {"pricing/index.html": PAGE_HTML}), "/pricing"),
+        (JEKYLL, files(tmp_path / "j1", {"pricing.md": "---\n---\n"}), "/pricing"),
+        (HUGO, files(tmp_path / "h1", {"content/pricing.md": "---\n---\n"}), "/pricing"),
+        (NEXT, app(tmp_path / "n1", {"pricing/page.tsx": METADATA_PAGE}), "/pricing"),
+    ]
+    checked = 0
+    for detection, root, route in cases:
+        found = locate(f"https://x.example{route}", detection=detection, root=root)
+        assert found.path is not None, f"expected a location for {route!r}"
+        assert (root / found.path).resolve().is_relative_to(root.resolve())
+        checked += 1
+    assert checked == len(cases)
+
+
+def test_static_resolution_is_case_sensitive(tmp_path):
+    # `.is_file()` alone follows the host filesystem's own case folding: on
+    # by default on macOS and Windows, off on Linux CI. `next-app-router`
+    # does plain string comparison and is case-sensitive everywhere; the
+    # convention resolvers must match that rather than pass locally and fail
+    # in CI (or vice versa).
+    root = files(tmp_path, {"Pricing.html": PAGE_HTML})
+    assert locate("https://x.example/pricing", detection=STATIC, root=root) == NOT_LOCATED
+
+
 def test_blast_radius_is_one_for_a_single_page_file(tmp_path):
     root = files(tmp_path, {"index.html": PAGE_HTML})
     found = locate("https://x.example/", detection=STATIC, root=root)
