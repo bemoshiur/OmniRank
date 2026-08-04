@@ -126,12 +126,11 @@ See [[Fix-Preview]] for the full flag reference and what its output looks like.
 
 Both `SKILL.md` files list explicit "When NOT to use" cases. Asking Claude to "write our
 JSON-LD" or "emit schema for this entity type" will not trigger either shipped skill —
-that is `aeo-onpage`, which is on the roadmap and not present in v0.3.0. Asking it to
-"submit this URL to Google" will not trigger anything either — that is the unshipped
-`indexing` skill. Asking it to "apply the fix" or "write the canonical tag for me" will
-also not do anything by itself: `omnirank fix` only prints a diff, and no skill in
-v0.3.0 applies an edit to your source tree. See [[Roadmap]] for the full list of what
-does not exist yet.
+that is `aeo-onpage`, which is on the roadmap and not built yet. Asking it to "submit this
+URL to Google" will not trigger anything either — that is the unshipped `indexing` skill.
+Asking it to "apply the fix" or "write the canonical tag for me" will also not do
+anything by itself: `omnirank fix` only prints a diff, and no shipped skill applies an
+edit to your source tree. See [[Roadmap]] for the full list of what does not exist yet.
 
 ## See also
 

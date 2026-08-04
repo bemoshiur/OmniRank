@@ -5,9 +5,9 @@ GitLab CI, and a generic shell script — plus how `omnirank fix` fits the same 
 a second, distinct gate. Each recipe turns a specific class of problem into a non-zero
 exit that fails the job.
 
-OmniRank is not published to PyPI as of v0.3.0, so every example below installs straight
-from git. The `pip install "package @ git+URL#subdirectory=..."` syntax used here was
-verified to work against the real repository.
+OmniRank is not published to PyPI, so every example below installs straight from git. The
+`pip install "package @ git+URL#subdirectory=..."` syntax used here was verified to work
+against the real repository.
 
 ## GitHub Actions
 
@@ -110,15 +110,18 @@ run cleanup after a failure, as shown here.
 
 Not every gate name in the schema's `audit.failOn` enum can actually cause `--fail-on` to
 fail a build, and putting all 42 in the list creates false confidence rather than more
-protection. Verified directly against every gate's severity in `scripts/py/omnirank/gates/`:
+protection. Verified directly against every gate's severity in `scripts/py/omnirank/gates/`
+(`tests/test_repo_docs.py::test_documented_gate_counts_match_the_registry` re-derives
+these two numbers from `registry.py` and the config schema on every CI run, so they cannot
+drift silently):
 
 | Group | Gates | Effect on `--fail-on` |
 |---|---|---|
-| Warning-only (16) | `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`, `render-blocking`, `heading-order`, `image-alt`, `schema-required` (last three new in v0.4.0) | Every finding these gates can produce is `severity: "warning"`; `has_failures()` only counts errors. Listing them has zero effect on the exit code, ever. |
-| Info-only (4, all new in v0.4.0) | `hsts`, `nosniff`, `csp`, `referrer-policy` | Every finding these gates can produce is `severity: "info"`. OmniRank reports your security headers as inventory facts and never grades them — see [[Audit-Skill#security-v040]]. |
-| Mixed, but never error (1, new in v0.4.0) | `link-text` | Its `.empty` id is `warning`, its `.generic` id is `info` — neither is ever `error`, so the gate as a whole cannot gate a build. |
+| Warning-only (16) | `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`, `render-blocking`, `image-alt`, `heading-order`, `schema-required` | Every finding these gates can produce is `severity: "warning"`; `has_failures()` only counts errors. Listing them has zero effect on the exit code, ever. |
+| Info-only (4) — new in v0.4.0 | `hsts`, `nosniff`, `csp`, `referrer-policy` | The four `security` header gates. `info`-severity findings cost zero points and can never fail a build under any circumstance — see [[Security-Layer]]. |
+| Mixed warning/info (1) | `link-text` | Emits `seo.link-text.empty` (warning) and `seo.link-text.generic` (info). Listing it catches nothing at error severity either way. |
 | Removed from the enum entirely (v0.2.1) | `crawl-hygiene` | Its dedicated check (`hygiene.check_removed()`) needs a removed-URL list no config field supplies, so it could never fire from a plain run — v0.2.1 dropped it from the schema rather than ship a dead gate name. |
-| Can actually fail a build (21) | `h1`, `canonical`, `title-length` (missing only), `description-length` (missing only), `answer-block`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema`, `schema-fabrication`, `noindex-in-sitemap`, `response-time`, `sitemap-health`, and — new in v0.4.0 — `lang`, `robots-sitemap`, `canonical-target` (its `.redirects` id is a warning; `.noindexed`/`.not-found` are errors), `hreflang-noindex`, `mixed-content` (active-subresource id only), `https-redirect` | These can produce an error-severity finding and gate a build |
+| Can actually fail a build (21) | `h1`, `canonical`, `title-length` (missing only), `description-length` (missing only), `answer-block`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema`, `schema-fabrication`, `noindex-in-sitemap`, `response-time`, `sitemap-health`, `mixed-content`, `https-redirect`, `robots-sitemap`, `canonical-target`, `hreflang-noindex`, `lang` | These can produce an error-severity finding and gate a build. The last six are new in v0.4.0 — three `security`, three contradiction gates, plus `lang`. |
 
 **The practical guidance:** pick gates that map to problems severe enough to block a
 merge, not the full list. A reasonable starting set for most sites is `h1 canonical
@@ -127,8 +130,13 @@ schema` (structural SEO baseline) plus, once `geo-artifacts` is wired into your 
 production — this is the check that would have caught the OpenNext/CloudFront 403 trap
 described in [[GEO-Artifacts-Skill#what-is-the-opennextcloudfront-403-trap]] before a
 human noticed). Add `answer-block` once you have deliberately built AEO-oriented pages —
-gating on it before you have any answer blocks just fails every build. Leave the 21
-warning- or info-only gates out of `--fail-on` entirely.
+gating on it before you have any answer blocks just fails every build. Consider adding
+`robots-sitemap`, `canonical-target` and `hreflang-noindex` once you trust your sitemap
+and canonical hygiene — these are the new v0.4.0 contradiction gates, and every finding
+they can produce is provable from the site's own declarations, so false positives should
+be rare; see [[Contradictions]] before relying on that for `robots-sitemap` specifically,
+since its coverage varies by Python version. Leave the 21 warning-only/info-only/mixed
+gates out of `--fail-on` entirely — they can never move the exit code.
 
 Findings from gates you did **not** list in `--fail-on` are still computed and still land
 in the JSON report and terminal summary — they just do not fail the build. Nothing is

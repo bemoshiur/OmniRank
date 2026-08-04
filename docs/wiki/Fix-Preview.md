@@ -2,8 +2,12 @@
 
 `omnirank fix` answers the question no URL-keyed SEO tool can: which file is wrong? It
 audits a site, resolves each finding's URL to a source file, and prints the unified diff
-it would apply. It writes nothing — there is no `--write` flag, and passing one
-exits before any network call runs.
+it would apply. It writes nothing — there is no `--write` flag, and passing one exits
+before any network call runs. That has been true since v0.3.0 and remains true in
+v0.4.0: this release deliberately spent its budget on broadening what `audit` covers (a
+new `security` layer, five contradiction gates, on-page accessibility gates) rather than
+on write access. Writing ships once the locator is proven against real repositories and
+the write guarantees it depends on are implemented and tested — not on a release number.
 
 Verified against `scripts/py/omnirank/cli.py`, `scripts/py/omnirank/fixes/`, and a real
 run captured on this machine, shown in full below.
@@ -13,7 +17,7 @@ run captured on this machine, shown in full below.
 Three steps, all read-only: audit the site (the same `audit_site()` `omnirank audit`
 uses), detect the project's framework and locate each finding's source file (see
 [[The-Locator]]), then generate a diff for every finding whose `fixTier` is `mechanical`
-— currently 4 of 48 ids — when the locator's confidence and the edit's blast radius both
+— currently 4 of 67 ids — when the locator's confidence and the edit's blast radius both
 allow it (see [[Fix-Tiers-and-Applicability]]). Everything else is grouped and reported
 as a reason it was not fixed, never silently dropped.
 
@@ -43,30 +47,36 @@ placeholder) the project's own demo GIF is rendered from — served locally with
 -m http.server` and audited with no config file:
 
 ```
-$ python3 -m omnirank.cli audit http://127.0.0.1:8791
-OmniRank 0.3.0 — http://127.0.0.1:8791
-  overall 90/100  aeo 100  geo 90  perf 91  seo 82
-  3 URLs checked · 8 findings in 5 groups
+$ python3 -m omnirank.cli audit http://127.0.0.1:8792
+OmniRank 0.4.0 — http://127.0.0.1:8792
+  overall 93/100  aeo 100  geo 87  perf 85  security 100  seo 93
+  3 URLs checked · 19 findings in 9 groups
 
   ERRORS
   [2×] seo.canonical.missing — expected: one absolute self-referencing canonical
-        fix: Add <link rel="canonical" href="http://127.0.0.1:8791/"> to <head>.
-        e.g. http://127.0.0.1:8791/, http://127.0.0.1:8791/pricing/
+        fix: Add <link rel="canonical" href="http://127.0.0.1:8792/"> to <head>.
+        e.g. http://127.0.0.1:8792/, http://127.0.0.1:8792/pricing/
   [1×] seo.canonical.relative — expected: an absolute URL
         fix: Emit the canonical as an absolute URL including scheme and host.
-        e.g. http://127.0.0.1:8791/about/
+        e.g. http://127.0.0.1:8792/about/
   [1×] geo.ai-allowlist.missing — expected: HTTP 200
         fix: Publish a robots.txt that explicitly allows AI crawlers.
-        e.g. http://127.0.0.1:8791/robots.txt
+        e.g. http://127.0.0.1:8792/robots.txt
+  ...
 ```
 
-Three of those findings — two `seo.canonical.missing` and one `seo.canonical.relative` —
+`security` reads `100` here because this fixture's three pages carry no mixed content and
+the two scoring-capable `security` gates (`mixed-content`, `https-redirect`) found
+nothing — the three `info`-only header findings (`nosniff`, `csp`, `referrer-policy`) also
+fired but cost nothing and never touch the score. See [[Security-Layer]].
+
+Three of the errors above — two `seo.canonical.missing` and one `seo.canonical.relative` —
 are `mechanical`-tier. Now preview what `omnirank fix` would do about them, against the
 same fixture, with no config and no `--write`:
 
 ```
-$ python3 -m omnirank.cli fix http://127.0.0.1:8791 --root scripts/fixtures/demo-site
-OmniRank 0.3.0 — fix preview (writes nothing)
+$ python3 -m omnirank.cli fix http://127.0.0.1:8792 --root scripts/fixtures/demo-site
+OmniRank 0.4.0 — fix preview (writes nothing)
   framework: static (confidence high; evidence: index.html)
   2 diff(s) ready · 1 finding(s) not fixable here
 
@@ -76,7 +86,7 @@ OmniRank 0.3.0 — fix preview (writes nothing)
  <script type="application/ld+json">
  {"@context": "https://schema.org", "@type": "Organization", "name": "Trailhead Coffee Roasters"}
  </script>
-+<link rel="canonical" href="http://127.0.0.1:8791/">
++<link rel="canonical" href="http://127.0.0.1:8792/">
  </head>
  <body>
  <h1>Trailhead Coffee Roasters</h1>
@@ -88,14 +98,14 @@ OmniRank 0.3.0 — fix preview (writes nothing)
  <title>About Trailhead Coffee Roasters — Our Story</title>
  <meta name="description" content="How Trailhead Coffee Roasters grew from a Portland garage into a small nationwide roastery.">
 -<link rel="canonical" href="/about/">
-+<link rel="canonical" href="http://127.0.0.1:8791/about/">
++<link rel="canonical" href="http://127.0.0.1:8792/about/">
  <meta property="og:title" content="About Trailhead Coffee Roasters">
  <meta property="og:image" content="/og-about.png">
  <script type="application/ld+json">
 
   NOT FIXED (1 finding(s) in 1 group(s))
   [1×] pricing/index.html has no </head> to insert before
-        e.g. seo.canonical.missing http://127.0.0.1:8791/pricing/
+        e.g. seo.canonical.missing http://127.0.0.1:8792/pricing/
 
   This release writes nothing; --write is not available.
 ```
@@ -122,7 +132,7 @@ No. Not with any flag, any config, or any combination of the two. Passing `--wri
 prints a refusal and exits `2` before `load_config()` or any network call runs:
 
 ```
-$ python3 -m omnirank.cli fix http://127.0.0.1:8791 --root scripts/fixtures/demo-site --write
+$ python3 -m omnirank.cli fix http://127.0.0.1:8792 --root scripts/fixtures/demo-site --write
 omnirank: omnirank fix has no --write path. This release locates findings and prints
 the diff it would apply; it writes nothing. Writing ships once the locator has been
 proven against real repositories and the write guarantees in
@@ -136,7 +146,9 @@ PACKAGE OPENS A FILE FOR WRITING." A test in the repository's own suite asserts 
 directly. File modification ships once the locator is proven against real repositories
 and the write guarantees (git-dirty checks, a journal, `omnirank undo`) described in
 `docs/research/2026-08-04-automation-architecture.md` are implemented and tested — not
-on a release number.
+on a release number. v0.4.0 deliberately spent its budget on broadening what `audit`
+covers instead: auditing better is zero-risk, and a richer audit is what earns the right
+to edit files later.
 
 ## What is fixable today, and why so little?
 
@@ -155,7 +167,7 @@ named, but declined: the correct canonical there is a *relative*
 `metadata.alternates.canonical` plus a `metadataBase` in the root layout — a two-file
 edit that is not mechanical, and the generic `<link rel="canonical">` insertion this tool
 knows how to make would be exactly wrong on that file. See
-[[Fix-Tiers-and-Applicability]] for why the other 44 ids cannot get a generator no matter
+[[Fix-Tiers-and-Applicability]] for why the other 63 ids cannot get a generator no matter
 how the generator is written — the tier ceiling caps them before code quality even
 enters the question.
 

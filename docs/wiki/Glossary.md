@@ -17,7 +17,10 @@ SEO is the practice of structuring a webpage's HTML and content so crawlers like
 Googlebot and Bingbot can find, parse and rank it — canonical tags, correctly sized title
 and description metadata, and valid structured data are all part of it. OmniRank's SEO
 layer checks `h1`, `canonical`, `title-length`, `description-length`, `og`, `hreflang`,
-`image-dims`, `schema` and five site-level cross-URL gates against a page's real HTML.
+`image-dims`, `schema`, five site-level cross-URL gates, four on-page accessibility gates
+(`image-alt`, `heading-order`, `link-text`, `lang`, new in v0.4.0), and five
+indexability-contradiction gates (also new in v0.4.0, see [[Contradictions]]) against a
+page's real HTML.
 
 ### AEO (Answer Engine Optimisation)
 
@@ -40,7 +43,7 @@ crawlers.
 SMM is publishing and maintaining a consistent brand presence across social platforms so
 entity resolvers and human audiences both recognise the same organisation everywhere it
 appears. OmniRank's config schema reserves `smm` and `sameAs` fields for this, but no SMM
-skill ships in v0.3.0 — `smm-content` and `smm-publish` are both roadmap items, targeted
+skill has shipped yet — `smm-content` and `smm-publish` are both roadmap items, targeted
 at v0.6 and v0.7 respectively.
 
 ## Engines and retrieval
@@ -214,13 +217,49 @@ calling directly with your own list of retired URLs.
 410 Gone is an HTTP status code that tells a crawler a resource was intentionally and
 permanently removed, as distinct from `404 Not Found`.
 
+## Security (new in v0.4.0)
+
+### Mixed content
+
+Mixed content is an `https://` page requesting a subresource over literal `http://`.
+OmniRank splits it by what browsers actually do about it: *active* mixed content
+(`<script>`, `<iframe>`, stylesheets) is blocked outright and reported as `error`;
+*passive* mixed content (`<img>`, favicons) is silently upgraded to `https://` first and
+reported only as `warning`, since OmniRank cannot verify the upgrade succeeded from the
+HTML alone. See [[Security-Layer]].
+
+### HSTS (HTTP Strict Transport Security)
+
+HSTS is a response header (`Strict-Transport-Security`) that tells a browser to refuse
+ever downgrading a site to plain `http://`, for a stated `max-age`. OmniRank's `hsts` gate
+reports its absence or a short `max-age` as an `info`-severity fact — never graded,
+because what counts as "long enough" is a threat-model judgement outside an SEO tool's
+scope. See [[Security-Layer]].
+
+### Content-Security-Policy (CSP)
+
+CSP is a response header or `<meta http-equiv>` tag that restricts which sources a page
+may load scripts, styles and other resources from. OmniRank's `csp` gate reports only
+total absence, and parses a present policy for exactly one thing —
+`upgrade-insecure-requests`, which suppresses the mixed-content findings — never grading
+the policy's contents. See [[Security-Layer]].
+
+### Contradiction (indexability contradiction)
+
+A contradiction, in OmniRank's v0.4.0 terminology, is a defect provable purely from a
+site's own declarations disagreeing with each other — a sitemap URL its own `robots.txt`
+disallows, a canonical pointing at a noindexed page, an `hreflang` alternate that is
+itself noindexed. Every contradiction finding is 100% precision by construction: OmniRank
+never has to trust an external source to know the two declarations conflict. See
+[[Contradictions]].
+
 ## Fix safety (new in v0.3.0)
 
 ### fixTier
 
 `fixTier` is the epistemic axis of OmniRank's fix model: what kind of information the
 correct edit requires, as a static property of a finding id — `mechanical`, `templated`,
-`drafted`, `advisory` or `infrastructure`. It is declared for all 48 finding ids in
+`drafted`, `advisory` or `infrastructure`. It is declared for all 67 finding ids in
 `scripts/py/omnirank/registry.py` and replaces the removed `autoFixable` field. See
 [[Fix-Tiers-and-Applicability]].
 
@@ -286,6 +325,7 @@ directly.
 
 - [[FAQ]] — direct answers to common questions, including several referenced above
 - [[Audit-Skill]] — the gates that check many of these terms in practice
+- [[Security-Layer]] / [[Contradictions]] — the security and contradiction terms above, in full
 - [[Fix-Tiers-and-Applicability]] — the fix-safety terms defined above, explained in full
 - [[GEO-Artifacts-Skill]] — `llms.txt`, `llms-full.txt` and `facts.json` in full detail
 - [[Research-and-Evidence]] — the published research behind the GEO discipline

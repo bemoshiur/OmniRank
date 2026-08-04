@@ -13,13 +13,13 @@ Verified directly against `schemas/report.schema.json` and
 | Field | Type | Description |
 |---|---|---|
 | `generatedAt` | string, `date-time` | When the file was written, RFC 3339 UTC |
-| `tool` | object `{name, version}` | `name` is always `"omnirank"`; `version` is the installed package version (e.g. `"0.3.0"`) |
+| `tool` | object `{name, version}` | `name` is always `"omnirank"`; `version` is the installed package version (e.g. `"0.4.0"`) |
 | `site` | string | The audited site URL |
-| `kind` | enum: `audit`, `entity`, `rank`, `citation`, `mention-gap`, `indexing`, `weekly` | Only `audit` is produced by any shipped skill in v0.3.0 |
+| `kind` | enum: `audit`, `entity`, `rank`, `citation`, `mention-gap`, `indexing`, `weekly` | Only `audit` is produced by any shipped skill |
 | `score` | object, requires `overall` | Per-layer integer score (0-100) plus `overall` |
 | `stats` | object, requires `urlsChecked`, `passed`, `failed`, `warned` | Run statistics |
 | `findings` | array of Finding objects | Every finding produced, not just what the terminal summary shows |
-| `notEvaluated` | array of NotEvaluated objects | **New in v0.2.1.** Gates that could not actually run — see below |
+| `notEvaluated` | array of NotEvaluated objects | Gates that could not actually run — see below |
 
 ### The `stats` object
 
@@ -35,14 +35,14 @@ Verified directly against `schemas/report.schema.json` and
 | Field | Type | Always present? | Description |
 |---|---|---|---|
 | `id` | string, pattern `^[a-z0-9-]+\.[a-z0-9-]+\.[a-z0-9-]+$` | yes | The stable, three-part identifier — see below |
-| `severity` | enum: `error`, `warning`, `info` | yes | See severity table below |
-| `layer` | enum: `seo`, `aeo`, `geo`, `offsite`, `smm`, `perf` | yes | See layer table below |
+| `severity` | enum: `error`, `warning`, `info` | yes | See severity table below. `info` is populated by real gates as of v0.4.0 — the four `security` header findings |
+| `layer` | enum: `seo`, `aeo`, `geo`, `offsite`, `smm`, `perf`, `security` | yes | **`security` is new in v0.4.0.** See layer table below |
 | `url` | string | yes | The URL the finding is about |
 | `gate` | string | yes | The coarser name `--fail-on` matches against (e.g. `canonical`, not `seo.canonical.missing`) |
 | `observed` | string | yes | What OmniRank actually found — the raw fact |
 | `expected` | string | yes | What the gate requires |
 | `fix` | string | yes | A concrete, specific instruction for closing the gap |
-| `fixTier` | enum: `mechanical`, `templated`, `drafted`, `advisory`, `infrastructure` | **yes, as of v0.3.0** | The epistemic axis: what kind of information the correct edit requires. A static, derived property of `id` — see [[Fix-Tiers-and-Applicability]] |
+| `fixTier` | enum: `mechanical`, `templated`, `drafted`, `advisory`, `infrastructure` | yes, since v0.3.0 | The epistemic axis: what kind of information the correct edit requires. A static, derived property of `id` — see [[Fix-Tiers-and-Applicability]] |
 | `applicability` | enum: `safe`, `unsafe`, `display-only` | only when `omnirank fix` computed it | The safety axis, per finding-instance. **Absent from a plain `omnirank audit` file**, which does no locating |
 | `autoFixable` | boolean | **Never emitted since 0.3.0** | Deprecated. Kept in the schema, and only in the schema, so files written before v0.3.0 still validate. Use `fixTier` |
 
@@ -58,9 +58,20 @@ still validates.
 | Field | Type | Description |
 |---|---|---|
 | `gate` | string | The gate that could not run |
-| `reason` | enum: `no-sitemap`, `page-unreachable`, `not-applicable`, `adapter-absent` | Closed enum — `not-applicable` and `adapter-absent` are reserved for future gates |
+| `reason` | enum: `no-sitemap`, `page-unreachable`, `not-applicable`, `adapter-absent`, `matcher-unsupported`, `budget-exceeded` | Closed enum — the last two are **new in v0.4.0**, both additive; a report written before v0.4.0 contains neither and still validates |
 | `url` | string, optional | Set for a per-page gate that could not run |
 | `site` | string, optional | Set for a site-level gate that could not run |
+
+**`matcher-unsupported` (v0.4.0)** means `seo.robots-sitemap.disallowed` fetched `robots.txt`
+successfully but refused to evaluate it: the published rules use a capability (path
+wildcards, or an `Allow`/`Disallow` pair whose paths overlap) that `urllib.robotparser` on
+this interpreter does not evaluate the way RFC 9309 specifies. This is a **runtime
+capability probe**, never a Python-version check — see [[Contradictions#why-does-this-gate-sometimes-refuse-to-answer]].
+
+**`budget-exceeded` (v0.4.0)** means a bounded probe pass — `seo.canonical-target.*`
+probing canonical targets outside the crawled set — hit its cap (`MAX_CANONICAL_PROBES =
+25` per audit) before reaching this URL. It is reported explicitly rather than silently
+dropped once the budget runs out.
 
 Populated where the tool previously stayed silent: no sitemap found (`audit_site` used to
 fall back to the homepage and describe a 1-URL audit as if it were the whole site — now
@@ -77,7 +88,7 @@ A finding's `id` is three dot-separated, lowercase, hyphen-safe segments:
 
 | Segment | Meaning | Example |
 |---|---|---|
-| `layer` | Which of `seo`/`aeo`/`geo`/`perf` produced it | `seo` |
+| `layer` | Which of `seo`/`aeo`/`geo`/`perf`/`security` produced it | `seo` |
 | `gate` | The specific check within that layer — usually, but not always, the same as `gate` | `h1` |
 | `condition` | The specific failure mode | `missing` |
 
@@ -90,7 +101,7 @@ segment" pattern:
 - **`facts.json` that fetches but fails to parse** is written as `geo.facts-json.invalid`
   — the one case where the id's middle segment keeps the gate's full name.
 
-For the complete, registry-generated list of all 48 ids currently in use — including
+For the complete, registry-generated list of all 67 ids currently in use — including
 `layer`, `gate`, `severity` and `fixTier` for every one — see [[Finding-Reference]].
 Hand-transcribing that list here would drift from the source; it is generated instead.
 
@@ -100,19 +111,21 @@ Hand-transcribing that list here would drift from the source; it is generated in
 |---|---|---|
 | `error` | 10 points | Yes — `has_failures()` only counts `severity == "error"` |
 | `warning` | 3 points | No, never |
-| `info` | 0 points | No — and no shipped gate currently emits `info` |
+| `info` | 0 points | No, never — **populated since v0.4.0** by the four `security` response-header gates (`hsts`, `nosniff`, `csp`, `referrer-policy`) and `seo.link-text.generic`. `info` findings are reported as inventory facts, not graded, and are excluded from a layer's scoring surface entirely — see [[Audit-Skill#how-is-the-score-computed]] |
 
-As of v0.2.1, each gate's contribution to its layer is additionally capped at
-`GATE_CAP = 15` before summing — see [[Audit-Skill#how-is-the-score-computed]].
+Each gate's contribution to its layer is additionally capped at `GATE_CAP = 15` before
+summing, and — as of v0.4.0 — the summed cost is then divided by the layer's own scoring
+surface rather than a flat 100. See [[Audit-Skill#how-is-the-score-computed]].
 
 ## Layer values
 
 | Layer | Used by any shipped gate today? |
 |---|---|
-| `seo` | Yes — including crawl-hygiene and site-level cross-URL findings, which both carry `layer: "seo"` |
+| `seo` | Yes — including crawl-hygiene, site-level cross-URL, and indexability-contradiction findings, all of which carry `layer: "seo"` |
 | `aeo` | Yes |
 | `geo` | Yes |
-| `perf` | **Yes, as of v0.2.0** — response time, page weight, compression, render-blocking |
+| `perf` | Yes — response time, page weight, compression, render-blocking |
+| `security` | **Yes, new in v0.4.0** — response headers (reported as `info`), mixed content, and the http→https redirect. Enters `layersRun` only once at least one page was actually fetched, same rule `aeo` and `perf` follow |
 | `offsite` | No — reserved for the roadmap `offsite-entity` skill |
 | `smm` | No — reserved for the roadmap `smm-content` / `smm-publish` skills |
 

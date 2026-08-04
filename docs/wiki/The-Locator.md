@@ -45,7 +45,7 @@ believes:
 |---|---|---|
 | `high` | An unambiguous, framework-specific marker was found | `wp-config.php`; a single-router Next.js project with a config file present |
 | `medium` | A plausible marker was found, with less certainty | A Next.js project with a router directory but no `next.config.*` |
-| `low` | The project matches, but ambiguously | **Both** `app/` and `pages/` routers present in one Next.js project — Next resolves this per route; OmniRank's v0.3.0 locator cannot |
+| `low` | The project matches, but ambiguously | **Both** `app/` and `pages/` routers present in one Next.js project — Next resolves this per route; OmniRank's locator cannot (unchanged since v0.3.0) |
 | `none` | Nothing matched, or the match was too ambiguous to act on | No framework marker found at all |
 
 Confidence propagates forward, and only ever downward: `locator.DETECTION_CEILING` maps

@@ -3,7 +3,7 @@
 This page answers direct questions about OmniRank in short declarative sentences, each
 opening with a yes or no where one applies. Topics include what OmniRank guarantees, what
 data leaves your machine, whether `omnirank fix` writes to disk, and which skills
-actually ship in version 0.3.0.
+actually ship in version 0.4.0.
 
 Verified against the source in `scripts/py/omnirank/`, `schemas/`, and `.github/CONTRIBUTING.md`.
 See [[Troubleshooting]] for exact error text and [[Audit-Skill]] / [[GEO-Artifacts-Skill]] / [[Fix-Preview]]
@@ -29,13 +29,13 @@ or `fix` code paths.
 
 ### Will OmniRank edit my files?
 
-Not automatically, ever, from the `audit` skill. `omnirank fix` locates
-each finding, prints the unified diff it would apply, and stops — **there is no `--write`
-flag**, and passing one exits `2` with an explanation, before any network call.
-File modification ships once the locator described in [[The-Locator]]
-has been proven against real repositories and the write guarantees it depends on are
-implemented and tested — not on a release number. See [[Fix-Preview]] for the full
-behaviour and a worked example of its output.
+Not automatically, ever, from the `audit` skill. `omnirank fix` locates each finding,
+prints the unified diff it would apply, and stops — **there is no `--write` flag**, and
+passing one exits `2` with an explanation, before any network call. File modification
+ships once the locator described in [[The-Locator]] has been proven against real
+repositories and the write guarantees it depends on are implemented and tested — not on a
+release number. v0.4.0 deliberately spent its budget on broadening what `audit` covers
+instead. See [[Fix-Preview]] for the full behaviour and a worked example of its output.
 
 ### Is `llms.txt` a real, established standard?
 
@@ -52,15 +52,17 @@ llms.txt convention and gives an explicit citation licence, which removes a real
 
 ### Why does my site score 0 on one layer?
 
-As of v0.2.1, each gate's contribution to its layer is capped first
-(`min(GATE_CAP, 10*errors + 3*warnings)`, `GATE_CAP = 15`), then summed and subtracted
-from 100, floored at zero. This replaced an uncapped flat cost per finding: on a real
-57-URL site, one gate failing on every page (a missing `<h1>` on every template) used to
-cost `570` points against a `100`-point layer, so `seo` and `aeo` both read `0` with no
-information left in the score. A layer still scores `0` once enough DISTINCT gates are
-broken for their capped costs to sum past 100 — seven or more independently-broken gates
-is enough on its own. Check the JSON report's `findings` array grouped by `gate` for that
-layer.
+Each gate's contribution to its layer is capped first (`min(GATE_CAP, 10*errors +
+3*warnings)`, `GATE_CAP = 15`, since v0.2.1). As of v0.4.0, those capped costs are then
+summed and divided by the layer's own scoring surface — how many distinct gates could
+move that layer's score — instead of subtracted from a flat 100. A layer now scores `0`
+only when **every one of its registered gates** is maxed, not after a fixed count of
+broken gates: `seo` ships 24 scoring gates and needs all 24 maxed to floor, while
+`security` ships only 2 (`mixed-content`, `https-redirect`) and floors much more easily.
+**Scores from before and after v0.4.0 are not directly comparable** — the old flat model
+made every gate added cheaper to saturate, and put an artificial floor under small layers.
+Check the JSON report's `findings` array grouped by `gate` for that layer, and see
+[[Audit-Skill#how-is-the-score-computed]] for the full formula.
 
 ### Does OmniRank measure Core Web Vitals?
 
@@ -91,7 +93,7 @@ See [[The-Locator]].
 No. `audit` only diagnoses — it never writes to your site's source or output. `SKILL.md`
 states this directly: "Audit only diagnoses. It never edits the site." `geo-artifacts`
 does write files, but only the three GEO artifacts it generates into the output directory
-you specify. `fix` writes nothing at all in v0.3.0.
+you specify. `fix` writes nothing at all.
 
 ### What's the difference between `audit`, `geo-artifacts`, and `fix`?
 
@@ -103,13 +105,15 @@ covers today.
 
 ### Why isn't `--fail-on <gate>` failing my build even though I see a `[FAIL]` line for it?
 
-One structural reason worth ruling out: 13 gate names can only ever produce
-warning-severity findings, and `--fail-on` only counts errors — `og`, `hreflang`,
-`image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in
-v0.2.1), plus the four site-level gates added in 0.2.0 (`duplicate-title`,
-`duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`) and three `perf`
-gates also added in 0.2.0 (`page-weight`, `compression`, `render-blocking`).
-`response-time` is the one new `perf` gate that is **not** warning-only.
+One structural reason worth ruling out: of the 42 gate names in the schema, 21 can never
+produce an error-severity finding, and `--fail-on` only counts errors. That's 16
+warning-only gates (`og`, `hreflang`, `image-dims`, `citation-licence`,
+`lastmod-inflation`, `faq`, `duplicate-title`, `duplicate-description`,
+`canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`,
+`render-blocking`, `image-alt`, `heading-order`, `schema-required`), 4 info-only gates new
+in v0.4.0 (`hsts`, `nosniff`, `csp`, `referrer-policy` — the `security` header gates,
+which can never fail a build under any circumstance, see [[Security-Layer]]), and 1 mixed
+gate (`link-text`, which only ever produces warning or info findings).
 
 As of v0.2.1, `crawl-hygiene` no longer exists as a `--fail-on` value at all — see
 [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]] for the full
@@ -139,7 +143,7 @@ reuse rights, and prints a one-line notice to stderr saying so.
 
 ### Is OmniRank on PyPI or npm?
 
-No, not as of v0.3.0. Install the Python CLI from source, or `pip install "omnirank @
+No. Install the Python CLI from source, or `pip install "omnirank @
 git+https://github.com/bemoshiur/OmniRank.git#subdirectory=scripts/py"` directly from git
 — see [[Quick-Start]]. The Node generator is likewise not published.
 
@@ -155,8 +159,25 @@ citation behaviour is under OmniRank's control.
 
 ### What Python and Node versions does OmniRank require?
 
-Python 3.11 or newer (CI tests 3.11, 3.12, and 3.13). Node 22 or newer, only if you use
-the in-repo Node GEO-artifacts generator.
+Python 3.11 or newer (CI tests 3.11, 3.12, 3.13, and 3.14). Node 22 or newer, only if you
+use the in-repo Node GEO-artifacts generator. **Which Python you run changes real
+behaviour for one gate**, `seo.robots-sitemap.disallowed` — see the next question.
+
+### Does `seo.robots-sitemap.disallowed` behave the same on every Python version?
+
+No, and this is deliberate rather than a bug. Python's own `urllib.robotparser` —
+the matcher OmniRank uses for this one gate — was rewritten for RFC 9309 compliance in
+**Python 3.14**, and part of that rewrite was backported to **3.13**, but not all of it:
+a 3.13.7 interpreter lacks wildcard support that a 3.13.14 interpreter has. On an
+affected interpreter, the matcher can silently miss a `Disallow: /*.pdf$` wildcard, or
+resolve an overlapping `Allow`/`Disallow` pair by file order instead of RFC 9309's
+longest-match rule. **OmniRank never checks `sys.version_info` to decide this** — it runs
+two small behavioural probes against the live interpreter (does it honour a wildcard,
+does it pick the longest match) and evaluates a site's robots.txt only when its actual
+rules need a capability the probe confirms this interpreter has. When they need a
+capability the probe says is missing, the gate reports `matcher-unsupported` in
+`notEvaluated` rather than risk a wrong answer. Coverage is broader on 3.14+; correctness
+is identical everywhere, because a refusal is never wrong. See [[Contradictions]].
 
 ### Where does the audit report get written, and what format is it?
 
@@ -181,11 +202,11 @@ subcommand of the same package, not a third registered skill —
 `.claude-plugin/plugin.json` declares exactly two. Six more skills —
 `aeo-onpage`, `indexing`, `offsite-entity`, `measure`, `smm-content`, `smm-publish` — are
 named in the roadmap with target versions, but none exist in the installed package as of
-v0.3.0. See [[Roadmap]] for the full shipped-versus-planned breakdown.
+v0.4.0. See [[Roadmap]] for the full shipped-versus-planned breakdown.
 
 ### Does `omnirank fix` fix everything `audit` finds?
 
-No — today it can only ever produce a diff for 4 of the 48 finding ids (the
+No — today it can only ever produce a diff for 4 of the 67 finding ids (the
 `mechanical`-tier ones), and even those only when the locator's confidence, the edit's
 blast radius, and any protected surface all land on `safe`. See
 [[Fix-Tiers-and-Applicability]] for the full model and why that's deliberate, not a gap
@@ -195,6 +216,7 @@ to be embarrassed about.
 
 - [[Troubleshooting]] — exact error text for the failures referenced above
 - [[Audit-Skill]] / [[GEO-Artifacts-Skill]] / [[Fix-Preview]] — full detail on the shipped surface
+- [[Security-Layer]] / [[Contradictions]] — the two v0.4.0 gate groups in full
 - [[Fix-Tiers-and-Applicability]] — what is and is not safe to fix, and why
 - [[Roadmap]] — what's shipped, what's planned, and target versions
 - [[Glossary]] — definitions of terms used throughout this FAQ

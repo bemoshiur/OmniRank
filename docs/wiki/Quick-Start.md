@@ -3,9 +3,9 @@
 This page takes a fresh checkout of OmniRank from zero to a first audit report in seven
 numbered steps: clone the repository, create a virtual environment, install the CLI, run
 `omnirank audit` against a live URL, read the score and findings, locate the JSON report
-OmniRank writes to disk, and preview the one mechanical fix available in 0.3.0.
+OmniRank writes to disk, and preview a mechanical fix available today.
 
-Every command below was actually run against the real repository at v0.3.0, and the
+Every command below was actually run against the real repository at v0.4.0, and the
 output shown is pasted verbatim — nothing staged, nothing cropped.
 
 ## Prerequisites
@@ -16,8 +16,8 @@ output shown is pasted verbatim — nothing staged, nothing cropped.
 | git | any recent version | Cloning the repository |
 | Node.js | 22+ | Only if you use the in-repo GEO-artifacts generator (`scripts/node`) instead of the Python crawl path — see [[GEO-Artifacts-Skill]] |
 
-OmniRank is not published to PyPI, npm, or a container registry as of v0.3.0 — it
-installs from source.
+OmniRank is not published to PyPI, npm, or a container registry — it installs from
+source.
 
 ## 1. Clone the repository
 
@@ -52,7 +52,7 @@ Confirm the install:
 
 ```
 $ python3 -m omnirank.cli --version
-omnirank 0.3.0
+omnirank 0.4.0
 ```
 
 ## 4. Run the first audit
@@ -66,55 +66,73 @@ python3 -m omnirank.cli audit https://example.com
 Real output, captured on this machine against `https://example.com`:
 
 ```
-OmniRank 0.3.0 — https://example.com
-  overall 76/100  aeo 80  geo 60  perf 100  seo 67
-  1 URLs checked · 10 findings in 10 groups
+OmniRank 0.4.0 — https://example.com
+  overall 74/100  aeo 71  geo 47  perf 100  security 67  seo 88
+  1 URLs checked · 17 findings in 17 groups
 
   ERRORS
   [1×] seo.canonical.missing — expected: one absolute self-referencing canonical
         fix: Add <link rel="canonical" href="..."> with an absolute URL.
         e.g. https://example.com/
-  [1×] seo.description.missing — expected: a meta description
+  [1×] seo.description.missing — expected: a description of 1-160 characters
         fix: Add a meta description summarising the page.
         e.g. https://example.com/
-  [1×] aeo.answer-block.missing — expected: an element matching '.answer-block'
-        fix: Add <div class="answer-block" data-speakable> with a 40-60 word plain-prose answer.
+  [1×] aeo.answer-block.missing — expected: one answer block near the top
+        fix: Add <div class="answer-block" data-speakable> with a 40-60 words plain-prose answer.
         e.g. https://example.com/
-  [1×] aeo.faq.too-few — expected: at least 3 FAQ pairs
-        fix: Add FAQs as semantic <dl>/<dt>/<dd> or <details>, mirrored by FAQPage JSON-LD.
-        e.g. https://example.com/
-  [1×] seo.schema.absent — expected: at least one application/ld+json block
+  [1×] seo.schema.absent — expected: at least one typed entity
         fix: Emit JSON-LD describing this page and cross-reference the site organisation by stable @id.
         e.g. https://example.com/
-  [1×] geo.llms.missing — expected: HTTP 200 at llms.txt
+  [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
+        fix: Publish a sitemap.xml so OmniRank -- and search engines -- can discover every page. Without one, this audit only sees the homepage.
+        e.g. https://example.com/sitemap.xml
+  [1×] security.https-redirect.missing — expected: a 3xx redirect to the https:// URL
+        fix: Redirect http:// to https:// at the origin or CDN.
+        e.g. http://example.com/
+  [1×] geo.llms.missing — expected: HTTP 200
         fix: Generate llms.txt at build time and serve it as a static file.
         e.g. https://example.com/llms.txt
-  [1×] geo.llms-full.missing — expected: HTTP 200 at llms-full.txt
+  [1×] geo.llms-full.missing — expected: HTTP 200
         fix: Generate llms-full.txt at build time and serve it as a static file.
         e.g. https://example.com/llms-full.txt
-  [1×] geo.facts.missing — expected: HTTP 200 at facts.json
+  [1×] geo.facts.missing — expected: HTTP 200
         fix: Generate facts.json at build time and serve it as a static file.
         e.g. https://example.com/facts.json
-  [1×] geo.ai-allowlist.missing — expected: robots.txt allows AI crawlers
+  [1×] geo.ai-allowlist.missing — expected: HTTP 200
         fix: Publish a robots.txt that explicitly allows AI crawlers.
         e.g. https://example.com/robots.txt
 
   WARNINGS
-  [1×] seo.og.missing — expected: og:title and og:image
+  [1×] seo.og.missing — expected: og:title and og:image present
         fix: Add the missing OpenGraph tags so social unfurls render.
         e.g. https://example.com/
+  [1×] aeo.faq.too-few — expected: >= 3
+        fix: Add FAQs as semantic <dl>/<dt>/<dd> or <details>, mirrored by FAQPage JSON-LD.
+        e.g. https://example.com/
 
+  INFO
+  [1×] security.hsts.missing — expected: a Strict-Transport-Security header
+        fix: Send Strict-Transport-Security from the origin or CDN. Reported as a fact, not a defect.
+        e.g. https://example.com/
+  ...4 more info-severity findings (3 more security header gates, 1 seo.link-text.generic)...
+
+  NOT EVALUATED (2 gate(s) across 1 target(s) — see the JSON report for the reason enum)
+    robots-sitemap, site — https://example.com  [no-sitemap]
   report: .omnirank/reports/2026-08-04-audit.json
 ```
 
 `example.com` deliberately ships nothing but a static placeholder page, so this is close
-to a worst case — real sites usually clear a handful of these on the first pass.
+to a worst case — real sites usually clear a handful of these on the first pass. The
+`security 67` score is driven entirely by `security.https-redirect.missing` — the four
+`info`-severity header findings cost nothing and never move the score, by design. See
+[[Security-Layer]].
 
 ## 5. Read the result
 
-**The score line** — `overall 76/100  aeo 80  geo 60  perf 100  seo 67` — is one score per
-layer that ran, plus an overall figure; as of 0.2.0 there are four layers, not three.
-Full formula, including the v0.2.1 per-gate cap: [[Audit-Skill#how-is-the-score-computed]].
+**The score line** — `overall 74/100  aeo 71  geo 47  perf 100  security 67  seo 88` — is
+one score per layer that ran, plus an overall figure; as of v0.4.0 there are **five**
+layers, not four — `security` is new. Full formula, including the v0.4.0 per-layer
+normalisation: [[Audit-Skill#how-is-the-score-computed]].
 
 **Each finding's three fields:**
 
