@@ -13,13 +13,13 @@ crawled set at once, not one page in isolation.
 
 ## CLI reference
 
-Verbatim `--help` output from v0.2.0 (the flags are unchanged since v0.1.1 — this release
-added gates, not CLI surface):
+Verbatim `--help` output, captured after the console summary was changed to group
+findings by id (see "Console output" below):
 
 ```
 $ python3 -m omnirank.cli audit --help
 usage: omnirank audit [-h] [--config CONFIG] [--out OUT]
-                      [--fail-on [FAIL_ON ...]]
+                      [--fail-on [FAIL_ON ...]] [--detail] [--top TOP]
                       [url]
 
 positional arguments:
@@ -32,6 +32,10 @@ options:
                         .omnirank/reports/<date>-audit.json)
   --fail-on [FAIL_ON ...]
                         Gate ids that force exit code 1. Overrides config.
+  --detail              Print every finding individually instead of the
+                        grouped summary (capped at 25, same as before v0.2.1).
+  --top TOP             Limit the grouped summary to the top N groups
+                        (default: all). Ignored with --detail.
 ```
 
 | Flag | Required | Description |
@@ -40,6 +44,23 @@ options:
 | `--config PATH` | No | Path to a validated `omnirank.config.json`. See [configuration.md](configuration.md). |
 | `--out PATH` | No | Where the JSON report is written. Default: `.omnirank/reports/<UTC-date>-audit.json`. |
 | `--fail-on [GATE ...]` | No | Zero or more **gate names** (not finding ids) that force exit code `1` when they carry an error-severity finding. |
+| `--detail` | No | Print the old, ungrouped, one-finding-per-block listing (capped at 25) instead of the grouped summary. Useful when you're debugging one URL and need the raw `observed` value for each finding. |
+| `--top N` | No | Show only the first N groups of the grouped summary (default: all groups). Groups are already ordered errors-first, then by descending count, so `--top` keeps the highest-signal issues — handy for keeping CI logs short. Ignored when `--detail` is set. |
+
+### Console output
+
+The console summary **groups findings by `id`** — never by `gate`, since several ids can
+share a gate but mean different things (see the "gate ids" note below). Each group shows
+the count, the shared `expected` value, the `fix` (identical across the group), and up to
+three example URLs with an "…and N more" tail. Groups are ordered errors before warnings,
+then by descending count within each severity, and — unlike the pre-grouping output —
+**every group is shown**; nothing is silently truncated. Only `--detail` mode keeps the
+historical 25-finding cap, because that mode is for reading every individual finding, not
+for getting an overview.
+
+The **JSON report is unaffected** by any of `--detail`/`--top`/grouping — it always
+contains every finding individually and is the machine-readable contract validated by
+`schemas/report.schema.json`.
 
 Two behaviours worth being precise about, both verified by running the CLI:
 
