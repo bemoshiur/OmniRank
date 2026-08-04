@@ -1,4 +1,3 @@
-import sys
 
 from omnirank import robots
 
@@ -68,13 +67,35 @@ def test_an_overlapping_file_is_refused_when_the_interpreter_is_order_dependent(
         assert verdict.reason == robots.UNSUPPORTED_LONGEST_MATCH
 
 
-def test_the_capability_probes_agree_with_the_interpreter_this_is_running_on():
-    # Both capabilities arrived together in the CPython 3.14 RFC 9309 rewrite.
-    # Asserted against sys.version_info as a cross-check, so a probe that silently
-    # starts returning a constant is caught rather than trusted.
-    expected = sys.version_info >= (3, 14)
-    assert robots.matcher_supports_wildcards() is expected
-    assert robots.matcher_supports_longest_match() is expected
+def test_the_capability_probes_agree_with_the_matcher_they_probe():
+    """The probes must match OBSERVED matcher behaviour, never a version number.
+
+    The intent here is to catch a probe that has silently started returning a
+    constant. An earlier version cross-checked against `sys.version_info >= (3, 14)`,
+    reasoning that both capabilities arrived in CPython's 3.14 RFC 9309 rewrite.
+    That was wrong, and CI caught it: the change was BACKPORTED, so 3.13.7 reports no
+    wildcard support while 3.13.14 reports it. Any version inference calls one of
+    those wrong — which is precisely the failure the probe exists to prevent, so
+    asserting one here would have hard-coded the bug into its own regression test.
+
+    Observing the matcher directly keeps the original intent (a stuck constant still
+    fails, because these two witnesses are computed independently of the probe) and
+    is immune to whatever CPython backports next.
+    """
+    import urllib.robotparser
+
+    def matcher_observes_wildcards() -> bool:
+        parser = urllib.robotparser.RobotFileParser()
+        parser.parse(["User-agent: *", "Disallow: /*.pdf$"])
+        return not parser.can_fetch("*", "/a/b.pdf")
+
+    def matcher_observes_longest_match() -> bool:
+        parser = urllib.robotparser.RobotFileParser()
+        parser.parse(["User-agent: *", "Disallow: /docs/", "Allow: /docs/public/"])
+        return parser.can_fetch("*", "/docs/public/x")
+
+    assert robots.matcher_supports_wildcards() is matcher_observes_wildcards()
+    assert robots.matcher_supports_longest_match() is matcher_observes_longest_match()
 
 
 def test_a_googlebot_group_overrides_the_wildcard_group():
