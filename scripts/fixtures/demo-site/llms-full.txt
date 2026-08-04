@@ -1,0 +1,7 @@
+# Trailhead Coffee Roasters — full reference
+
+Trailhead Coffee Roasters roasts and ships small-batch coffee from Portland,
+Oregon. Plans: one-time bags, a biweekly subscription, and wholesale for
+cafes ordering more than twenty pounds a month.
+
+See llms.txt for the summary and citation terms.
