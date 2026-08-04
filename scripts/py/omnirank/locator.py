@@ -203,11 +203,80 @@ def _locate_next_app_router(route: str, root: Path) -> Location:
                     confidence=_min_confidence(route_confidence, metadata_confidence))
 
 
-# Frameworks with no entry here return NOT_LOCATED. Task 6 adds the
-# static/jekyll/hugo conventions; everything else stays honestly absent until a
-# real implementation exists for it.
+# Where a static site's HTML might live. "" is the repo root; the other two are
+# the conventional build outputs a static project commits or generates.
+STATIC_ROOTS: tuple[str, ...] = ("", "public", "dist")
+
+
+def _prefixed(base: str, name: str) -> str:
+    return f"{base}/{name}" if base else name
+
+
+def _locate_by_convention(root: Path, relatives: list[str]) -> Location:
+    """Resolve only when EXACTLY ONE candidate exists.
+
+    Two candidates is a genuine ambiguity -- `pricing.html` and
+    `pricing/index.html` are both plausible owners of `/pricing` and the answer
+    depends on server configuration this tool cannot read. Picking one and
+    editing it is the failure mode the whole design exists to avoid.
+    """
+    hits = [relative for relative in relatives if (root / relative).is_file()]
+    if len(hits) != 1:
+        return NOT_LOCATED
+    relative = hits[0]
+    return Location(path=relative, line=_head_line(root / relative),
+                    confidence="exact")
+
+
+def _locate_static(route: str, root: Path) -> Location:
+    if route == "/":
+        names = ("index.html",)
+    else:
+        stem = route.lstrip("/")
+        names = (f"{stem}/index.html", f"{stem}.html")
+    return _locate_by_convention(
+        root, [_prefixed(base, name) for base in STATIC_ROOTS for name in names])
+
+
+def _locate_jekyll(route: str, root: Path) -> Location:
+    """Resolve to the SOURCE page, never `_site/`.
+
+    Patching built output is erased by the next `jekyll build`. A source page's
+    front matter is a durable edit target and serves exactly one route.
+    Following its `layout:` up to `_layouts/*.html` is a second hop whose
+    fan-out is every post on the site; that arrives with the edit engine in
+    v0.4.0, not here.
+    """
+    if route == "/":
+        names = ["index.html", "index.md", "index.markdown"]
+    else:
+        stem = route.lstrip("/")
+        names = [f"{stem}.md", f"{stem}.html", f"{stem}/index.md",
+                 f"{stem}/index.html"]
+    return _locate_by_convention(root, names)
+
+
+def _locate_hugo(route: str, root: Path) -> Location:
+    """Resolve into `content/`, Hugo's source tree, never `public/`."""
+    if route == "/":
+        names = ["content/_index.md"]
+    else:
+        stem = route.lstrip("/")
+        names = [f"content/{stem}.md", f"content/{stem}/index.md",
+                 f"content/{stem}/_index.md"]
+    return _locate_by_convention(root, names)
+
+
+# Frameworks with no entry here return NOT_LOCATED. `next-pages-router`,
+# `astro`, `nuxt`, `sveltekit`, `eleventy` and `wordpress` are deliberately
+# absent: an honest `none` demotes their findings to display-only, which is
+# correct, whereas a half-implemented resolver produces a confident diff
+# against the wrong file.
 _BY_FRAMEWORK = {
     "next-app-router": _locate_next_app_router,
+    "static": _locate_static,
+    "jekyll": _locate_jekyll,
+    "hugo": _locate_hugo,
 }
 
 
@@ -224,3 +293,36 @@ def locate(url: str, *, detection: Detection, root: str | Path) -> Location:
     ceiling = DETECTION_CEILING[detection.confidence]
     return Location(path=found.path, line=found.line,
                     confidence=_min_confidence(found.confidence, ceiling))
+
+
+_SINGLE_ROUTE_FRAMEWORKS = ("static", "jekyll", "hugo")
+
+
+def blast_radius(location: Location, *, detection: Detection,
+                 root: str | Path) -> int | None:
+    """How many routes the located file serves, or None when unprovable.
+
+    None is NOT zero and must never be read as one. `applicability.
+    blast_radius_ceiling()` treats it as the worst case, which is the guard
+    that stops a literal canonical being written into a layout serving
+    thousands of routes -- the single highest-severity failure mode in the
+    whole fixability table, and one no URL-keyed tool can even ask about.
+    """
+    if location.path is None:
+        return None
+    if detection.framework in _SINGLE_ROUTE_FRAMEWORKS:
+        return 1
+    if detection.framework != "next-app-router":
+        return None
+
+    base = Path(root)
+    app_root = _app_root(base)
+    if app_root is None:
+        return None
+    try:
+        segments = _route_segments_for(base / location.path, app_root)
+    except ValueError:
+        return None                      # located outside the app directory
+    dynamic = any(_DYNAMIC.match(segment) or _OPTIONAL_CATCH_ALL.match(segment)
+                  for segment in segments)
+    return None if dynamic else 1
