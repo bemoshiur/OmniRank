@@ -36,9 +36,16 @@ def test_warning_costs_three_points():
 
 
 def test_score_floors_at_zero():
+    # v0.2.1: under the old flat-per-finding model, 20 findings from the SAME gate
+    # were enough to floor a layer (20*10=200). Under the capped model that same
+    # gate now maxes out at GATE_CAP (15) no matter how many times it fires, so
+    # flooring requires enough DISTINCT broken gates for their capped costs to sum
+    # past 100: ceil(100/15) = 7 gates, each firing twice (10*2=20, capped to 15).
     r = Report(site="https://x.example", kind="audit")
-    for i in range(20):
-        r.add(f(url=f"https://x.example/{i}"))
+    for gate_n in range(7):
+        for i in range(2):
+            r.add(f(url=f"https://x.example/{gate_n}-{i}",
+                    id=f"seo.issue-{gate_n}.broken", gate=f"gate-{gate_n}"))
     assert r.score()["seo"] == 0
 
 
@@ -134,3 +141,36 @@ def test_layer_that_did_not_run_is_absent():
     r = Report(site="https://x.example", kind="audit")
     r.layers_run.update({"seo"})
     assert "geo" not in r.score()
+
+
+# --- v0.2.1: GATE_CAP -- one gate's contribution to its layer is capped, so a
+# systemic issue (one gate firing on every URL of a real site) cannot alone zero
+# the layer and drown out every other signal. ---
+
+def test_one_gate_firing_fifty_seven_times_does_not_zero_its_layer():
+    r = Report(site="https://x.example", kind="audit")
+    for i in range(57):
+        r.add(f(url=f"https://x.example/{i}"))          # all id=seo.h1.multiple, gate=h1
+    assert r.score()["seo"] > 0
+    assert r.score()["seo"] == 85, "100 - GATE_CAP(15), regardless of the 57 URLs"
+
+
+def test_two_distinct_gates_cost_more_than_one_gate_firing_twice_as_often():
+    one_gate_twice = Report(site="https://x.example", kind="audit")
+    one_gate_twice.add(f(url="https://x.example/a"))
+    one_gate_twice.add(f(url="https://x.example/b"))    # same id/gate as above
+
+    two_gates_once_each = Report(site="https://x.example", kind="audit")
+    two_gates_once_each.add(f(url="https://x.example/a"))
+    two_gates_once_each.add(f(url="https://x.example/b",
+                              id="seo.canonical.missing", gate="canonical"))
+
+    assert two_gates_once_each.score()["seo"] < one_gate_twice.score()["seo"], (
+        "two distinct broken gates is a worse site than one gate failing twice, "
+        "even though the total finding COUNT is identical")
+
+
+def test_a_clean_layer_that_ran_still_scores_100():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.update({"seo", "aeo", "geo"})
+    assert r.score() == {"seo": 100, "aeo": 100, "geo": 100, "overall": 100}
