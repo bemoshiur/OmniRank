@@ -132,8 +132,14 @@ def test_wordpress(tmp_path):
 
 
 def test_plain_html_is_static(tmp_path):
+    # S4: `static` is now `high`, not `medium` -- by the time this detector
+    # runs (last in `_DETECTORS`) every framework-specific marker has already
+    # failed to match, so `index.html`'s presence is as strong a signal as any
+    # other framework's single named config file gets. See `_static`'s
+    # docstring for why this does not weaken the locator's own per-route
+    # ambiguity guard.
     found = detect(repo(tmp_path, {"index.html": "<html></html>"}))
-    assert (found.framework, found.confidence) == ("static", "medium")
+    assert (found.framework, found.confidence) == ("static", "high")
 
 
 def test_static_found_in_a_build_directory(tmp_path):

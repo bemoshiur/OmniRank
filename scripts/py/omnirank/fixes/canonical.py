@@ -18,8 +18,8 @@ from ..html import find_rel
 from ..locator import Location
 from ..report import Finding
 from .base import (
-    TSX_DEFERRED,
     FixOutcome,
+    deferred_reason,
     is_html,
     link_close,
     newline_style,
@@ -37,6 +37,10 @@ _CANONICAL_TAG = re.compile(
 _HREF_VALUE = re.compile(r"""(\bhref\s*=\s*)(["'])(.*?)\2""",
                          re.IGNORECASE | re.DOTALL)
 _HEAD_CLOSE = re.compile(r"</head\s*>", re.IGNORECASE)
+# Comments are invisible to _CANONICAL_TAG's raw-text search but not to
+# BeautifulSoup, which never turns a <!-- ... --> body into a Tag at all: see
+# `_live_canonical_match` below.
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def _load(finding: Finding, location: Location, root: Path):
@@ -45,7 +49,7 @@ def _load(finding: Finding, location: Location, root: Path):
         return None, outcome(finding, location, reason="no source file was located")
     path = root / location.path
     if not is_html(path):
-        return None, outcome(finding, location, reason=TSX_DEFERRED)
+        return None, outcome(finding, location, reason=deferred_reason(path))
     text = read_text(path)
     if text is None:
         return None, outcome(finding, location,
@@ -57,9 +61,32 @@ def _canonical_tag(soup: BeautifulSoup):
     return find_rel(soup, "link", "canonical")
 
 
+def _live_canonical_match(text: str) -> re.Match | None:
+    """The first `<link rel=canonical>` match NOT sitting inside an HTML comment.
+
+    `_canonical_tag` (BeautifulSoup) and `_CANONICAL_TAG` (this regex) must
+    agree on which tag is "the" canonical tag, or the parser can decide one
+    thing while the regex-based splice edits another. BeautifulSoup already
+    gets this right for free: a commented-out `<!-- <link rel="canonical" ...>
+    -->` is parsed as a Comment node, never a Tag, so it is invisible to
+    `_canonical_tag`. The regex has no such awareness -- it matches textually,
+    comment or not -- so a decoy canonical sitting in a comment BEFORE the real
+    one used to be "the first canonical tag" to the regex while BeautifulSoup
+    correctly ignored it, and the tool edited the comment, left the real tag
+    untouched, and reported success. Filtering out any match whose start falls
+    inside a `<!-- ... -->` span makes the two agree.
+    """
+    comments = [(m.start(), m.end()) for m in _HTML_COMMENT.finditer(text)]
+    for match in _CANONICAL_TAG.finditer(text):
+        if not any(start <= match.start() < end for start, end in comments):
+            return match
+    return None
+
+
 def _replace_href(text: str, new_href: str) -> str | None:
-    """Splice a new href into the first canonical tag. None if it cannot be found."""
-    tag = _CANONICAL_TAG.search(text)
+    """Splice a new href into the first LIVE canonical tag. None if it cannot
+    be found."""
+    tag = _live_canonical_match(text)
     if tag is None:
         return None
     inner = _HREF_VALUE.search(tag.group(0))

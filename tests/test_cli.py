@@ -367,6 +367,33 @@ def test_fix_prints_a_diff_and_exits_one(tmp_path, capsys):
     assert "writes nothing" in out.lower()
 
 
+def static_repo(tmp_path: Path) -> Path:
+    """A BARE static site: just index.html, no framework markers at all.
+
+    S4: `static` detection is now `high` confidence (framework.py::_static),
+    so this -- the plain-HTML case users try first -- can finally reach
+    `applicability == "safe"` and produce a diff. Through v0.3.0, `_static`
+    was hard-coded `medium`, which capped `locate()` at `inferred` and
+    `inferred` capped applicability at `unsafe` -- see `fixable_repo`'s own
+    docstring above, which is why THAT fixture uses Jekyll instead of a bare
+    index.html.
+    """
+    (tmp_path / "index.html").write_text(FIXABLE_PAGE)
+    return tmp_path
+
+
+@respx.mock
+def test_fix_now_reaches_a_bare_static_site_after_the_S4_confidence_fix(tmp_path, capsys):
+    mock_fixable_site()
+    code = main(["fix", SITE, "--root", str(static_repo(tmp_path))])
+    out = capsys.readouterr().out
+    assert code == 1, out
+    assert "framework: static" in out
+    assert "confidence high" in out
+    assert "--- a/index.html" in out
+    assert '+    <link rel="canonical" href="https://x.example/">' in out
+
+
 @respx.mock
 def test_fix_exits_zero_when_there_is_nothing_to_fix(tmp_path, capsys):
     mock_site()                       # the clean fixture already self-canonicalises

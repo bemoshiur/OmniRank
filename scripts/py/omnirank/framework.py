@@ -175,10 +175,34 @@ def _eleventy(root: Path) -> Detection | None:
 
 
 def _static(root: Path) -> Detection | None:
+    """`static` is the last detector tried (see `_DETECTORS` below): by the
+    time this runs, every framework-specific marker has already failed to
+    match, so an `index.html` at the repo root or a conventional build output
+    is as strong a signal as this module can get for "plain HTML, no
+    framework" -- `high`, the same confidence a single named config file
+    earns every other framework here (`astro.config.mjs`, `hugo.toml`, a
+    `wp-config.php`).
+
+    This was `medium` through v0.3.0, which -- via DETECTION_CEILING in
+    locator.py -- capped every static-site locate() at `inferred`, and
+    CONFIDENCE_CEILING caps `inferred` at `unsafe`. A bare static site,
+    the plain-HTML case users try first, could therefore NEVER reach
+    `applicability == "safe"` and `omnirank fix` could never emit a diff for
+    it, despite `_locate_static` and `canonical.missing` being fully
+    implemented and tested. Raising this to `high` does not weaken the
+    genuine ambiguity guard: `_locate_by_convention` in locator.py already
+    returns NOT_LOCATED (confidence `none`) whenever more than one on-disk
+    file could serve the SAME route (e.g. both `pricing.html` and
+    `pricing/index.html` exist) -- a per-route check that is completely
+    independent of this per-repo detection confidence and is unaffected by
+    it either way. The two axes stay orthogonal on purpose: this confidence
+    says "how sure are we this project has no framework", not "how sure are
+    we about any one route", which is what the locator's own guard is for.
+    """
     for base in _STATIC_ROOTS:
         relative = f"{base}/index.html" if base else "index.html"
         if (root / relative).is_file():
-            return Detection("static", "medium", (relative,))
+            return Detection("static", "high", (relative,))
     return None
 
 
