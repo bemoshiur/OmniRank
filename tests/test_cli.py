@@ -430,3 +430,100 @@ def test_fix_without_a_url_or_config_exits_two():
 
 def test_fix_with_a_missing_config_exits_two(tmp_path):
     assert main(["fix", "--config", str(tmp_path / "nope.json")]) == 2
+
+
+# --- S1: `omnirank fix`'s NOT FIXED section, grouped like audit's summary ----
+#
+# A real run against danluu.com printed 293 lines: 142 entries with one
+# identical reason string, one line each. `audit` solved exactly this problem
+# in v0.2.1 (`_group_findings`, tested above); the same grouping now applies to
+# fix's "NOT FIXED" section.
+
+from omnirank.cli import _format_fix                    # noqa: E402
+from omnirank.fixes.base import FixOutcome               # noqa: E402
+from omnirank.framework import Detection as _Detection   # noqa: E402
+
+_FIX_DETECTION = _Detection("jekyll", "high", ("_config.yml", "_layouts"))
+
+
+def _skip(**kw) -> FixOutcome:
+    base = dict(finding_id="seo.canonical.missing", url="https://x.example/",
+                fix_tier="mechanical", applicability="unsafe", path="index.html",
+                diff=None, reason="the file already declares a rel=canonical")
+    base.update(kw)
+    return FixOutcome(**base)
+
+
+def _fixed(**kw) -> FixOutcome:
+    base = dict(finding_id="seo.canonical.missing", url="https://x.example/",
+                fix_tier="mechanical", applicability="safe", path="index.html",
+                diff="--- a/index.html\n+++ b/index.html\n", reason=None)
+    base.update(kw)
+    return FixOutcome(**base)
+
+
+def test_not_fixed_groups_by_identical_reason_shows_a_single_line_with_count():
+    outcomes = [_skip(url=f"https://x.example/{i}") for i in range(5)]
+    out = _format_fix(_FIX_DETECTION, outcomes)
+    assert out.count("the file already declares a rel=canonical") == 1
+    assert "[5×]" in out
+
+
+def test_not_fixed_example_urls_capped_at_three_with_accurate_more_count():
+    outcomes = [_skip(url=f"https://x.example/page{i}") for i in range(5)]
+    out = _format_fix(_FIX_DETECTION, outcomes)
+    assert "https://x.example/page0" in out
+    assert "https://x.example/page1" in out
+    assert "https://x.example/page2" in out
+    assert "https://x.example/page3" not in out
+    assert "and 2 more" in out
+
+
+def test_not_fixed_groups_ordered_by_descending_count():
+    outcomes = (
+        [_skip(url=f"https://x.example/a{i}", reason="reason A") for i in range(2)]
+        + [_skip(url=f"https://x.example/b{i}", reason="reason B") for i in range(5)]
+    )
+    out = _format_fix(_FIX_DETECTION, outcomes)
+    assert out.index("reason B") < out.index("reason A")
+
+
+def test_not_fixed_top_limits_number_of_groups_shown():
+    outcomes = [_skip(url=f"https://x.example/{i}", reason=f"reason {i}")
+                for i in range(8)]
+    out = _format_fix(_FIX_DETECTION, outcomes, top=3)
+    assert out.count("×]") == 3
+    assert "5 more group" in out
+
+
+def test_not_fixed_without_top_shows_every_group():
+    outcomes = [_skip(url=f"https://x.example/{i}", reason=f"reason {i}")
+                for i in range(8)]
+    out = _format_fix(_FIX_DETECTION, outcomes, top=None)
+    assert out.count("×]") == 8
+    assert "more group" not in out
+
+
+def test_fixed_diffs_are_unaffected_by_not_fixed_grouping():
+    out = _format_fix(_FIX_DETECTION, [_fixed()])
+    assert "--- a/index.html" in out
+    assert "NOT FIXED" not in out
+
+
+def test_not_fixed_section_absent_when_nothing_was_skipped():
+    out = _format_fix(_FIX_DETECTION, [_fixed()])
+    assert "NOT FIXED" not in out
+
+
+@respx.mock
+def test_fix_top_flag_is_accepted_and_does_not_change_exit_code(tmp_path):
+    mock_fixable_site()
+    assert main(["fix", SITE, "--root", str(tmp_path), "--top", "1"]) == 0
+
+
+@respx.mock
+def test_fix_top_flag_is_ignored_by_the_json_output(tmp_path, capsys):
+    mock_fixable_site()
+    main(["fix", SITE, "--root", str(tmp_path), "--json", "--top", "1"])
+    payload = json.loads(capsys.readouterr().out)
+    assert "skipped" in payload

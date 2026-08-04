@@ -171,7 +171,41 @@ def fix_plan(config: Config, root: str) -> tuple[Detection, list[FixOutcome]]:
     return detection, outcomes
 
 
-def _format_fix(detection: Detection, outcomes: list[FixOutcome]) -> str:
+def _group_skipped(outcomes: list[FixOutcome]) -> list[dict]:
+    """Collapse NOT-FIXED outcomes that share an identical reason into one group.
+
+    audit's console summary solved the identical problem in v0.2.1 (see
+    `_group_findings` above): a real run against a large site can print the
+    same reason string dozens of times, once per URL, which reads as noise --
+    a danluu.com-sized run printed 293 lines, 142 of them one repeated reason.
+    """
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for o in outcomes:
+        g = groups.get(o.reason)
+        if g is None:
+            g = {"reason": o.reason, "outcomes": []}
+            groups[o.reason] = g
+            order.append(o.reason)
+        g["outcomes"].append(o)
+    ordered = [groups[key] for key in order]
+    ordered.sort(key=lambda g: -len(g["outcomes"]))
+    return ordered
+
+
+def _format_skipped_group(g: dict) -> list[str]:
+    entries = g["outcomes"]
+    examples = entries[:MAX_EXAMPLE_URLS]
+    remainder = len(entries) - len(examples)
+    example_line = "        e.g. " + ", ".join(
+        f"{o.finding_id} {o.url}" for o in examples)
+    if remainder > 0:
+        example_line += f", …and {remainder} more"
+    return [f"  [{len(entries)}×] {g['reason']}", example_line]
+
+
+def _format_fix(detection: Detection, outcomes: list[FixOutcome], *,
+                top: int | None = None) -> str:
     fixed = [o for o in outcomes if o.fixed]
     skipped = [o for o in outcomes if not o.fixed]
     lines = [
@@ -184,12 +218,16 @@ def _format_fix(detection: Detection, outcomes: list[FixOutcome]) -> str:
         lines.append("")
         lines.append(outcome.diff.rstrip("\n"))
     if skipped:
+        groups = _group_skipped(skipped)
         lines.append("")
-        lines.append("  NOT FIXED")
-        for outcome in skipped:
-            where = outcome.path or "no source file located"
-            lines.append(f"    {outcome.finding_id}  {outcome.url}")
-            lines.append(f"        {where} — {outcome.reason}")
+        lines.append(f"  NOT FIXED ({len(skipped)} finding(s) in {len(groups)} group(s))")
+        shown = groups[:top] if top is not None else groups
+        for g in shown:
+            lines.extend(_format_skipped_group(g))
+        hidden = len(groups) - len(shown)
+        if hidden > 0:
+            lines.append("")
+            lines.append(f"  …and {hidden} more groups in the JSON report")
     lines.append("")
     lines.append(f"  {NOTHING_WRITTEN}")
     return "\n".join(lines)
@@ -243,6 +281,9 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="Repository root to locate findings in (default: .)")
     fix.add_argument("--json", action="store_true",
                      help="Emit the fix plan as JSON instead of a unified diff")
+    fix.add_argument("--top", type=int, default=None,
+                     help="Limit the grouped NOT FIXED summary to the top N "
+                          "groups (default: all). Ignored with --json.")
     fix.add_argument("--write", action="store_true",
                      help="Not available in 0.3.0: exits 2 with an explanation. "
                           "File modification arrives in v0.4.0.")
@@ -298,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps(_fix_json(config, detection, outcomes), indent=2))
         else:
-            print(_format_fix(detection, outcomes))
+            print(_format_fix(detection, outcomes, top=args.top))
         # Exit 1 when a diff exists so CI can gate on "there is an outstanding
         # mechanical fix". This is NOT audit's exit 1 (a failOn gate tripped) --
         # the two subcommands answer different questions.
