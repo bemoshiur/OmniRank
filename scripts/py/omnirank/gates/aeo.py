@@ -49,12 +49,25 @@ def _answer_block(soup: BeautifulSoup, url: str, selector: str,
 
 
 def _faq(soup: BeautifulSoup, url: str) -> list[Finding]:
-    pairs = len(soup.find_all("dt")) or len(soup.find_all("details"))
+    # Summed, not `or`-ed: a <dt> is never itself a <details> element, so the two
+    # selectors can never double-count the same pair -- each match is a genuinely
+    # distinct FAQ pair. The old `len(dt) or len(details)` short-circuited on any
+    # non-zero <dt> count, so a page with 2 <dt> (maybe an unrelated glossary
+    # elsewhere) plus 20 real <details>-based FAQs reported "2 FAQ pairs" and
+    # demanded more, ignoring the 20 that were already there. Summing also covers a
+    # site mid-migration between the two markup styles without undercounting either.
+    pairs = len(soup.find_all("dt")) + len(soup.find_all("details"))
     if pairs < MIN_FAQS:
-        return [_f("aeo.faq.too-few", "faq", url, "error",
+        # Warning, not error: demanding 3+ FAQs on every page -- pricing pages,
+        # about pages, 404s -- is not defensible advice, and treating it as a
+        # build-failing error meant one real site's pricing/about/legal pages
+        # alone contributed 57 error findings for a check that doesn't apply to
+        # most of them.
+        return [_f("aeo.faq.too-few", "faq", url, "warning",
                    f"{pairs} FAQ pairs", f">= {MIN_FAQS}",
                    "Add FAQs as semantic <dl>/<dt>/<dd> or <details>, mirrored by "
-                   "FAQPage JSON-LD.")]
+                   "FAQPage JSON-LD. Skip this on pages where an FAQ section "
+                   "genuinely doesn't belong (pricing, about, legal, 404).")]
     return []
 
 
