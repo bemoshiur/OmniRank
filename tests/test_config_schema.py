@@ -157,3 +157,9 @@ def test_the_contradiction_gates_are_accepted_in_fail_on():
     cfg = minimal()
     cfg["audit"] = {"failOn": ["robots-sitemap"]}
     assert list(validator().iter_errors(cfg)) == []
+
+
+def test_canonical_target_is_accepted_in_fail_on():
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ["canonical-target"]}
+    assert list(validator().iter_errors(cfg)) == []

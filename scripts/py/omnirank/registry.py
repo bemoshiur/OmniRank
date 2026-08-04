@@ -156,6 +156,17 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     # Exactly parallel to seo.noindex.in-sitemap.
     _r("seo.robots-sitemap.disallowed", "advisory", "error", "seo",
        "robots-sitemap"),
+    # `advisory` for both errors: remove the noindex / restore the target, or
+    # repoint the canonical -- two opposite correct answers, owner's call.
+    _r("seo.canonical-target.noindexed", "advisory", "error", "seo",
+       "canonical-target"),
+    _r("seo.canonical-target.not-found", "advisory", "error", "seo",
+       "canonical-target"),
+    # `templated`, deliberately NOT `mechanical`: the redirect destination comes
+    # from a probe response, not from data already in the finding, and this release
+    # ships no new fix generator (see test_generators_cover_exactly_the_mechanical_tier).
+    _r("seo.canonical-target.redirects", "templated", "warning", "seo",
+       "canonical-target"),
 )
 
 REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}

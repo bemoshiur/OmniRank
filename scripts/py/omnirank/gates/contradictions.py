@@ -24,10 +24,20 @@ from __future__ import annotations
 import httpx
 
 from .. import robots
-from ..fetch import fetch
+from ..fetch import Fetched, fetch
+from ..page import PageData
 from ..report import Finding, NotEvaluated
+from . import site
 
 GATE_ROBOTS_SITEMAP = "robots-sitemap"
+GATE_CANONICAL_TARGET = "canonical-target"
+
+# How many canonical targets outside the crawled set OmniRank will fetch in one
+# audit. A cap rather than an unbounded pass: a 200-page site whose every canonical
+# points at an uncrawled URL would otherwise double the audit's request count
+# without warning. Targets past the cap are reported as budget-exceeded, never
+# skipped silently.
+MAX_CANONICAL_PROBES = 25
 
 _MATCHER_LIMITATION = {
     robots.UNSUPPORTED_WILDCARDS:
@@ -100,3 +110,111 @@ def matcher_limitation(reason: str) -> str:
             "(fixed in Python 3.14). OmniRank refuses to answer rather than report "
             "a result it knows may be wrong. Re-run on Python 3.14 or later for "
             "full coverage.")
+
+
+def _canonical_pairs(pages: list[PageData]) -> list[tuple[PageData, str, str]]:
+    """(page, absolute target, target key) for every page with a foreign canonical.
+
+    Self-canonicals are dropped: a page canonicalising to itself contradicts
+    nothing, even when it is noindexed -- that is a coherent "exclude this page"
+    configuration, and seo.noindex.in-sitemap owns the sitemap half of it.
+    """
+    pairs: list[tuple[PageData, str, str]] = []
+    for page in pages:
+        target = site.canonical_target(page)
+        if not target:
+            continue                                  # the per-URL gate's problem
+        key = site.canonical_key(target)
+        if key == site.canonical_key(page.url):
+            continue                                  # self-canonical, correct
+        pairs.append((page, target, key))
+    return pairs
+
+
+def _noindexed(page: PageData, target: str) -> Finding:
+    return _f("seo.canonical-target.noindexed", GATE_CANONICAL_TARGET, page.url,
+              "error",
+              f"canonical points to {target}, which carries a noindex directive",
+              "a canonical pointing at an indexable page",
+              f"Remove the noindex on {target}, or point this page's canonical "
+              "somewhere indexable. Naming a page engines are forbidden to index as "
+              "the canonical version of this one discards this page's signals "
+              "without transferring them anywhere: both URLs leave the index.")
+
+
+def check_canonical_targets(
+    client: httpx.Client, pages: list[PageData],
+) -> tuple[list[Finding], list[NotEvaluated]]:
+    """Canonicals whose target is noindexed, redirects, or does not exist.
+
+    Targets already in the crawled set are judged from the PageData already held --
+    no second fetch. Targets outside it are probed once each, deduplicated, up to
+    MAX_CANONICAL_PROBES; past that they are reported as budget-exceeded. Nothing
+    is ever judged from a URL OmniRank did not actually see.
+
+    A 5xx or transport failure on a probe is `page-unreachable`, not `.not-found`:
+    a transient origin error is not a missing page, and calling it one would be a
+    guess dressed as a finding.
+    """
+    crawled = {site.canonical_key(p.url): p for p in pages}
+    findings: list[Finding] = []
+    not_evaluated: list[NotEvaluated] = []
+
+    # target key -> the outcome of probing it, so N pages sharing one broken target
+    # cost one request and still each get told.
+    probed: dict[str, Fetched | None] = {}
+    budget = MAX_CANONICAL_PROBES
+
+    for page, target, key in _canonical_pairs(pages):
+        known = crawled.get(key)
+        if known is not None:
+            # Already fetched and 200 by construction (unreachable URLs never
+            # become PageData), so only the noindex question remains.
+            if site.is_noindex(known):
+                findings.append(_noindexed(page, target))
+            continue
+
+        if key not in probed:
+            if budget <= 0:
+                probed[key] = None
+                not_evaluated.append(NotEvaluated(
+                    gate=GATE_CANONICAL_TARGET, url=target, reason="budget-exceeded"))
+            else:
+                budget -= 1
+                probed[key] = fetch(client, target)
+
+        result = probed[key]
+        if result is None:
+            continue                                  # already recorded as unevaluated
+
+        if result.is_redirect:
+            location = (result.headers.get("location", "") or "").strip() or "(no Location)"
+            findings.append(_f(
+                "seo.canonical-target.redirects", GATE_CANONICAL_TARGET, page.url,
+                "warning",
+                f"canonical points to {target}, which returns HTTP {result.status}",
+                "a canonical pointing at a URL that resolves 200",
+                f"Point this page's canonical straight at {location}. A canonical "
+                "that redirects makes engines resolve one more hop than they need "
+                "to, and a stale canonical is a symptom of a URL change the rest of "
+                "the markup has not caught up with."))
+        elif result.status in (404, 410):
+            findings.append(_f(
+                "seo.canonical-target.not-found", GATE_CANONICAL_TARGET, page.url,
+                "error",
+                f"canonical points to {target}, which returns HTTP {result.status}",
+                "a canonical pointing at a URL that resolves 200",
+                f"Restore {target}, or point this page's canonical at a URL that "
+                "exists. Nominating a missing page as the canonical version of this "
+                "one asks engines to index a URL that is not there, so this page's "
+                "signals go nowhere."))
+        elif result.ok:
+            if site.is_noindex(PageData.from_fetched(result)):
+                findings.append(_noindexed(page, target))
+        else:
+            # 5xx, 401, 403, or a transport failure (status 0). None of these means
+            # "gone", and OmniRank does not guess which one it is.
+            not_evaluated.append(NotEvaluated(
+                gate=GATE_CANONICAL_TARGET, url=target, reason="page-unreachable"))
+
+    return findings, not_evaluated
