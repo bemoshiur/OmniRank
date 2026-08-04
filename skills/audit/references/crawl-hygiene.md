@@ -3,14 +3,16 @@
 **Standing rule: treat a 404 as something Search Console should never detect.** Every
 removed or unknown URL must resolve to a live, topically relevant page.
 
-**Scope note:** a plain `omnirank audit <url>` run automatically evaluates only the
-`lastmod` inflation check below against the site's sitemap. The removed-URL and
-sitemap-health policies in this document are enforced by `hygiene.check_removed()` and
-`hygiene.check_sitemap()`, which are real, tested gates but are not yet wired into the
-automatic CLI pipeline — they take an explicit list of URLs to check and are invoked
-directly (e.g. from a script, or a future CLI flag). Apply this document's policy table
-by hand when reviewing 404s, redirects, and sitemap entries; do not assume a bare audit
-run already checked them.
+**Scope note (as of v0.2.1):** a plain `omnirank audit <url>` run automatically evaluates
+the `lastmod` inflation check and the sitemap-health policy below (`hygiene.check_sitemap()`
+is wired into `audit_site()`, checked against sitemap URLs not already confirmed reachable
+during the crawl). The removed-URL policy (404/5xx handling above) is still enforced only
+by `hygiene.check_removed()`, which is a real, tested function but is not called
+automatically — it needs an explicit list of URLs your site used to serve, and no config
+field supplies that list. There is also no longer a `crawl-hygiene` `--fail-on` gate name;
+it was removed from `omnirank.config.schema.json` in v0.2.1 since it could never actually
+fire. Call `check_removed()` directly (e.g. from a script) with your own retired-URL list,
+or apply this document's 404/5xx policy table by hand.
 
 ## Status policy
 

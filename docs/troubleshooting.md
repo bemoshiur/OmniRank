@@ -148,61 +148,84 @@ Exit code `1`. Read the finding lines above `failOn gates:` — every `[FAIL]` l
 Apply the `fix` text for the flagged gate(s) and re-run.
 
 If a gate you listed in `--fail-on` never seems to go red no matter what you do, check
-whether it is one of the 12 gates that only ever produce warning-severity findings
-(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`,
-`duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`,
-`page-weight`, `compression`, `render-blocking`) or whether it is `crawl-hygiene`, the
-one gate whose dedicated check is not wired into the automatic pipeline. `sitemap-health`
-looks like it belongs in that last group too — its own dedicated check is equally
-unwired — but it is not actually inert: an unreachable target is reported as an error
-under `gate: "sitemap-health"` through a different code path, so it can trigger exit code
-`1`. See
+whether it is one of the 13 gates that only ever produce warning-severity findings
+(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq`
+(downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`,
+`canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`,
+`render-blocking`). `crawl-hygiene` no longer exists as a `--fail-on` gate name at all as
+of v0.2.1 — it was removed from the schema because its dedicated check needs a
+removed-URL list no config field supplies, so it could never trigger exit code `1`.
+`sitemap-health` is not inert: an unreachable target is reported as an error under `gate:
+"sitemap-health"`, and as of v0.2.1 `hygiene.check_sitemap()` is also wired in,
+distinguishing a redirecting sitemap entry (warning) from a genuinely dead one (error).
+See
 [ci-integration.md](ci-integration.md#choosing---fail-on-gates--and-why-gate-on-everything-is-a-trap)
 for the full breakdown of which gate names can actually trigger exit code `1`.
 
 ## No sitemap found
 
-If `sitemap.xml` returns anything other than 200, `omnirank` silently falls back to
-auditing just the site root rather than failing — verified against `example.com`, which
-has no sitemap:
+If `sitemap.xml` returns anything other than 200, `omnirank` falls back to auditing just
+the site root rather than failing — but as of v0.2.1 this is no longer silent: it emits
+`seo.sitemap.missing` (error, gate `sitemap-health`) and a `notEvaluated` entry (reason
+`no-sitemap`) recording that the site-level gates could not run meaningfully. Verified
+against `example.com`, which has no sitemap:
 
 ```
 $ curl -s -o /dev/null -w "%{http_code}\n" https://example.com/sitemap.xml
 404
 $ python3 -m omnirank.cli audit https://example.com
-OmniRank 0.2.0 — https://example.com
-  overall 76/100  aeo 80  geo 60  perf 100  seo 67
-  1 URLs checked, 10 findings
+OmniRank 0.2.1 — https://example.com
+  overall 76/100  aeo 87  geo 60  perf 100  seo 57
+  1 URLs checked · 11 findings in 11 groups
+
+  ERRORS
+  [1×] seo.canonical.missing — expected: one absolute self-referencing canonical
+        ...
+  [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
+        fix: Publish a sitemap.xml so OmniRank -- and search engines -- can discover every page. Without one, this audit only sees the homepage.
+        e.g. https://example.com/sitemap.xml
   ...
+
+  NOT EVALUATED (1 gate(s) across 1 target(s) — see the JSON report for the reason enum)
+    site — https://example.com  [no-sitemap]
 ```
 
 `1 URLs checked` confirms only the root page was audited — `read_sitemap()` returns an
-empty list on any non-2xx status, and `_discover()` falls back to `[config.site_url +
-"/"]` when that list is empty. This is not an error condition and produces no finding
-about the missing sitemap itself; if you expect a sitemap to exist and are seeing only 1
-URL checked, verify `sitemap.xml` is actually reachable at your site root
-(`curl -I https://your-site/sitemap.xml`).
+empty list on any non-2xx status, and `audit_site()` falls back to `[config.site_url +
+"/"]` when that list is empty. If you expect a sitemap to exist and are seeing only 1 URL
+checked plus `seo.sitemap.missing`, verify `sitemap.xml` is actually reachable at your
+site root (`curl -I https://your-site/sitemap.xml`).
 
 ## Network timeouts / unreachable hosts
 
 `fetch()` uses a 15-second `httpx` client timeout (`make_client()`'s default) and there is
 currently no `--timeout` CLI flag to change it. Any network failure — DNS resolution
 failure, connection refused, or a timeout — is caught and reported as `status: 0`, with
-the underlying exception's message as the finding's `observed` text. Reproduced against a
-non-existent domain:
+the underlying exception's message as the finding's `observed` text. As of v0.2.1 the
+per-page gates that could not run for an unreachable URL (`seo`, `aeo`, `perf`) are also
+recorded in `notEvaluated` (reason `page-unreachable`), and a short "NOT EVALUATED"
+section prints in the console. Reproduced against a non-existent domain:
 
 ```
 $ python3 -m omnirank.cli audit https://this-domain-does-not-exist.invalid
-OmniRank 0.2.0 — https://this-domain-does-not-exist.invalid
-  overall 87/100  aeo 100  geo 60  perf 100  seo 90
-  1 URLs checked, 5 findings
-  [FAIL] seo.page.unreachable  https://this-domain-does-not-exist.invalid/
-         observed: HTTP 0
-         fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
-  [FAIL] geo.llms.missing  ...
-  [FAIL] geo.llms-full.missing  ...
-  [FAIL] geo.facts.missing  ...
-  [FAIL] geo.ai-allowlist.missing  ...
+OmniRank 0.2.1 — https://this-domain-does-not-exist.invalid
+  overall 72/100  geo 60  seo 85
+  1 URLs checked · 6 findings in 6 groups
+
+  ERRORS
+  [1×] seo.page.unreachable — expected: HTTP 200
+        fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
+        e.g. https://this-domain-does-not-exist.invalid/
+  [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
+        ...
+  [1×] geo.llms.missing  ...
+  [1×] geo.llms-full.missing  ...
+  [1×] geo.facts.missing  ...
+  [1×] geo.ai-allowlist.missing  ...
+
+  NOT EVALUATED (4 gate(s) across 2 target(s) — see the JSON report for the reason enum)
+    site — https://this-domain-does-not-exist.invalid  [no-sitemap]
+    aeo, perf, seo — https://this-domain-does-not-exist.invalid/  [page-unreachable]
 ```
 
 `HTTP 0` is the tell — it means the request never got an HTTP response at all (DNS,

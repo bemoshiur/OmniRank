@@ -149,9 +149,14 @@ Exit code `1`. Read the finding lines above `failOn gates:` — every `[FAIL]` l
 the `fix` text for the flagged gate(s) and re-run.
 
 If a gate you listed in `--fail-on` never seems to go red no matter what you do, check
-whether it is one of the five gates that only ever produce warning-severity findings
-(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`) or one of the
-two gates not wired into the automatic pipeline (`crawl-hygiene`, `sitemap-health`) — see
+whether it is one of the 13 gates that only ever produce warning-severity findings
+(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq`, and
+several site-level and `perf` gates) — or whether you listed `crawl-hygiene`, which no
+longer exists as a `--fail-on` gate name at all as of v0.2.1 (its only source,
+`hygiene.check_removed()`, needs an explicit removed-URL list no config field supplies,
+so it was removed from the schema rather than left permanently inert). `sitemap-health`
+is not in either bucket: it is wired into the automatic pipeline via `_collect()`'s
+unreachable-target check and, as of v0.2.1, `hygiene.check_sitemap()` too — see
 [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]] for the full breakdown.
 
 ## No sitemap found

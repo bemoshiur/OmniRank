@@ -6,6 +6,58 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-04
+
+"Stop the silent passes." OmniRank's stated promise is that it never fabricates and
+never reports a pass or fail for a gate it could not actually run. This release closes
+every place that promise was actually broken, confirmed by executing the real code
+against a real 57-URL site.
+
+### Fixed
+
+- Five confirmed false positives: `seo.py` and `jsonld.py` matched HTML attribute
+  VALUES case-sensitively, so perfectly valid markup emitted build-failing findings --
+  `meta name="Description"`, `rel="Canonical"`, `hreflang="X-Default"`,
+  `script type="application/LD+JSON"`, and `...ld+json; charset=utf-8"` (a `;charset`
+  parameter is not part of the MIME type per RFC 2045). `site.py` already matched
+  `rel` case-insensitively; the comparison is now extracted once into a new shared
+  module, `omnirank/html.py`, that every gate module imports from.
+- The score model saturated to 0 on real sites. `score()` charged a flat 10 points per
+  error finding with no cap, so one gate failing on every page of a 57-URL site (a
+  missing `<h1>` on every template) cost 570 points against a 100-point layer -- `seo`
+  and `aeo` both read 0, with no information left to act on. Each GATE's contribution
+  to its layer is now capped (`GATE_CAP = 15`): one gate firing on every page is one
+  problem to fix, not fifty, but a second, distinct broken gate still adds its own cost.
+- `aeo.faq.too-few` fired as a build-failing error on every page with fewer than 3 FAQ
+  pairs, including pricing pages, about pages and 404s (57 times on one real site).
+  Downgraded to a warning. Also fixes a real counting bug --
+  `len(find_all("dt")) or len(find_all("details"))` short-circuited on any non-zero
+  `<dt>` count, so a page mixing both markup styles undercounted; now summed, since a
+  `<dt>` is never itself a `<details>` and the two can never double-count the same pair.
+- `crawl-hygiene` was accepted by `omnirank.config.schema.json`'s `audit.failOn` enum,
+  but `hygiene.check_removed()` -- crawl-hygiene's only source -- was never called from
+  `audit_site()`, so `--fail-on crawl-hygiene` could never match anything. Removed from
+  the enum: no config field supplies the removed-URL list the check needs, and a
+  config-accepted gate name that can never fire is its own kind of fabrication.
+  `hygiene.check_sitemap()` was equally unwired despite distinguishing a redirecting
+  sitemap entry (warning) from a genuinely dead one (error) -- a real signal the
+  blanket `seo.page.unreachable` error cannot give. Wired into `audit_site()`, checked
+  only against targets not already confirmed reachable, so a healthy sitemap is never
+  double-fetched.
+
+### Added
+
+- A top-level `notEvaluated` array on the report -- `{gate, url|site, reason}`, reason
+  from a closed enum (`no-sitemap`, `page-unreachable`, `not-applicable`,
+  `adapter-absent`). Additive/optional in `schemas/report.schema.json`; a report
+  written before this release still validates. Populated where the tool previously
+  stayed silent: no sitemap found (`audit_site` fell back to the homepage and reported
+  a 1-URL audit as if that were the whole site -- now also emits `seo.sitemap.missing`,
+  error, gate `sitemap-health`), and any page that could not be fetched (its per-page
+  gates -- `seo`, `aeo`, `perf` -- are now recorded rather than silently skipped). The
+  console summary gets a short "NOT EVALUATED" section so this is visible without
+  opening the JSON report.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added
@@ -91,7 +143,8 @@ All notable changes to this project are documented here. The format follows
   path and a Node in-repo path producing identical output.
 - `omnirank` CLI with a zero-config URL mode and CI-usable exit codes.
 
-[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bemoshiur/OmniRank/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/bemoshiur/OmniRank/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bemoshiur/OmniRank/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bemoshiur/OmniRank/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bemoshiur/OmniRank/releases/tag/v0.1.0

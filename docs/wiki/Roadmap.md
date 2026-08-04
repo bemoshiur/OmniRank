@@ -13,7 +13,7 @@ dates. It changes in response to what people actually ask for in
 
 | Skill | What it does |
 |---|---|
-| **`audit`** | Scores a site's SEO, AEO, GEO and crawl-hygiene gates against its real HTML and emits a prioritised fix list with `observed` / `expected` / `fix` per finding. Runs with no configuration beyond a URL. See [[Audit-Skill]]. |
+| **`audit`** | Scores a site's SEO, AEO, GEO and perf layers (plus site-level and sitemap-hygiene checks) against its real HTML and emits a prioritised fix list with `observed` / `expected` / `fix` per finding. Runs with no configuration beyond a URL. See [[Audit-Skill]]. |
 | **`geo-artifacts`** | Generates `llms.txt`, `llms-full.txt` and `facts.json`, each carrying an explicit citation licence. Python crawl path works on any stack; Node path imports a site's own content layer. See [[GEO-Artifacts-Skill]]. |
 
 Supporting surface that also ships: the `omnirank.config.json` schema

@@ -57,13 +57,18 @@ project's maintainer.
 
 ### Why does my site score 0 on one layer?
 
-A layer scores `0` when its error/warning cost meets or exceeds 100 —
-`max(0, 100 - 10*errors - 3*warnings)` floors at zero rather than going negative. Ten or
-more error-severity findings in one layer is enough on its own (`10 * 10 = 100`). Check
-the JSON report's `findings` array for that layer's `severity: "error"` entries; a brand
-new site with no `<title>`, no canonical tag, no JSON-LD, and no `llms.txt` will commonly
-hit this on the GEO layer alone, since every one of `llms.txt`, `llms-full.txt`,
-`facts.json`, and `robots.txt`-allowlist missing is a separate error.
+As of v0.2.1, each GATE's contribution to its layer is capped first
+(`min(GATE_CAP, 10*errors + 3*warnings)`, `GATE_CAP = 15`), then summed and subtracted
+from 100, floored at zero. This replaced an uncapped flat cost per finding: on a real
+57-URL site, one gate failing on every page (a missing `<h1>` on every template) used to
+cost `570` points against a `100`-point layer, so `seo` and `aeo` both read `0` with no
+information left in the score. A layer still scores `0` once enough DISTINCT gates are
+broken for their capped costs to sum past 100 — seven or more independently-broken gates
+is enough on its own (`7 * 15 = 105`). Check the JSON report's `findings` array grouped
+by `gate` for that layer; a brand new site with no `<title>`, no canonical tag, no
+JSON-LD, and no `llms.txt` will commonly hit this on the GEO layer, since every one of
+`llms.txt`, `llms-full.txt`, `facts.json`, and `robots.txt`-allowlist missing is a
+separate broken gate.
 
 ### Does OmniRank measure Core Web Vitals?
 
@@ -111,24 +116,29 @@ production — `audit`'s GEO layer checks exactly that.
 
 ### Why isn't `--fail-on <gate>` failing my build even though I see a `[FAIL]` line for it?
 
-Two structural reasons this happens, both worth ruling out before assuming a bug. First,
-12 gate names can only ever produce warning-severity findings, and `--fail-on` only
-counts errors; listing any of them has no effect on the exit code by design: `og`,
-`hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation` from the original
-gate set, plus four site-level gates added in 0.2.0 (`duplicate-title`,
-`duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`) and three `perf`
-gates also added in 0.2.0 (`page-weight`, `compression`, `render-blocking`).
-`response-time` is the one new `perf` gate name that is **not** warning-only — it emits
-an error-severity finding once response time crosses `RESPONSE_ERROR_MS`. Second, one
-gate name — `crawl-hygiene` — is accepted by the config schema but its check
-(`hygiene.check_removed()`) is never called by the automatic `omnirank audit` pipeline in
-v0.2.0, so it never produces a finding from a plain run. `sitemap-health` looks like it
-belongs in that same bucket — `hygiene.check_sitemap()` is likewise never called
-automatically — but the gate name is **not** inert: an unreachable target reports its
-`seo.page.unreachable` finding under `gate: "sitemap-health"` (see `_collect()` in
-`audit.py`), so `--fail-on sitemap-health` does fail a build against a dead page, just
-through a different code path than `check_sitemap()`. See [[CI-Recipes]] for the full
-gate-by-severity breakdown.
+One structural reason this happens, worth ruling out before assuming a bug: 13 gate
+names can only ever produce warning-severity findings, and `--fail-on` only counts
+errors; listing any of them has no effect on the exit code by design: `og`, `hreflang`,
+`image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in
+v0.2.1 — demanding 3+ FAQs on every page, including pricing and 404 pages, was not
+defensible advice) from the original gate set, plus four site-level gates added in 0.2.0
+(`duplicate-title`, `duplicate-description`, `canonical-cluster`,
+`hreflang-reciprocity`) and three `perf` gates also added in 0.2.0 (`page-weight`,
+`compression`, `render-blocking`). `response-time` is the one new `perf` gate name that
+is **not** warning-only — it emits an error-severity finding once response time crosses
+`RESPONSE_ERROR_MS`.
+
+As of v0.2.1, `crawl-hygiene` no longer exists as a `--fail-on` value at all — it used to
+be accepted by the config schema, but its check (`hygiene.check_removed()`) needs an
+explicit removed-URL list no config field supplies, so it could never produce a finding
+from a plain `omnirank audit` run. Rather than leave a config-accepted gate name that
+could never fire, it was removed from the schema. `sitemap-health` is not inert: an
+unreachable target URL reports its `seo.page.unreachable` finding under `gate:
+"sitemap-health"` (see `_collect()` in `audit.py`), and as of v0.2.1
+`hygiene.check_sitemap()` is also wired into `audit_site()`, so `--fail-on sitemap-health`
+fails a build against a dead page, a dead `sitemap.xml` entry, or (as a warning) a
+redirecting one. See [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]]
+for the full gate-by-severity breakdown.
 
 ### Do warnings ever fail a build?
 

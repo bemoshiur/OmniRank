@@ -282,31 +282,27 @@ per-page change — exactly 90% (e.g. 9 of 10) does not trigger it; anything abo
 learn to ignore it. Fix: stamp `lastmod` from real publish/update timestamps, and use a
 stable constant for genuinely static routes rather than the build timestamp.
 
-This is the **only** hygiene check `omnirank audit` runs automatically — see the callout
-below.
+This runs automatically. `check_sitemap()` (below) is now wired in too, as of v0.2.1.
 
-### What `crawl-hygiene` and `sitemap-health` do NOT cover automatically
+### `crawl-hygiene` and `sitemap-health` (as of v0.2.1)
 
 `hygiene.py` defines `check_removed()` (404s should be warnings, 5xx errors on unknown
 slugs should be errors) and `check_sitemap()` (every sitemap URL should return 200).
-**Both are real, tested functions — but `audit_site()` does not call either of them.**
-Reading `scripts/py/omnirank/audit.py` confirms only `hygiene.check_lastmod()` runs as
-part of a normal audit. `check_removed()` and `check_sitemap()` take an explicit list of
-URLs and must be invoked directly from Python (or your own script) — there is no CLI flag
-for them in v0.2.0.
 
-**This makes `crawl-hygiene` — but not `sitemap-health` — inert as a `--fail-on` gate,
-and the two are easy to conflate.** `crawl-hygiene`'s only source is `check_removed()`,
-so with that function unwired, `crawl-hygiene` truly never fires from a plain
-`omnirank audit` run. `sitemap-health` has a *second* source: `_collect()` in `audit.py`
-reports every target URL it could not fetch as an error under `gate: "sitemap-health"`
-(the `seo.page.unreachable` finding) — a code path entirely separate from
-`check_sitemap()`. So `sitemap-health` **does** produce a finding, and can fail a build,
-any time a target 404s or errors, even though `check_sitemap()` itself never runs.
-Verify directly: `omnirank audit https://example.com/nope-xyz --fail-on sitemap-health`
-exits `1`; the otherwise-identical `--fail-on crawl-hygiene` exits `0`. If you also want
-`check_sitemap()`'s specific redirect/dead-URL policy, or `check_removed()`'s 404/5xx
-policy for a list of legacy URLs, call them directly:
+**`check_sitemap()` is now called automatically from `audit_site()`.** For every target
+URL the sitemap listed that `_collect()` could not already confirm reachable, it
+distinguishes a redirecting entry (warning — the sitemap should point at the final URL)
+from a genuinely dead one (error) — a signal the blanket `seo.page.unreachable` finding
+cannot give on its own, since OmniRank's client never follows redirects and so cannot
+tell "redirects somewhere" apart from "truly gone" without asking again.
+
+**`check_removed()` is not wired in, and `crawl-hygiene` no longer exists as a
+`--fail-on` gate name.** It needs an explicit list of URLs your site used to serve and no
+longer does — nothing in `omnirank.config.json` supplies that list, so there was no way
+for `audit_site()` to call it automatically. Shipping `crawl-hygiene` as a config-accepted
+gate name that could never actually fire was its own kind of fabrication, so v0.2.1 removed
+it from `schemas/omnirank.config.schema.json` rather than leave it silently inert. The
+function itself is untouched — call it directly with your own list of retired URLs:
 
 ```python
 from omnirank.fetch import make_client
@@ -314,8 +310,6 @@ from omnirank.gates import hygiene
 
 client = make_client()
 findings = hygiene.check_removed(client, ["https://example.com/old-page"])
-findings += hygiene.check_sitemap(client, "https://example.com",
-                                   ["https://example.com/a", "https://example.com/b"])
 ```
 
 The status policy both functions apply:
@@ -325,10 +319,10 @@ The status policy both functions apply:
 | Page moved, modern equivalent exists | `301`/`308` to the equivalent | pass |
 | Page removed, no equivalent | `410 Gone` | pass |
 | Unknown slug on a dynamic route | `308` to the section hub | pass |
-| Anything returning `404` | — | warning (`seo.crawl-hygiene.not-found`) |
-| Anything returning `5xx` (or unreachable) | — | error (`seo.crawl-hygiene.server-error`) |
-| A sitemap URL that redirects | — | warning (`seo.sitemap-health.redirect`) |
-| A sitemap URL that is dead (non-2xx, non-redirect) | — | error (`seo.sitemap-health.dead-url`) |
+| Anything returning `404` (`check_removed`, called manually) | — | warning (`seo.crawl-hygiene.not-found`) |
+| Anything returning `5xx` (or unreachable) (`check_removed`, called manually) | — | error (`seo.crawl-hygiene.server-error`) |
+| A sitemap URL that redirects (automatic since v0.2.1) | — | warning (`seo.sitemap-health.redirect`) |
+| A sitemap URL that is dead, non-2xx non-redirect (automatic since v0.2.1) | — | error (`seo.sitemap-health.dead-url`) |
 
 A `5xx` on an unknown slug most often means a dynamic route shipped with
 `dynamicParams = false` in a Next.js App Router project — on OpenNext/Lambda that returns
@@ -342,10 +336,20 @@ Verified directly against `scripts/py/omnirank/report.py`:
 ```python
 ERROR_COST = 10
 WARNING_COST = 3
+GATE_CAP = 15
 ```
 
-**Per layer:** `max(0, 100 - 10*errors - 3*warnings)` — `info`-severity findings cost
-nothing. A layer that ran and accumulated zero findings scores exactly `100`.
+**Per gate, then per layer (as of v0.2.1):** each GATE's contribution to its layer is
+capped first — `min(GATE_CAP, 10*errors + 3*warnings)` — and the layer's score is
+`max(0, 100 - sum(capped gate costs))`. `info`-severity findings cost nothing. A layer
+that ran and accumulated zero findings scores exactly `100`. This replaced a flat
+per-finding cost with no cap: measured against a real 57-URL site, one gate failing on
+every page (a missing `<h1>` on every template) cost `570` points against a `100`-point
+layer under the old model, saturating `seo` and `aeo` to `0` and leaving nothing to act
+on. One gate firing on every page of a site is one problem to fix, not fifty — repeating
+the SAME gate no longer compounds past `GATE_CAP`, but a second, DISTINCT broken gate
+still adds its own capped cost, so a site with many different problems still scores worse
+than one with a single frequently-firing one.
 
 **Overall:** the integer floor-division average of every layer's score —
 `sum(scores.values()) // len(scores)`. Not a rounded mean: `//` truncates, it does not
@@ -375,19 +379,32 @@ any content — they are absent, not a fabricated `100`:
 
 ```
 $ python3 -m omnirank.cli audit https://example.com/nope-xyz
-OmniRank 0.2.0 — https://example.com/nope-xyz
-  overall 75/100  geo 60  seo 90
-  1 URLs checked, 5 findings
-  [FAIL] seo.page.unreachable  https://example.com/nope-xyz/
-         observed: HTTP 404
-         fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
-  [FAIL] geo.llms.missing  ...
+OmniRank 0.2.1 — https://example.com/nope-xyz
+  overall 72/100  geo 60  seo 85
+  1 URLs checked · 6 findings in 6 groups
+
+  ERRORS
+  [1×] seo.page.unreachable — expected: HTTP 200
+        fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
+        e.g. https://example.com/nope-xyz/
+  [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
+        fix: Publish a sitemap.xml so OmniRank -- and search engines -- can discover every page. Without one, this audit only sees the homepage.
+        e.g. https://example.com/nope-xyz/sitemap.xml
+  [1×] geo.llms.missing  ...
   ...
+
+  NOT EVALUATED (4 gate(s) across 2 target(s) — see the JSON report for the reason enum)
+    site — https://example.com/nope-xyz  [no-sitemap]
+    aeo, perf, seo — https://example.com/nope-xyz/  [page-unreachable]
 ```
 
-(`overall 75` = `(90 + 60) // 2 = 150 // 2 = 75` — only `seo` and `geo` ran, so the
-average is over **two** layers, not four.) Real output, captured against
-`https://example.com/nope-xyz` on 0.2.0.
+(`overall 72` = `(85 + 60) // 2 = 145 // 2 = 72` — only `seo` and `geo` ran, so the
+average is over **two** layers, not four. `seo` is `85`, not `90`: both
+`seo.page.unreachable` and `seo.sitemap.missing` fire under the same gate,
+`sitemap-health`, so their capped combined cost is `min(GATE_CAP, 20) = 15`.) Real
+output, captured against `https://example.com/nope-xyz` on v0.2.1. Note the `NOT
+EVALUATED` section — `nope-xyz` has no `sitemap.xml`, so the site-level gates could not
+run meaningfully either, and that is now visible instead of silent.
 
 Read `seo.page.unreachable` as the signal that the whole run is unreliable, regardless of
 what the other layers show.
