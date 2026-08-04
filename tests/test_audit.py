@@ -48,6 +48,10 @@ def mock_site(page_status=200):
     respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(200, text='{"a":1}'))
     respx.get(f"{SITE}/robots.txt").mock(
         return_value=httpx.Response(200, text="User-agent: *\nAllow: /\n"))
+    # v0.4.0: audit_site probes the http:// form once per audit. Unmocked, respx
+    # raises rather than returning, so every @respx.mock audit test needs this.
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
 
 def test_default_config_needs_only_a_url():
@@ -105,6 +109,8 @@ def test_falls_back_to_root_when_sitemap_absent():
     respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
     report = audit_site(default_config(SITE), make_client())
     assert report.urls_checked == 1
 
@@ -119,6 +125,8 @@ def test_missing_sitemap_reports_a_finding_not_a_silent_fallback():
     respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
     report = audit_site(default_config(SITE), make_client())
 
     missing = [f for f in report.findings if f.id == "seo.sitemap.missing"]
@@ -190,6 +198,8 @@ def test_a_healthy_sitemap_url_is_not_refetched_by_check_sitemap():
     for art in ("llms.txt", "llms-full.txt", "facts.json"):
         respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
     audit_site(default_config(SITE), make_client())
     assert route.call_count == 1, (
@@ -230,6 +240,8 @@ def test_findings_are_ordered_by_target_position():
         respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
     respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(404))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
     report = audit_site(default_config(SITE), make_client(),
                         urls=[f"{SITE}/a", f"{SITE}/b", f"{SITE}/c"])
@@ -258,6 +270,8 @@ def test_layers_that_never_ran_are_absent_when_every_target_404s():
     respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(404))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
     report = audit_site(default_config(SITE), make_client())
     score = report.score()
@@ -288,6 +302,8 @@ def test_site_pass_sees_duplicates_across_urls():
         respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(200, text=body))
     respx.get(f"{SITE}/robots.txt").mock(
         return_value=httpx.Response(200, text="User-agent: *\nAllow: /\n"))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
     report = audit_site(default_config(SITE), make_client())
     found = {f.id for f in report.findings}
@@ -353,6 +369,8 @@ def test_duplicate_sitemap_entries_are_fetched_once():
     for art in ("llms.txt", "llms-full.txt", "facts.json"):
         respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
     report = audit_site(default_config(SITE), make_client())
     assert route.call_count == 1, "a URL listed twice must not be fetched twice"
@@ -375,6 +393,8 @@ def test_duplicate_sitemap_entries_do_not_inflate_duplicate_groups():
     for art in ("llms.txt", "llms-full.txt", "facts.json"):
         respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
     respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    respx.get("http://x.example/").mock(
+        return_value=httpx.Response(301, headers={"location": f"{SITE}/"}))
 
     report = audit_site(default_config(SITE), make_client())
     dup = [f for f in report.findings if f.id == "seo.duplicate-title.shared"]

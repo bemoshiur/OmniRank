@@ -142,6 +142,14 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     _r("security.csp.absent", "infrastructure", "info", "security", "csp"),
     _r("security.referrer-policy.missing", "infrastructure", "info", "security",
        "referrer-policy"),
+    # `templated`: the edit is a scheme rewrite in markup the repo owns, which is
+    # deterministic given repo facts. Whether the https origin actually serves the
+    # asset is a per-INSTANCE question, and applicability.py is where that demotes.
+    _r("security.mixed-content.subresource", "templated", "error", "security",
+       "mixed-content"),
+    # `infrastructure`: no source edit produces an origin-level redirect.
+    _r("security.https-redirect.missing", "infrastructure", "error", "security",
+       "https-redirect"),
 )
 
 REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}
