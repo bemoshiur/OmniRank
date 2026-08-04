@@ -38,18 +38,35 @@ def _insert_context(raw: str) -> str | None:
     A textual insertion, never a re-serialisation: json.dumps would reformat
     the entire block and bury a one-line fix in a whole-file diff, and diff size
     is inversely proportional to whether anyone merges it.
+
+    `rest.find("\\n")` is not "is this object multi-line" -- it is "where is the
+    FIRST newline anywhere in the rest of the raw text", and for a compact
+    single-line object (the common minified shape) that first newline is the one
+    AFTER the closing brace, not one introduced by pretty-printing. Splicing at
+    that newline discarded everything before it: the whole node, including its
+    closing brace, leaving invalid JSON and a corrupted script body. The guard
+    below is `rest[:newline].strip()`: real (non-whitespace) content between the
+    brace and that newline means the newline is not a line break introduced
+    between the brace and the first member -- it belongs to something after the
+    object -- so this must splice inline instead of pretending the object is
+    pretty-printed.
     """
     brace = raw.find("{")
     if brace == -1:
         return None
     rest = raw[brace + 1:]
     newline = rest.find("\n")
-    if newline == -1:
+    if newline == -1 or rest[:newline].strip():
         return f'{raw[:brace + 1]} "@context": "{SCHEMA_CONTEXT}",{rest}'
+    # A CRLF file's line break is two characters ("\r\n"); slicing from the "\n"
+    # alone would silently drop the "\r" immediately before it, downgrading
+    # just this one break to a bare LF in an otherwise-CRLF file.
+    break_start = newline - 1 if rest[:newline].endswith("\r") else newline
+    eol = rest[break_start:newline + 1]
     following = rest[newline + 1:]
     indent = following[:len(following) - len(following.lstrip(" \t"))]
-    return (f'{raw[:brace + 1]}\n{indent}"@context": "{SCHEMA_CONTEXT}",'
-            f"{rest[newline:]}")
+    return (f'{raw[:brace + 1]}{eol}{indent}"@context": "{SCHEMA_CONTEXT}",'
+            f"{rest[break_start:]}")
 
 
 def no_context(finding: Finding, location: Location, root: Path,
