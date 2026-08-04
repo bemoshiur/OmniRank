@@ -1,10 +1,10 @@
 # Glossary
 
-This glossary defines 32 terms spanning search-engine optimisation, answer-engine
-optimisation, generative-engine optimisation and the structured-data vocabulary OmniRank
-checks for, from AnswerBlock and speakable markup to `llms.txt`, JSON-LD and E-E-A-T. Each
-entry stands alone as a short, quotable answer to "what does this term mean," matching the
-same answer-first format OmniRank scores every audited page against.
+This glossary defines terms spanning search-engine optimisation, answer-engine
+optimisation, generative-engine optimisation, and OmniRank's own fix-safety vocabulary —
+from AnswerBlock and speakable markup to `llms.txt`, JSON-LD, `fixTier` and blast radius.
+Each entry stands alone as a short, quotable answer to "what does this term mean,"
+matching the same answer-first format OmniRank scores every audited page against.
 
 Terms are grouped by theme, not alphabetised, so related concepts sit near each other.
 Each H3 heading is a stable anchor — link directly to `Glossary#term-name` from anywhere.
@@ -17,14 +17,15 @@ SEO is the practice of structuring a webpage's HTML and content so crawlers like
 Googlebot and Bingbot can find, parse and rank it — canonical tags, correctly sized title
 and description metadata, and valid structured data are all part of it. OmniRank's SEO
 layer checks `h1`, `canonical`, `title-length`, `description-length`, `og`, `hreflang`,
-`image-dims` and `schema` gates against a page's real HTML.
+`image-dims`, `schema` and five site-level cross-URL gates against a page's real HTML.
 
 ### AEO (Answer Engine Optimisation)
 
 AEO is the practice of shaping a page so an AI Overview, Copilot, or voice assistant can
 lift a short, factual answer directly from it rather than sending a user to click
-through. OmniRank's AEO layer checks for a 40–60 word AnswerBlock, at least three FAQ
-pairs, and speakable markup that resolves to real content on the page.
+through. OmniRank's AEO layer checks for a script-aware AnswerBlock (40–60 words for
+Latin scripts, 80–200 characters for CJK scripts), at least three FAQ pairs, and
+speakable markup that resolves to real content on the page.
 
 ### GEO (Generative Engine Optimisation)
 
@@ -39,7 +40,7 @@ crawlers.
 SMM is publishing and maintaining a consistent brand presence across social platforms so
 entity resolvers and human audiences both recognise the same organisation everywhere it
 appears. OmniRank's config schema reserves `smm` and `sameAs` fields for this, but no SMM
-skill ships in v0.2.0 — `smm-content` and `smm-publish` are both roadmap items, targeted
+skill ships in v0.3.0 — `smm-content` and `smm-publish` are both roadmap items, targeted
 at v0.6 and v0.7 respectively.
 
 ## Engines and retrieval
@@ -80,26 +81,25 @@ RAG pipeline clean, structured passages to retrieve.
 In generative-engine terms, a citation is a generated answer that names or links its
 source rather than presenting synthesised text as if it had no origin. OmniRank cannot
 make any engine cite a source — no third party controls that — but an explicit citation
-licence in `llms.txt` removes one concrete barrier: a cautious model declining to quote
-content it has no clear permission to reuse.
+licence in `llms.txt` removes one concrete barrier.
 
 ## AEO-specific markup
 
 ### AnswerBlock
 
-An AnswerBlock is a 40–60 word, plain-prose HTML element (OmniRank's default selector is
+An AnswerBlock is a plain-prose HTML element (OmniRank's default selector is
 `.answer-block`) that directly answers "what is this page about" in subject-verb-object
-sentences, with no lists and no superlatives. It is the passage OmniRank's
-`aeo.answer-block` gate checks for, and the passage an answer engine is most likely to
-lift verbatim.
+sentences, with no lists and no superlatives. Its target length depends on the page's
+script — 40–60 words for Latin text by default, 80–200 characters for CJK scripts — set
+by `aeo.answerBlock` (see [[Configuration-Reference#aeoanswerblock]]). It is the passage
+an answer engine is most likely to lift verbatim.
 
 ### Speakable
 
 Speakable is a schema.org property, nested under `speakable.cssSelector` inside JSON-LD,
 that names the CSS selectors of the page elements suitable for a voice assistant to read
 aloud. OmniRank's `speakable` gate resolves every declared selector against the live page
-and fails if any selector matches no element — an unresolved selector is a claim with
-nothing behind it.
+and fails if any selector matches no element.
 
 ## GEO artifacts
 
@@ -114,147 +114,146 @@ is a proposal, not a ratified standard — see [[FAQ#is-llmstxt-a-real-establish
 ### llms-full.txt
 
 `llms-full.txt` is the full-corpus companion to `llms.txt`: every page's title, URL,
-description and AnswerBlock text, concatenated into one Markdown file for engines that
-want the complete content rather than a summary index. It is the file most often broken
-in production by the OpenNext/CloudFront 403 trap, because dynamic routes at `.txt` paths
-never get reached once a CDN is in front of the site.
+description and AnswerBlock text, concatenated into one Markdown file. It is the file
+most often broken in production by the OpenNext/CloudFront 403 trap.
 
 ### facts.json
 
-`facts.json` is the structured, JSON-formatted counterpart to `llms.txt`: `name`, `url`,
-`entityType`, `license`, `attribution`, and whichever of `legalName`, `locales`, `nap`,
-`identifiers`, `sameAs` and `statistics` the site's config supplies. Fields with no data
-are omitted entirely rather than emitted empty, and `statistics` entries only appear when
-explicitly marked `published: true`.
+`facts.json` is the structured, JSON-formatted counterpart to `llms.txt`. As of v0.2.1,
+its `license` field is no longer defaulted to `CC-BY-4.0` when unset — it states plainly
+that no reuse licence is granted, matching `geo.license`'s "grant nothing" default.
 
-## Structured data
+## Structured-data vocabulary
 
 ### JSON-LD
 
 JSON-LD (JavaScript Object Notation for Linked Data) is a format for embedding structured
 data inside a `<script type="application/ld+json">` tag so crawlers can parse an
 unambiguous, typed description of a page's content without scraping visible text.
-OmniRank's `schema` gate requires at least one valid JSON-LD block with an `@type` on
-every top-level node.
 
 ### schema.org
 
 schema.org is the shared vocabulary of types — `Organization`, `Article`, `FAQPage`,
-`Review`, and hundreds more — that JSON-LD, Microdata and RDFa markup all draw from,
-maintained jointly by Google, Microsoft, Yahoo and Yandex. It gives crawlers and AI
-systems a common, typed language for describing entities instead of each site inventing
-its own.
+`Review`, and hundreds more — that JSON-LD, Microdata and RDFa markup all draw from.
 
 ### Structured data
 
 Structured data is any markup — most commonly JSON-LD — that describes a page's content
-in a fixed, machine-parseable vocabulary rather than free text, so a crawler or AI system
-does not have to guess what a number, name or date means. OmniRank's `schema` and
-`schema-fabrication` gates both operate on structured data extracted from a page's
-JSON-LD blocks.
+in a fixed, machine-parseable vocabulary rather than free text.
 
 ### @graph
 
 `@graph` is a JSON-LD keyword that groups multiple typed nodes under one shared
 `@context` inside a single script block, instead of repeating `@context` on every node.
-OmniRank's JSON-LD parser flattens a `@graph` array so every child node is checked
-individually, and a child that omits its own `@context` inside a `@graph` is correctly
-never warned about, since the container's context applies to it.
 
 ## Crawling and indexing
 
 ### Canonical URL
 
 A canonical URL is the one absolute address a page declares, via `<link
-rel="canonical">`, as its authoritative version — telling a crawler which URL to index
-when several near-duplicate URLs (with tracking parameters, trailing slashes, or
-alternate protocols) could otherwise serve the same content. OmniRank's `canonical` gate
-fails if the tag is missing or the URL is relative rather than absolute.
-
-### Canonical chain
-
-A canonical chain occurs when page A names page B as canonical while B names page C.
-Search engines commonly follow a single hop and stop, so A's ranking signals can be
-stranded on B rather than reaching C. Point every canonical directly at a page that
-declares itself canonical. OmniRank's site-level `canonical-cluster` gate
-(`seo.canonical.chained`) detects this across the whole crawled set, but only when both
-B and C are pages OmniRank actually fetched — a chain ending outside the crawled set is
-unevaluated and produces no finding.
+rel="canonical">`, as its authoritative version. OmniRank's `canonical` gate fails if the
+tag is missing or the URL is relative rather than absolute — and, as of v0.2.0, its
+site-level `canonical-cluster` gate additionally catches a canonical that points at
+another page which itself canonicalises elsewhere (a chain).
 
 ### hreflang
 
 `hreflang` is an HTML attribute on `<link rel="alternate">` tags that tells a crawler
-which URL serves which language or regional variant of a page, so the right version is
-shown to the right audience in search results. OmniRank's `hreflang` gate only fires once
-a page declares any `hreflang` alternates at all, and then checks that one of them is
-`x-default`.
+which URL serves which language or regional variant of a page. As of v0.2.0, OmniRank
+also checks reciprocity across the whole crawled set — see `hreflang-reciprocity` in
+[[Audit-Skill]].
 
 ### x-default
 
 `x-default` is the reserved `hreflang` value that names the fallback page shown to a
-visitor whose language or region matches none of a page's other declared alternates —
-omitting it leaves a crawler to guess. OmniRank's `hreflang` gate warns if any `hreflang`
-alternates exist but none of them is `x-default`.
+visitor whose language or region matches none of a page's other declared alternates.
 
 ### Crawl budget
 
 Crawl budget is the finite number of pages a search engine's crawler will fetch from a
-given site within a given time window, shaped by the site's perceived quality, size and
-server response health. Wasting it on dead sitemap URLs, redirect chains or duplicate
-content leaves fewer crawls available for pages that actually matter, which is why
-OmniRank's sitemap-health check treats a dead sitemap URL as an error.
+given site within a given time window. Wasting it on dead sitemap URLs, redirect chains
+or duplicate content leaves fewer crawls available for pages that actually matter.
 
 ### IndexNow
 
 IndexNow is a protocol, backed by Bing and Yandex, that lets a site push a URL directly
-to a search engine's indexing queue the moment it changes, instead of waiting for the
-next scheduled crawl. OmniRank's config schema reserves an `indexnowKeyFile` field for it
-under `indexing`, but the `indexing` skill itself is roadmap, targeted at v0.3, and not
-present in v0.2.0.
+to a search engine's indexing queue the moment it changes. OmniRank's config schema
+reserves an `indexnowKeyFile` field for it under `indexing`, a roadmap skill (target v0.3).
 
 ### Sitemap
 
 A sitemap is an XML file, conventionally at `/sitemap.xml`, listing every URL a site
-wants crawled along with an optional `lastmod` date — it is a hint to crawlers, not a
-guarantee of indexing. OmniRank's `audit` reads a site's sitemap to discover which URLs
-to check, and falls back to auditing just the site root when no sitemap is reachable.
+wants crawled along with an optional `lastmod` date. As of v0.2.1, a missing or
+unreachable sitemap now emits `seo.sitemap.missing` (error) instead of silently auditing
+just the homepage.
 
 ### lastmod
 
-`lastmod` is the XML element inside a sitemap entry that states when a URL last changed,
-which crawlers use to prioritise re-crawling recently updated pages over stable ones. A
-`lastmod` value that is re-stamped to today's date on every build rather than reflecting
-a real edit is a false freshness signal — exactly what OmniRank's `lastmod-inflation` gate
-detects when more than 90% of sampled entries share one date.
+`lastmod` is the XML element inside a sitemap entry that states when a URL last changed.
+A `lastmod` value re-stamped to today's date on every build is a false freshness signal —
+what OmniRank's `lastmod-inflation` gate detects when more than 90% of sampled entries
+share one date.
 
 ### robots.txt
 
 `robots.txt` is a plain-text file at a site's root that tells crawlers which paths they
-may or may not fetch, following the Robots Exclusion Protocol standardised as RFC 9309.
-OmniRank's `ai-allowlist` gate reads a site's real, published `robots.txt` and fails if
-any of 19 named AI-crawler user agents — `GPTBot`, `ClaudeBot` and `PerplexityBot` among
-them — are fully disallowed.
+may or may not fetch. OmniRank's `ai-allowlist` gate reads a site's real, published
+`robots.txt` and fails if any of 19 named AI-crawler user agents are fully disallowed —
+this is also a "protected surface" that no fix mode will ever write to unattended, see
+[[Fix-Tiers-and-Applicability#what-are-protected-surfaces]].
 
 ### Crawl hygiene
 
-Crawl hygiene is the practice of keeping every URL a crawler might encounter — including
-old and removed ones — resolving to a live, correctly coded response: a redirect to a
-modern equivalent, a `410 Gone` for content that is genuinely gone, or a real `200`, never
-a bare `404` or a `5xx`. OmniRank's hygiene module implements this policy. As of v0.2.1,
-the automatic `omnirank audit` run evaluates both the `lastmod-inflation` check and, via
-`check_sitemap()`, the sitemap-URL-reachability check; only the removed-URL check
-(`check_removed()`) — which needs an explicit list of URLs your site used to serve and no
-longer does — must still be called directly, and `crawl-hygiene` is consequently no
-longer a selectable `--fail-on` gate name.
+Crawl hygiene is the practice of keeping every URL a crawler might encounter resolving to
+a live, correctly coded response. As of v0.2.1, `omnirank audit` automatically runs
+`check_sitemap()` (a redirecting or dead sitemap entry); `check_removed()` still requires
+calling directly with your own list of retired URLs.
 
 ### 410 Gone
 
 410 Gone is an HTTP status code that tells a crawler a resource was intentionally and
-permanently removed, as distinct from `404 Not Found`, which just means nothing was found
-at that address right now. A `410` deindexes faster and more cleanly than a `404`,
-because it removes the ambiguity of whether the page might come back — OmniRank's
-crawl-hygiene policy treats a `410` on a removed page as correct, and a bare `404` as a
-warning.
+permanently removed, as distinct from `404 Not Found`.
+
+## Fix safety (new in v0.3.0)
+
+### fixTier
+
+`fixTier` is the epistemic axis of OmniRank's fix model: what kind of information the
+correct edit requires, as a static property of a finding id — `mechanical`, `templated`,
+`drafted`, `advisory` or `infrastructure`. It is declared for all 48 finding ids in
+`scripts/py/omnirank/registry.py` and replaces the removed `autoFixable` field. See
+[[Fix-Tiers-and-Applicability]].
+
+### applicability
+
+`applicability` is the safety axis of OmniRank's fix model: whether one particular
+occurrence of a finding may be applied unattended, computed as the minimum of the tier
+ceiling, the locator's confidence, the edit's blast radius, and any protected-surface
+ceiling — `safe`, `unsafe` or `display-only`. Every input can demote; none can promote.
+See [[Fix-Tiers-and-Applicability]].
+
+### Locator
+
+The locator is the OmniRank component that resolves a finding's URL to `{path, line,
+confidence}` in the source tree — the answer to "which file is wrong?" It never guesses:
+an unresolvable route returns `none` confidence rather than a plausible-looking path. See
+[[The-Locator]].
+
+### Blast radius
+
+Blast radius is how many routes a located source file serves. A file serving exactly one
+route can safely carry a route-specific literal (like a canonical URL); a shared layout
+serving thousands cannot — writing one there would collapse the whole site to one
+indexed page. `routes_served` is one of the four ceilings `applicability` takes the
+minimum of. See [[Fix-Tiers-and-Applicability]].
+
+### Protected surface
+
+A protected surface is one of four categories of edit — robots.txt/crawler directives,
+`noindex`/sitemap membership, canonical/hreflang sets, or any licence grant — that is
+hard-capped at `unsafe` regardless of tier or locator confidence, and never reachable by
+an unattended write at any point on the roadmap. See
+[[Fix-Tiers-and-Applicability#what-are-protected-surfaces]].
 
 ## Entities and trust
 
@@ -262,37 +261,31 @@ warning.
 
 An entity, in search and AI-retrieval terms, is a distinct, identifiable thing — a
 person, organisation, product or place — that a search engine or generative engine tries
-to resolve to one canonical representation rather than treating as free text. `sameAs`
-links, JSON-LD `@id` values and a knowledge graph entry are all ways a site helps engines
-resolve it as one entity instead of several disconnected mentions.
+to resolve to one canonical representation rather than treating as free text.
 
 ### sameAs
 
-`sameAs` is a schema.org property listing the URLs of a site's other verified profiles —
-its Wikidata entry, LinkedIn page, Crunchbase listing — that all represent the same
-real-world entity. In OmniRank's config, a `null` value in the `sameAs` map is not "not
-applicable"; it is a documented entity-linking gap, and only non-null values are ever
-emitted into `facts.json`.
+`sameAs` is a schema.org property listing the URLs of a site's other verified profiles.
+In OmniRank's config, a `null` value in the `sameAs` map is not "not applicable"; it is a
+documented entity-linking gap, and only non-null values are ever emitted into
+`facts.json`.
 
 ### Knowledge graph
 
 A knowledge graph is a search engine's internal database of entities and the
-relationships between them, used to answer factual queries directly and to power the
-info panels shown beside search results. Consistent `sameAs` links and typed JSON-LD are
-two of the concrete signals a site can offer to help an engine resolve it correctly
-inside that graph.
+relationships between them, used to answer factual queries directly.
 
 ### E-E-A-T
 
 E-E-A-T stands for Experience, Expertise, Authoritativeness and Trustworthiness — the
-criteria Google's Search Quality Rater Guidelines describe for evaluating content,
-particularly on topics that affect health, finance or safety. It is a rating framework,
-not an algorithmic score OmniRank or any third-party tool computes directly; author
-attribution, real reviews, and verifiable facts are the concrete signals that support it.
+criteria Google's Search Quality Rater Guidelines describe for evaluating content. It is
+a rating framework, not an algorithmic score OmniRank or any third-party tool computes
+directly.
 
 ## See also
 
 - [[FAQ]] — direct answers to common questions, including several referenced above
 - [[Audit-Skill]] — the gates that check many of these terms in practice
+- [[Fix-Tiers-and-Applicability]] — the fix-safety terms defined above, explained in full
 - [[GEO-Artifacts-Skill]] — `llms.txt`, `llms-full.txt` and `facts.json` in full detail
 - [[Research-and-Evidence]] — the published research behind the GEO discipline

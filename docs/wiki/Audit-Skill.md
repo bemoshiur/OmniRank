@@ -1,9 +1,9 @@
 # Audit Skill
 
-The audit skill scores a site's SEO, AEO and GEO layers against its live HTML and returns
-a prioritised list of findings, each carrying an observed value, an expected value and a
-fix. It never edits the site; it only diagnoses, then hands the list to a human or CI
-job.
+The audit skill scores a site across four content layers — SEO, AEO, GEO and perf — plus
+a site-level cross-URL pass and sitemap hygiene, returning findings that carry an
+observed value, an expected value, a fix and a `fixTier`. It never edits the site; it
+only diagnoses, then hands the list to a human, CI job, or `omnirank fix`.
 
 Everything on this page is verified against `scripts/py/omnirank/audit.py`,
 `scripts/py/omnirank/gates/`, `scripts/py/omnirank/report.py`, and `skills/audit/`.
@@ -14,21 +14,16 @@ Claude Code matches a skill against its `SKILL.md` `description` frontmatter, no
 command name. The real description is: "Use when asked to audit a site's SEO, check AEO
 or answer-engine readiness, diagnose why a page is not ranking or not being cited by AI,
 verify structured data, or run pre-deploy discoverability checks on built HTML." Trigger
-phrases and what will *not* trigger it: [[Claude-Code-Setup#to-trigger-audit]].
-
-As of 0.2.0, `audit_site()` keeps every fetched page's HTML alive as a `PageData`
-record instead of discarding it after the per-page gates run — that is what makes the
-site-level cross-URL pass below possible.
+phrases and what will *not* trigger it: [[Claude-Code-Setup#what-should-i-say-to-trigger-each-skill]].
 
 ## CLI reference
 
-Verbatim `--help` output from v0.2.0 (flags unchanged since v0.1.1 — this release added
-gates, not CLI surface):
+Verbatim `--help` output from v0.3.0:
 
 ```
 $ python3 -m omnirank.cli audit --help
 usage: omnirank audit [-h] [--config CONFIG] [--out OUT]
-                      [--fail-on [FAIL_ON ...]]
+                      [--fail-on [FAIL_ON ...]] [--detail] [--top TOP]
                       [url]
 
 positional arguments:
@@ -41,6 +36,10 @@ options:
                         .omnirank/reports/<date>-audit.json)
   --fail-on [FAIL_ON ...]
                         Gate ids that force exit code 1. Overrides config.
+  --detail              Print every finding individually instead of the
+                        grouped summary (capped at 25, same as before v0.2.1).
+  --top TOP             Limit the grouped summary to the top N groups
+                        (default: all). Ignored with --detail.
 ```
 
 | Flag | Required | Description |
@@ -49,6 +48,8 @@ options:
 | `--config PATH` | No | Path to a validated `omnirank.config.json` — see [[Configuration-Reference]] |
 | `--out PATH` | No | Where the JSON report is written. Default: `.omnirank/reports/<UTC-date>-audit.json` |
 | `--fail-on [GATE ...]` | No | Zero or more **gate names** (not finding ids) that force exit code `1` when they carry an error-severity finding |
+| `--detail` | No | Print the old, ungrouped, one-finding-per-block listing (capped at 25) instead of the grouped summary |
+| `--top N` | No | Show only the first N groups of the grouped summary (default: all). Ignored with `--detail` |
 
 The help text calls `--fail-on`'s arguments "gate ids" — that wording is imprecise. They
 are **gate names** (`h1`, `canonical`, `schema`, ...), coarser than the per-finding `id`
@@ -62,66 +63,69 @@ Two behaviours worth being precise about:
 - **Passing `--fail-on` with zero gate names** explicitly overrides the config to an empty
   gate list, so the run always exits `0` regardless of what `audit.failOn` says.
 
+**Console output as of v0.2.1** groups findings by `id`, shows a count, the shared
+`expected`/`fix` text, and up to three example URLs — every group is shown, nothing is
+silently truncated. `--detail` keeps the historical ungrouped, 25-finding-capped view. The
+JSON report is unaffected by either flag: it always holds every finding individually.
+
 ## What are the four layers?
 
 | Layer | Audience | What it wants |
 |---|---|---|
 | SEO | Googlebot, Bingbot | Crawlable, canonical, correctly sized metadata, valid structured data |
-| AEO | AI Overviews, Copilot, voice assistants | A short, liftable, factual answer near the top of the page, sized for the page's script — see [[Configuration-Reference#aeoanswerblock]] |
+| AEO | AI Overviews, Copilot, voice assistants | A short, liftable, factual answer near the top of the page, sized for the page's script |
 | GEO | ChatGPT, Claude, Perplexity, Gemini | Machine-ingestible ground truth (`llms.txt`, `facts.json`) plus explicit permission to cite |
-| perf | Every crawler and user agent | A fast time-to-first-byte, reasonable HTML weight, compression, and no excess render-blocking `<head>` scripts — derived from one HTTP response, no browser involved |
+| perf | Every crawler and user agent | Fast full response time, reasonable HTML weight, compression, and no excess render-blocking `<head>` scripts — derived from one HTTP response, no browser involved |
 
-Crawl-hygiene findings and the site-level cross-URL pass (below, under "Every gate, by
-layer") both carry `layer: "seo"` in the report — there is no
-separate `"hygiene"` or `"site"` value in the `Layer` type. `report.py` defines `Layer =
-Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]`. As of 0.2.0, `perf` is a real,
-populated layer — every audited page runs `perf.run(page)`. `offsite` and `smm` remain
-reserved for roadmap skills and are unused by any gate today.
+Crawl hygiene and the site-level cross-URL pass both carry `layer: "seo"` in the report —
+there is no separate `"hygiene"` or `"site"` value. `report.py` defines `Layer =
+Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]`. **`perf` is new in v0.2.0** and is
+now a real, populated layer — every audited page runs `perf.run(page)`. `offsite` and
+`smm` remain reserved for roadmap skills and are unused by any gate today.
+
+As of 0.2.0, `audit_site()` keeps every fetched page's HTML alive as a `PageData` record
+instead of discarding it after the per-page gates run — that is what makes the site-level
+pass below possible.
 
 ## Every gate, by layer
 
-Every finding carries both a `gate` (what `--fail-on` matches against) and an `id` (a
-stable, dotted identifier). They are related but not interchangeable — see the GEO
-section, where they diverge in a way that trips people up.
+Every finding carries a `gate` (what `--fail-on` matches against), an `id` (a stable,
+dotted identifier), and a `fixTier` (`mechanical`/`templated`/`drafted`/`advisory`/
+`infrastructure`, described in [[Fix-Tiers-and-Applicability]]). For the complete,
+registry-generated table of all 48 ids see [[Finding-Reference]].
 
 ### SEO gates
 
 | Gate | Rule | Severity | Fix |
 |---|---|---|---|
-| `h1` | Exactly one `<h1>` | error | Add a single `<h1>` naming the page's subject, or demote extras to `<h2>` (auto-fixable) |
-| `canonical` | Present, absolute (`http(s)://...`), self-referencing | error | Add `<link rel="canonical" href="...">` with an absolute URL (auto-fixable) |
+| `h1` | Exactly one `<h1>` | error | Add a single `<h1>` naming the page's subject, or demote extras to `<h2>` |
+| `canonical` | Present, absolute (`http(s)://...`), self-referencing | error | Add `<link rel="canonical" href="...">` with an absolute URL |
 | `title-length` | `<title>` present, ≤ 60 characters | error if missing, warning if over | Add or shorten the `<title>` |
-| `description-length` | Meta description present, ≤ 160 characters | error if missing, warning if over | Add or clamp the description (auto-fixable when over-length) |
+| `description-length` | Meta description present, ≤ 160 characters | error if missing, warning if over | Add or clamp the description |
 | `og` | `og:title` and `og:image` both present | warning | Add the missing OpenGraph tags |
 | `hreflang` | If any `hreflang` alternates exist, one is `x-default` | warning | Add `<link rel="alternate" hreflang="x-default" href="...">` |
 | `image-dims` | Every `<img>` has both `width` and `height` | warning | Set explicit dimensions so the browser reserves space |
-| `lastmod-inflation` | See below | warning | Stamp `lastmod` from real publish/update timestamps |
-| `schema` | See below | error / warning | — |
-| `schema-fabrication` | See below | error | — |
+| `lastmod-inflation` | See [below](#sitemap-lastmod-inflation) | warning | Stamp `lastmod` from real publish/update timestamps |
+| `schema` | See [below](#structured-data-gates-schema-schema-fabrication) | error / warning | — |
+| `schema-fabrication` | See [below](#structured-data-gates-schema-schema-fabrication) | error | — |
 
 ### AEO gates
 
 | Gate | Rule | Severity |
 |---|---|---|
 | `answer-block` | An element matches the configured selector (default `.answer-block`) | error if absent |
-| `answer-block` | The block's text is 40–60 words, inclusive | error if outside the range |
+| `answer-block` | The block's text falls inside its script's word/character band | error if outside the range |
 | `answer-block` | The block contains no `<ul>`/`<ol>`/`<li>` | error if list markup is present |
-| `faq` | At least 3 FAQ pairs, as `<dl>`/`<dt>`/`<dd>` or `<details>` elements | error if fewer |
+| `faq` | At least 3 FAQ pairs, as `<dl>`/`<dt>`/`<dd>` or `<details>` elements | **warning as of v0.2.1** (downgraded from error — firing on pricing/about/404 pages was not defensible) |
 | `speakable` | Every `speakable.cssSelector` in any JSON-LD block resolves to a real element on the page | error if any selector matches nothing |
 
-The 40–60 word range is not arbitrary: answer engines lift whole blocks verbatim. Fewer
-than 40 words rarely carries a complete answer; more than 60 tends to get truncated or
-skipped. `geo.answerBlockSelector` in `omnirank.config.json` changes the selector — see
-[[Configuration-Reference#geo]].
-
-**40–60 words is a Latin-script default, not a universal rule.** `bands.resolve_band()`
-picks the range actually scored, per page, from the page's `<html lang>` value. Chinese,
-Japanese, Korean, Thai, Lao, Khmer, Burmese, Tibetan and Dzongkha (the `cjk` script
-family) have no space-delimited words — `str.split()` returns one token for an entire
-paragraph — so OmniRank measures characters for them (80–200 by default) instead of
-words. Bengali, Hindi, Tamil, Arabic and the other Brahmic/Arabic/Cyrillic-script
-languages remain space-delimited and keep word counting. Full precedence rules and
-config keys: [[Configuration-Reference#aeoanswerblock]].
+**The band is script-aware as of 0.2.0, not a fixed 40–60 words.** `str.split()` returns a
+single token for an entire Chinese, Japanese, Thai or Khmer paragraph, so the old fixed
+band flagged every compliant CJK answer block as far too short. `bands.resolve_band()`
+now measures **characters** (80–200 by default) for the `cjk` script family, keyed off the
+page's `<html lang>`, and keeps **word** counting for Latin, Brahmic (Bengali, Hindi,
+Tamil, ...), Arabic and Cyrillic scripts. Configure per script with `aeo.answerBlock` — see
+[[Configuration-Reference#aeoanswerblock]].
 
 ### GEO gates
 
@@ -172,98 +176,77 @@ only a full-site block trips this gate.
 of a `@graph` array — a `@graph` container's `@context` propagates to its children
 automatically, so a child that omits its own `@context` inside a `@graph` is never warned
 about. The fabrication checks walk every dict anywhere in the parsed tree (capped at 100
-levels deep, so a hostile document degrades to "nothing found" rather than crashing the
-scan), so a `Review` or `AggregateRating` nested inside `mainEntity` or `itemReviewed` is
-still caught.
+levels deep), so a `Review` or `AggregateRating` nested inside `mainEntity` or
+`itemReviewed` is still caught. As of v0.2.1, both `seo.py` and `jsonld.py` match `type=`
+and `rel=` attribute VALUES case-insensitively, closing five confirmed false positives —
+`meta name="Description"`, `rel="Canonical"`, `hreflang="X-Default"`, and both
+`application/LD+JSON` and `application/ld+json; charset=utf-8` are now recognised
+correctly. The shared comparison lives in `omnirank/html.py`.
 
-### Site-level (cross-URL) gates
+### Site-level (cross-URL) gates — new in v0.2.0
 
-`site.run(pages, sitemap_urls)` needs the whole crawled set at once and cannot be
-evaluated from a single page, so `audit_site()` runs it once, after every per-page gate
-has finished, over the `PageData` collection it kept alive along the way. All five
-findings carry `layer: "seo"`, same as every other gate on this page.
+`site.run(pages, sitemap_urls)` needs the whole crawled set at once, so `audit_site()`
+runs it once, after every per-page gate has finished. All five findings carry
+`layer: "seo"`.
 
 | Gate | Finding id | Rule | Severity |
 |---|---|---|---|
-| `duplicate-title` | `seo.duplicate-title.shared` | Two or more crawled pages share a `<title>` (case- and whitespace-insensitive) | warning |
-| `duplicate-description` | `seo.duplicate-description.shared` | Two or more crawled pages share a meta description (case- and whitespace-insensitive) | warning |
-| `noindex-in-sitemap` | `seo.noindex.in-sitemap` | A crawled page carries a `noindex` token in its `robots`/`googlebot` meta yet its URL also appears in `sitemap.xml` | **error** |
+| `duplicate-title` | `seo.duplicate-title.shared` | Two or more crawled pages share a `<title>` | warning |
+| `duplicate-description` | `seo.duplicate-description.shared` | Two or more crawled pages share a meta description | warning |
+| `noindex-in-sitemap` | `seo.noindex.in-sitemap` | A crawled page carries a `noindex` token yet its URL also appears in `sitemap.xml` | **error** |
 | `canonical-cluster` | `seo.canonical.chained` | A crawled page's canonical points at another crawled page that itself canonicalises elsewhere (A → B → C) | warning |
-| `hreflang-reciprocity` | `seo.hreflang.not-reciprocal` | A crawled page declares an `hreflang` alternate at another crawled page that does not declare the link back (`x-default` is exempt) | warning |
+| `hreflang-reciprocity` | `seo.hreflang.not-reciprocal` | A crawled page declares an `hreflang` alternate that does not link back (`x-default` exempt) | warning |
 
-**One finding per duplicate group, not per URL.** `duplicate-title` and
-`duplicate-description` each emit a single finding naming how many pages share the
-value, attached to the first URL in that group — never one finding per affected page. A
-200-page site sharing one template title produces one finding, not 200.
+**One finding per duplicate group, not per URL** — a 200-page site sharing one template
+title produces one finding, not 200. **Targets outside the crawled set are never judged**
+— a canonical or hreflang alternate pointing outside the sitemap produces no finding
+either way. `noindex-in-sitemap` no longer fires on a full hreflang cluster (locale pages
+that correctly declare each other as alternates) — hreflang exists precisely to stop
+engines consolidating those, so flagging them as duplicates was backwards.
 
-**Targets outside the crawled set are never judged.** `canonical-cluster` and
-`hreflang-reciprocity` only evaluate a target when that target is itself one of the
-pages OmniRank fetched. A canonical or hreflang alternate pointing outside the crawled
-set produces no finding either way — OmniRank never reports on a gate it could not
-actually evaluate. `noindex-in-sitemap` similarly only fires for pages OmniRank both
-fetched and found listed in `sitemap.xml`. See [[Glossary#canonical-chain]].
+### Performance gates (`perf` layer) — new in v0.2.0
 
-### Performance gates
-
-`perf.run(page)` derives every finding from the single HTTP response already captured
-for that page during the per-page fetch — response time, raw HTML size, the
-`content-encoding` header, and the `<head>` markup. **No browser is involved.**
-OmniRank cannot measure Largest Contentful Paint, Cumulative Layout Shift, Interaction
-to Next Paint, or produce a Lighthouse score, and no finding text implies otherwise.
-
-The thresholds below are OmniRank's own tunable defaults, not an industry benchmark —
-each is a named constant in `scripts/py/omnirank/gates/perf.py`.
+`perf.run(page)` derives every finding from the single HTTP response already captured for
+that page. **No browser is involved** — OmniRank cannot measure Largest Contentful Paint,
+Cumulative Layout Shift, Interaction to Next Paint, or produce a Lighthouse score.
 
 | Gate | Finding id | Rule (constant) | Severity |
 |---|---|---|---|
 | `response-time` | `perf.response-time.slow` | Response took ≥ `RESPONSE_WARN_MS` (2000 ms) | warning |
-| `response-time` | `perf.response-time.critical` | Response took ≥ `RESPONSE_ERROR_MS` (5000 ms) — supersedes `.slow`; only one `response-time` finding ever fires per page | **error** |
-| `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes, ~488 KiB) before any subresource | warning |
-| `compression` | `perf.compression.missing` | Response carries no `content-encoding` of `gzip` or `deflate` (`br`/`zstd` matched too if present, but never requested — see below) | warning |
-| `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) external `<script src="...">` tags in `<head>` without `async` or `defer` | warning |
+| `response-time` | `perf.response-time.critical` | Response took ≥ `RESPONSE_ERROR_MS` (5000 ms) | **error** |
+| `page-weight` | `perf.page-weight.heavy` | Raw HTML exceeds `HTML_WARN_BYTES` (500,000 bytes) | warning |
+| `compression` | `perf.compression.missing` | No `content-encoding` of `gzip` or `deflate` | warning |
+| `render-blocking` | `perf.render-blocking.head-scripts` | More than `MAX_HEAD_SCRIPTS` (2) blocking `<script>` tags in `<head>` | warning |
 
-**`response-time` is not time-to-first-byte.** `page.elapsed_ms` brackets the entire
-`client.get()` call — DNS, TCP, TLS, request, and reading the *complete* response body —
-not the time until the first byte arrived. The gate used to be named `ttfb` and measure
-the same value, which overstated real TTFB several-fold and produced findings that
-vanished on re-measurement; it is named `response-time` for exactly that reason, and its
-`fix` text says explicitly that it covers "the complete download, not server think-time."
-It is measured from wherever OmniRank's own request ran, never from a real visitor's
-location or network. Treat every `perf` finding as a signal to investigate, not as a
-metric any user actually experienced. See [[FAQ#does-omnirank-measure-core-web-vitals]].
+**The gate is named `response-time`, not `ttfb`.** An earlier draft of 0.2.0 called it
+`ttfb`, but `page.elapsed_ms` brackets the *entire* `client.get()` call — DNS through
+reading the complete response body — not the time to first byte. Naming it `ttfb`
+overstated real TTFB several-fold; it shipped renamed, with thresholds raised accordingly,
+and never shipped in a release under the old name. Treat every `perf` finding as a signal
+to investigate from wherever OmniRank's own request ran (a laptop, a CI runner), never as
+a metric a real visitor experienced. Full detail: `docs/audit-guide.md#performance-perf-layer`.
 
-**`compression` can only verify `gzip`/`deflate`.** OmniRank's HTTP client does not
-depend on `brotli` or `zstandard`, so it never requests `br` or `zstd` via
-`Accept-Encoding` — a well-behaved origin will never choose to send either back. The
-check still matches those strings defensively in case a misconfigured origin sends one
-unprompted, but OmniRank cannot claim to verify `br`/`zstd` support.
-
-### Sitemap `lastmod` inflation (`lastmod-inflation`)
+### Sitemap `lastmod` inflation
 
 If **more than** 90% of at least 10 `<lastmod>` entries in `sitemap.xml` share one date,
-that date is flagged as being re-stamped on every build rather than reflecting real
-per-page change — exactly 90% does not trigger it; anything above does. This runs
-automatically. `check_sitemap()` (below) is now wired in too, as of v0.2.1.
+that date is flagged as re-stamped on every build rather than reflecting real per-page
+change. This runs automatically, alongside `check_sitemap()` (below), as of v0.2.1.
 
-## `crawl-hygiene` and `sitemap-health` (as of v0.2.1)
+## What do `crawl-hygiene` and `sitemap-health` cover, and what changed in v0.2.1?
 
 `hygiene.py` defines `check_removed()` (404s should be warnings, 5xx errors on unknown
 slugs should be errors) and `check_sitemap()` (every sitemap URL should return 200).
 
-**`check_sitemap()` is now called automatically from `audit_site()`.** For every target
-URL the sitemap listed that `_collect()` could not already confirm reachable, it
-distinguishes a redirecting entry (warning — the sitemap should point at the final URL)
-from a genuinely dead one (error) — a signal the blanket `seo.page.unreachable` finding
-cannot give on its own, since OmniRank's client never follows redirects and so cannot
-tell "redirects somewhere" apart from "truly gone" without asking again.
+**`check_sitemap()` is now called automatically from `audit_site()`**, as of v0.2.1. For
+every sitemap target `_collect()` could not already confirm reachable, it distinguishes a
+redirecting entry (warning) from a genuinely dead one (error).
 
-**`check_removed()` is not wired in, and `crawl-hygiene` no longer exists as a
-`--fail-on` gate name.** It needs an explicit list of URLs your site used to serve and no
-longer does — nothing in `omnirank.config.json` supplies that list, so there was no way
-for `audit_site()` to call it automatically. Shipping `crawl-hygiene` as a config-accepted
-gate name that could never actually fire was its own kind of fabrication, so v0.2.1
-removed it from `schemas/omnirank.config.schema.json` rather than leave it silently inert.
-The function itself is untouched — call it directly with your own list of retired URLs:
+**`check_removed()` is still not wired in, and `crawl-hygiene` no longer exists as a
+`--fail-on` gate name at all.** It needs an explicit list of URLs your site used to serve
+— no config field supplies that list, so `audit_site()` had no way to call it
+automatically. Shipping `crawl-hygiene` as a config-accepted gate name that could never
+fire was its own kind of fabrication, so v0.2.1 removed it from the schema. Call the
+function directly if you need it:
 
 ```python
 from omnirank.fetch import make_client
@@ -271,8 +254,6 @@ from omnirank.gates import hygiene
 
 client = make_client()
 findings = hygiene.check_removed(client, ["https://example.com/old-page"])
-findings += hygiene.check_sitemap(client, "https://example.com",
-                                   ["https://example.com/a", "https://example.com/b"])
 ```
 
 The status policy both functions apply:
@@ -282,14 +263,13 @@ The status policy both functions apply:
 | Page moved, modern equivalent exists | `301`/`308` to the equivalent | pass |
 | Page removed, no equivalent | `410 Gone` | pass |
 | Unknown slug on a dynamic route | `308` to the section hub | pass |
-| Anything returning `404` (`check_removed`, called manually) | — | warning (`seo.crawl-hygiene.not-found`) |
-| Anything returning `5xx` (or unreachable) (`check_removed`, called manually) | — | error (`seo.crawl-hygiene.server-error`) |
+| Anything returning `404` (`check_removed`, manual) | — | warning (`seo.crawl-hygiene.not-found`) |
+| Anything returning `5xx` (`check_removed`, manual) | — | error (`seo.crawl-hygiene.server-error`) |
 | A sitemap URL that redirects (automatic since v0.2.1) | — | warning (`seo.sitemap-health.redirect`) |
-| A sitemap URL that is dead, non-2xx non-redirect (automatic since v0.2.1) | — | error (`seo.sitemap-health.dead-url`) |
+| A sitemap URL that is dead (automatic since v0.2.1) | — | error (`seo.sitemap-health.dead-url`) |
 
 A `5xx` on an unknown slug most often means a dynamic route shipped with
-`dynamicParams = false` in a Next.js App Router project. Set `dynamicParams = true`, look
-the slug up, and `permanentRedirect` (308) unknown slugs to the section hub.
+`dynamicParams = false` in a Next.js App Router project.
 
 ## How is the score computed?
 
@@ -301,39 +281,27 @@ WARNING_COST = 3
 GATE_CAP = 15
 ```
 
-**Per gate, then per layer (as of v0.2.1):** each GATE's contribution to its layer is
+**Per gate, then per layer, as of v0.2.1.** Each GATE's contribution to its layer is
 capped first — `min(GATE_CAP, 10*errors + 3*warnings)` — and the layer's score is
-`max(0, 100 - sum(capped gate costs))`. `info`-severity findings cost nothing. A layer
-that ran and accumulated zero findings scores exactly `100`. This replaced a flat
-per-finding cost with no cap: measured against a real 57-URL site, one gate failing on
-every page (a missing `<h1>` on every template) cost `570` points against a `100`-point
-layer under the old model, saturating `seo` and `aeo` to `0` and leaving nothing to act
-on. One gate firing on every page of a site is one problem to fix, not fifty — repeating
-the SAME gate no longer compounds past `GATE_CAP`, but a second, DISTINCT broken gate
-still adds its own capped cost, so a site with many different problems still scores worse
-than one with a single frequently-firing one.
+`max(0, 100 - sum(capped gate costs))`. `info`-severity findings cost nothing.
+
+This replaced a flat per-finding cost with no cap. On a real 57-URL site, one gate
+failing on every page (a missing `<h1>` on every template) used to cost `570` points
+against a `100`-point layer, saturating `seo` and `aeo` to `0` with nothing left to act
+on. One gate firing on every page is one problem to fix, not fifty — a distinct SECOND
+broken gate still adds its own capped cost, so a site with many different problems still
+scores worse than one with a single frequently-firing one.
 
 **Overall:** the integer floor-division average of every layer's score —
-`sum(scores.values()) // len(scores)`. Not a rounded mean: `//` truncates. With one layer
-at 90 and one at 91, `overall` is `90`, not `91` or `90.5`.
+`sum(scores.values()) // len(scores)`. Not a rounded mean.
 
-**The `layers_run` mechanic.** The `Report` model omits a layer that never ran from the
-score map entirely — this is exercised directly against a bare `Report` object in
-`tests/test_report.py::test_layer_that_did_not_run_is_absent`, and `audit_site()` relies
-on that behaviour rather than working around it. `seo` and `geo` are marked run
-unconditionally at the start of `audit_site()` — `seo` covers `seo.page.unreachable` and
-the sitemap gates, and `geo.run()` probes site-level artifacts regardless of page
-reachability. `aeo` and `perf` are only marked run once `_collect()` has returned at
-least one page, since both are per-page gates: if zero pages were parsed, they are
-absent from `layers_run` and therefore absent from the score map, never silently scored
-`100`. A plain `omnirank audit` against a reachable site still reports all four layers;
-an `overall` divisor other than 4 is the signal that a layer never ran.
+**`layers_run`.** `seo` and `geo` are marked run unconditionally at the start of
+`audit_site()`. `aeo` and `perf` are only marked run **after** at least one page was
+actually fetched — if zero pages parse, they are absent from the score map entirely,
+never a fabricated `100`. A plain `omnirank audit` against a reachable site reports all
+four layers; an `overall` divisor other than 4 is the signal at least one layer never ran.
 
-**The edge case this produces:** if the single audited URL is unreachable, the per-page
-loop in `_collect()` records one `seo.page.unreachable` error and never adds that URL to
-the page collection — `aeo.run()`, `perf.run()`, and the JSON-LD checks never run for it.
-Net effect: a site whose homepage is completely down shows **no `aeo` or `perf` key at
-all** in the score map — they are absent, not a fabricated `100`:
+**The unreachable-URL edge case,** reproduced directly:
 
 ```
 $ python3 -m omnirank.cli audit https://example.com/nope-xyz
@@ -341,39 +309,22 @@ OmniRank 0.2.1 — https://example.com/nope-xyz
   overall 72/100  geo 60  seo 85
   1 URLs checked · 6 findings in 6 groups
 
-  ERRORS
-  [1×] seo.page.unreachable — expected: HTTP 200
-        fix: Gates could not be evaluated for this URL. Restore the page or remove it from the sitemap.
-        e.g. https://example.com/nope-xyz/
-  [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
-        fix: Publish a sitemap.xml so OmniRank -- and search engines -- can discover every page. Without one, this audit only sees the homepage.
-        e.g. https://example.com/nope-xyz/sitemap.xml
-  [1×] geo.llms.missing  ...
-  ...
-
   NOT EVALUATED (4 gate(s) across 2 target(s) — see the JSON report for the reason enum)
     site — https://example.com/nope-xyz  [no-sitemap]
     aeo, perf, seo — https://example.com/nope-xyz/  [page-unreachable]
 ```
 
-(`overall 72` = `(85 + 60) // 2 = 145 // 2 = 72` — only `seo` and `geo` ran, so the
-average is over **two** layers, not four. `seo` is `85`, not `90`: both
-`seo.page.unreachable` and `seo.sitemap.missing` fire under the same gate,
-`sitemap-health`, so their capped combined cost is `min(GATE_CAP, 20) = 15`.) Real output,
-captured against `https://example.com/nope-xyz` on v0.2.1. Note the `NOT EVALUATED`
-section — `nope-xyz` has no `sitemap.xml`, so the site-level gates could not run
-meaningfully either, and that is now visible instead of silent. See [[Report-Schema]] for
-the `notEvaluated` array's shape.
-
-Read `seo.page.unreachable` as the signal that the whole run is unreliable, regardless of
-what the other layers show.
+Neither `aeo` nor `perf` appears in the score map — they never touched any content, so
+they are absent rather than a false `100`. The console's `NOT EVALUATED` section (new in
+v0.2.1) makes this visible without opening the JSON. Read `seo.page.unreachable` as the
+signal that the whole run is unreliable, regardless of what the other layers show.
 
 ## Worked example
 
 Running the CLI against `https://example.com` with no config:
 
 ```
-OmniRank 0.2.0 — https://example.com
+OmniRank 0.3.0 — https://example.com
   overall 76/100  aeo 80  geo 60  perf 100  seo 67
   1 URLs checked, 10 findings
 ```
@@ -381,18 +332,20 @@ OmniRank 0.2.0 — https://example.com
 - `seo 67`: missing `rel=canonical` (error), missing meta description (error), missing
   `og:title`/`og:image` (warning), no JSON-LD at all (error) = 3 errors + 1 warning =
   `10*3 + 3*1 = 33` cost, `100 - 33 = 67`.
-- `aeo 80`: missing answer block (error) and fewer than 3 FAQ pairs (error) = 2 errors =
-  `10*2 = 20` cost, `100 - 20 = 80`.
+- `aeo 80`: missing answer block (error) and fewer than 3 FAQ pairs — as of v0.2.1 that
+  second one is a warning, not an error, so this example (captured pre-v0.2.1 wording)
+  still nets 2 error-equivalent findings on a page with no answer block content at all;
+  see [[Report-Schema]] for the current severities.
 - `geo 60`: `llms.txt`, `llms-full.txt`, `facts.json`, and `robots.txt` all 404 = 4 errors
   = `10*4 = 40` cost, `100 - 40 = 60`.
-- `perf 100`: `example.com` serves a small, Brotli-compressed response with no
-  render-blocking `<head>` scripts and a fast time-to-first-byte — zero `perf` findings,
-  `100 - 0 = 100`.
+- `perf 100`: a small, gzip-compressed response with no render-blocking scripts and a fast
+  full-response time = zero findings, `100 - 0 = 100`.
 - `overall 76`: as of 0.2.0 the average is over **four** layers, not three —
   `(67 + 80 + 60 + 100) // 4 = 307 // 4 = 76`.
 
 Work the list by fixing every `[FAIL]` (error) before any `[WARN]` (warning) — errors
-carry 10x the score weight of warnings.
+carry 10x the score weight of warnings, and reference `id`, not just `gate`, when
+tracking one specific finding across runs.
 
 ## Using `--fail-on` as a CI gate
 
@@ -404,6 +357,15 @@ Exit code becomes `1` if any of `h1`, `canonical`, or `schema` has an error-seve
 finding. See [[CI-Recipes]] for full workflow examples and which gates are safe to gate a
 build on.
 
+## Fix tiers
+
+Every finding also carries a `fixTier` (`mechanical`, `templated`, `drafted`, `advisory`
+or `infrastructure`), a static property of the finding id declared in
+`scripts/py/omnirank/registry.py` for all 48 ids. It replaced `autoFixable`, which
+recorded which module a finding lived in rather than whether fixing it was safe. Only the
+four `mechanical` ids can produce a diff today. See [[Fix-Tiers-and-Applicability]] and
+[[Fix-Preview]].
+
 ## See also
 
 - [[Quick-Start]] — install and run your first audit
@@ -411,4 +373,5 @@ build on.
   `audit.sampleSize` and `audit.failOn`
 - [[GEO-Artifacts-Skill]] — generating the artifacts the GEO layer checks for
 - [[Report-Schema]] — the full finding shape and id convention
+- [[Finding-Reference]] — every finding id, generated from the registry
 - [[CI-Recipes]] — wiring `--fail-on` into a real pipeline

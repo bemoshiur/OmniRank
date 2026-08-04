@@ -11,6 +11,15 @@ datasets, and several results come from models that have since been replaced. A 
 cited these figures as guarantees would be doing exactly what OmniRank refuses to do
 elsewhere.
 
+**A note on what "uses it" means as of v0.3.0.** OmniRank now *acts* on some findings —
+`omnirank fix` prints a real diff for 4 mechanical finding ids (see [[Fix-Preview]]) —
+but every citation on this page still describes research the *content* of a page needs to
+satisfy (statistics, quotations, primary-source citations, entity mentions), not the
+structural edits `fix` makes today. `fix` never drafts prose; it only ever splices a
+constant string or resolves an existing value. The research below still awaits
+`aeo-onpage` (roadmap), which is the skill that will actually draft against it — see
+[[Fix-Tiers-and-Applicability]] for why that boundary is deliberate.
+
 ## What the research supports
 
 ### On-page elements that lift AI visibility
@@ -22,9 +31,9 @@ The study tested content modifications against generative engines and found that
 largest gains in how often a page was surfaced and quoted. Reported lift reached roughly
 40% on their benchmark.
 
-**How OmniRank uses it:** the `aeo-onpage` skill (planned, v0.2) will treat those three
+**How OmniRank uses it:** the `aeo-onpage` skill (planned) will treat those three
 elements as required when drafting, not optional polish. The shipped `audit` skill does not
-yet check for them.
+yet check for them, and `omnirank fix` does not draft content of any kind.
 
 **Limits:** a single benchmark, on 2023-era models, in English. Whether the effect
 transfers to Bengali news content or Bangladeshi commercial queries is untested by anyone.
@@ -87,6 +96,7 @@ They move independently.
 | "A 40% lift is what you will get" | **Misreading.** That figure is one benchmark under one set of conditions, not a forecast for your site. |
 | "Brand mentions cause citations" | **Not established.** The correlation is real; the causal direction is not demonstrated and brand size confounds it. |
 | "This works the same in every language" | **Untested.** No study in this list covered non-English content. |
+| "`omnirank fix` applies this research automatically" | **False.** `fix` splices constants and resolves existing values for 4 mechanical finding ids; it drafts no prose and adds no statistics, quotations or citations. |
 
 ## Measuring it yourself
 
@@ -109,4 +119,4 @@ correct reference. Code is MIT; documentation and the generated corpus are CC BY
 
 ---
 
-See also: [[Glossary]] · [[GEO-Artifacts-Skill]] · [[Roadmap]] · [[FAQ]]
+See also: [[Glossary]] · [[GEO-Artifacts-Skill]] · [[Fix-Tiers-and-Applicability]] · [[Roadmap]] · [[FAQ]]

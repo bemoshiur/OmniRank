@@ -1,9 +1,10 @@
 # Claude Code Setup
 
 OmniRank installs into Claude Code as a plugin, either by downloading the tagged release
-ZIP or by cloning the repository directly into the plugins directory. Once installed,
-Claude Code discovers two skills, `audit` and `geo-artifacts`, and triggers each one from
-natural-language phrases that echo their `SKILL.md` description field.
+ZIP or by cloning the repository into the plugins directory. Once installed, Claude Code
+discovers two skills, `audit` and `geo-artifacts`, triggered from natural-language
+phrases that echo their `SKILL.md` description field. `omnirank fix` is a CLI subcommand
+of the same package, not a third registered skill.
 
 Verified against `.claude-plugin/plugin.json`, `scripts/build-skill-zip.sh`, and the two
 `SKILL.md` files.
@@ -18,33 +19,12 @@ unzip omnirank-skill.zip -d ~/.claude/plugins/
 This is the README's documented install path. The release ZIP is built by
 `scripts/build-skill-zip.sh` and published by `.github/workflows/release.yml` on every
 `v*` tag push. Unzipping it stages a top-level `omnirank/` directory, so the command
-above leaves you with `~/.claude/plugins/omnirank/`. Confirmed by listing the actual
-archive contents:
-
-```
-$ unzip -l dist/omnirank-skill-0.1.1.zip
-  Length      Date    Time    Name
----------  ---------- -----   ----
-        0  ...         omnirank/
-     1096  ...         omnirank/LICENSE
-      247  ...         omnirank/Makefile
-      569  ...         omnirank/LICENSE-CONTENT
-        0  ...         omnirank/schemas/
-     5674  ...         omnirank/schemas/omnirank.config.schema.json
-     6832  ...         omnirank/README.md
-        0  ...         omnirank/scripts/py/omnirank/
-     ...
-        0  ...         omnirank/.claude-plugin/
-      975  ...         omnirank/.claude-plugin/plugin.json
-        0  ...         omnirank/templates/
-     1361  ...         omnirank/templates/omnirank.config.example.json
-        0  ...         omnirank/skills/
-```
-
-The archive contains `.claude-plugin/plugin.json`, both skill directories under
-`skills/`, the Python package, the JSON Schemas, and the config template — everything
-needed to run the CLI and have both skills discoverable, without cloning the full
-repository (Node sources, tests, and CI config are intentionally left out).
+above leaves you with `~/.claude/plugins/omnirank/`. Contents mirror the archive listing
+for the current release — `.claude-plugin/plugin.json`, both skill directories under
+`skills/`, the Python package (including `fixes/`, `registry.py`, `locator.py`, and
+`framework.py`, all new since v0.2.1), the JSON Schemas, and the config template —
+everything needed to run the CLI and have both skills discoverable, without cloning the
+full repository (Node sources, tests, and CI config are intentionally left out).
 
 Build the archive yourself instead of downloading it:
 
@@ -78,7 +58,7 @@ ls ~/.claude/plugins/omnirank/skills/geo-artifacts/SKILL.md
 
 All three must exist. If `.claude-plugin/plugin.json` is missing, the ZIP was unzipped to
 the wrong location or the clone did not complete; if a `SKILL.md` is missing, re-download
-or re-clone.
+or re-clone. `plugin.json`'s `"version"` field reads `"0.3.0"` on a current checkout.
 
 **Confirm each skill's identity by reading its frontmatter** (what Claude Code actually
 parses to register the skill and decide when to trigger it):
@@ -130,16 +110,32 @@ description above, not because they are hardcoded trigger strings.
 - "Make our site citable by ChatGPT, Claude, Perplexity, or Gemini."
 - "Publish machine-readable ground truth for AI crawlers."
 
+### To use `omnirank fix`
+
+There is no `SKILL.md` description to match against — `fix` is not a Claude Code skill,
+it is a CLI subcommand of the same package the `audit` skill already installs. Run it
+directly, from inside a Claude Code session's terminal access or your own shell:
+
+```bash
+python3 -m omnirank.cli fix https://example.com --root .
+```
+
+See [[Fix-Preview]] for the full flag reference and what its output looks like.
+
 ## What will not trigger either skill?
 
 Both `SKILL.md` files list explicit "When NOT to use" cases. Asking Claude to "write our
 JSON-LD" or "emit schema for this entity type" will not trigger either shipped skill —
-that is `aeo-onpage`, which is on the roadmap and not present in v0.1.1. Asking it to
+that is `aeo-onpage`, which is on the roadmap and not present in v0.3.0. Asking it to
 "submit this URL to Google" will not trigger anything either — that is the unshipped
-`indexing` skill. See [[Roadmap]] for the full list of what does not exist yet.
+`indexing` skill. Asking it to "apply the fix" or "write the canonical tag for me" will
+also not do anything by itself: `omnirank fix` only prints a diff, and no skill in
+v0.3.0 applies an edit to your source tree. See [[Roadmap]] for the full list of what
+does not exist yet.
 
 ## See also
 
 - [[Quick-Start]] — installing the CLI itself (not the plugin) for local/CI use
 - [[Audit-Skill]] and [[GEO-Artifacts-Skill]] — what each skill actually does once triggered
+- [[Fix-Preview]] — what `omnirank fix` does and why it has no Claude Code skill of its own
 - [[Roadmap]] — which skills are planned versus shipped
