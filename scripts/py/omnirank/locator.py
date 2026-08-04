@@ -224,20 +224,71 @@ def _prefixed(base: str, name: str) -> str:
     return f"{base}/{name}" if base else name
 
 
+def _resolve_candidate(root: Path, relative: str) -> Path | None:
+    """The real on-disk path for `relative` under `root`, or `None` if it
+    escapes `root` or doesn't match on disk byte-for-byte.
+
+    Two independent gaps, one gate. First, `relative` is built directly from
+    URL segments, so a `../` in the URL (or, after `.resolve()`, a symlink
+    *inside* the repo whose target lives outside it) must not be allowed to
+    walk out of the repository -- nothing writes through a `Location.path`
+    yet, but v0.4.0 opens `root / location.path` directly, and an escaped
+    candidate today is arbitrary-file-write the day that lands. Second,
+    `Path.is_file()` follows the host filesystem's own case folding, which is
+    on by default on macOS and Windows and off on Linux CI, so a naive check
+    would match `/pricing` to an on-disk `Pricing.html` on a contributor's
+    Mac and not in CI.
+
+    Walking `relative` one component at a time against each directory's real
+    `iterdir()` entries closes both at once: a literal `..` component is
+    never a real entry (`iterdir()` never yields `.` or `..`), so a traversal
+    attempt fails here before the filesystem is ever asked to resolve
+    anything, and comparing names exactly makes the match case-sensitive on
+    every platform, matching `next-app-router`'s plain string comparison.
+    The trailing `resolve()` + containment check is what catches the one
+    case a name-walk alone cannot: a symlink whose *target* -- not its own
+    name -- points outside `root`.
+    """
+    current = root
+    for part in Path(relative).parts:
+        try:
+            names = {entry.name for entry in current.iterdir()}
+        except OSError:
+            return None
+        if part not in names:
+            return None
+        current = current / part
+
+    try:
+        resolved_root = root.resolve()
+        resolved_candidate = current.resolve()
+    except OSError:
+        return None
+    if not resolved_candidate.is_relative_to(resolved_root):
+        return None
+    return current
+
+
 def _locate_by_convention(root: Path, relatives: list[str]) -> Location:
     """Resolve only when EXACTLY ONE candidate exists.
 
     Two candidates is a genuine ambiguity -- `pricing.html` and
     `pricing/index.html` are both plausible owners of `/pricing` and the answer
     depends on server configuration this tool cannot read. Picking one and
-    editing it is the failure mode the whole design exists to avoid.
+    editing it is the failure mode the whole design exists to avoid. A
+    candidate that fails `_resolve_candidate` (escapes `root`, or only matches
+    case-insensitively) is not a candidate at all -- it is excluded before
+    the ambiguity count is taken, not treated as a tie-breaking loss.
     """
-    hits = [relative for relative in relatives if (root / relative).is_file()]
+    hits: list[tuple[str, Path]] = []
+    for relative in relatives:
+        candidate = _resolve_candidate(root, relative)
+        if candidate is not None and candidate.is_file():
+            hits.append((relative, candidate))
     if len(hits) != 1:
         return NOT_LOCATED
-    relative = hits[0]
-    return Location(path=relative, line=_head_line(root / relative),
-                    confidence="exact")
+    relative, candidate = hits[0]
+    return Location(path=relative, line=_head_line(candidate), confidence="exact")
 
 
 def _locate_static(route: str, root: Path) -> Location:
@@ -292,14 +343,36 @@ _BY_FRAMEWORK = {
 }
 
 
+def _escapes_root(root: Path, relative: str) -> bool:
+    """True if `relative`, resolved against `root`, is not a descendant of it.
+
+    This is the module's final backstop, not its primary defence: every
+    resolver is expected to keep its own candidates inside `root` (see
+    `_resolve_candidate` for the convention resolvers; `next-app-router` is
+    contained by construction, since its candidates come from `rglob()` under
+    a known-good `app_root`). This check exists so that a future resolver
+    added to `_BY_FRAMEWORK` cannot reintroduce a path-traversal hole simply
+    by forgetting to; `locate()` is the one place every resolver's output
+    passes through on its way out of this module, so it is the one place a
+    module-wide guarantee can actually be enforced.
+    """
+    try:
+        return not (root / relative).resolve().is_relative_to(root.resolve())
+    except OSError:
+        return True
+
+
 def locate(url: str, *, detection: Detection, root: str | Path) -> Location:
     """Resolve `url` to a source file. Unresolvable is `NOT_LOCATED`, never a guess."""
     resolver = _BY_FRAMEWORK.get(detection.framework)
     if resolver is None:
         return NOT_LOCATED
 
-    found = resolver(route_of(url), Path(root))
+    base = Path(root)
+    found = resolver(route_of(url), base)
     if found.path is None:
+        return NOT_LOCATED
+    if _escapes_root(base, found.path):
         return NOT_LOCATED
 
     ceiling = DETECTION_CEILING[detection.confidence]
