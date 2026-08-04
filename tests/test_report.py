@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from omnirank.report import Finding, Report
+from omnirank.report import Finding, NotEvaluated, Report
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads((ROOT / "schemas" / "report.schema.json").read_text())
@@ -174,3 +174,49 @@ def test_a_clean_layer_that_ran_still_scores_100():
     r = Report(site="https://x.example", kind="audit")
     r.layers_run.update({"seo", "aeo", "geo"})
     assert r.score() == {"seo": 100, "aeo": 100, "geo": 100, "overall": 100}
+
+
+# --- v0.2.1: notEvaluated -- a gate that could not run must be visible, not silent ---
+
+def test_report_has_no_not_evaluated_entries_by_default():
+    r = Report(site="https://x.example", kind="audit")
+    assert r.not_evaluated == []
+    assert r.to_dict()["notEvaluated"] == []
+
+
+def test_flag_not_evaluated_appears_in_to_dict():
+    r = Report(site="https://x.example", kind="audit")
+    r.flag_not_evaluated(NotEvaluated(gate="aeo", url="https://x.example/a",
+                                      reason="page-unreachable"))
+    d = r.to_dict()["notEvaluated"]
+    assert d == [{"gate": "aeo", "reason": "page-unreachable", "url": "https://x.example/a"}]
+
+
+def test_not_evaluated_site_entry_omits_the_url_key():
+    r = Report(site="https://x.example", kind="audit")
+    r.flag_not_evaluated(NotEvaluated(gate="site", site="https://x.example",
+                                      reason="no-sitemap"))
+    d = r.to_dict()["notEvaluated"][0]
+    assert "url" not in d
+    assert d["site"] == "https://x.example"
+
+
+def test_not_evaluated_validates_against_the_report_schema():
+    r = Report(site="https://x.example", kind="audit")
+    r.flag_not_evaluated(NotEvaluated(gate="aeo", url="https://x.example/a",
+                                      reason="page-unreachable"))
+    r.flag_not_evaluated(NotEvaluated(gate="site", site="https://x.example",
+                                      reason="no-sitemap"))
+    validator = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
+    errors = list(validator.iter_errors(r.to_dict()))
+    assert errors == [], errors
+
+
+def test_a_report_without_not_evaluated_key_still_validates():
+    # An old report written before v0.2.1 has no "notEvaluated" key at all -- the
+    # field must be additive, never required.
+    r = Report(site="https://x.example", kind="audit")
+    d = r.to_dict()
+    del d["notEvaluated"]
+    validator = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
+    assert list(validator.iter_errors(d)) == []

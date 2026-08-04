@@ -102,6 +102,94 @@ def test_falls_back_to_root_when_sitemap_absent():
     assert report.urls_checked == 1
 
 
+# --- v0.2.1: a missing sitemap must not be a silent 1-URL "whole site" audit ---
+
+@respx.mock
+def test_missing_sitemap_reports_a_finding_not_a_silent_fallback():
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/").mock(return_value=httpx.Response(200, text=PAGE))
+    respx.get(f"{SITE}/llms.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+    report = audit_site(default_config(SITE), make_client())
+
+    missing = [f for f in report.findings if f.id == "seo.sitemap.missing"]
+    assert missing and missing[0].severity == "error"
+    assert missing[0].gate == "sitemap-health"
+
+    site_level = [e for e in report.not_evaluated if e.reason == "no-sitemap"]
+    assert site_level and site_level[0].site == SITE
+    assert site_level[0].url is None
+
+
+@respx.mock
+def test_present_sitemap_does_not_flag_it_missing():
+    mock_site()
+    report = audit_site(default_config(SITE), make_client())
+    assert "seo.sitemap.missing" not in {f.id for f in report.findings}
+    assert not any(e.reason == "no-sitemap" for e in report.not_evaluated)
+
+
+# --- v0.2.1: an unreachable page's per-page gates go into notEvaluated, not
+# silence ---
+
+@respx.mock
+def test_unreachable_page_flags_its_per_page_gates_as_not_evaluated():
+    mock_site(page_status=500)
+    report = audit_site(default_config(SITE), make_client())
+    unreachable_url = f"{SITE}/"
+    gates = {e.gate for e in report.not_evaluated if e.url == unreachable_url}
+    assert gates == {"seo", "aeo", "perf"}
+    assert all(e.reason == "page-unreachable"
+               for e in report.not_evaluated if e.url == unreachable_url)
+
+
+@respx.mock
+def test_reachable_page_has_no_not_evaluated_entries():
+    mock_site()
+    report = audit_site(default_config(SITE), make_client())
+    assert report.not_evaluated == []
+
+
+# --- v0.2.1: hygiene.check_sitemap() is wired in, distinguishing a redirecting
+# sitemap entry (warning) from a genuinely dead one (error) ---
+
+@respx.mock
+def test_dead_sitemap_url_is_reported_by_the_dedicated_gate():
+    mock_site(page_status=404)
+    report = audit_site(default_config(SITE), make_client())
+    dead = [f for f in report.findings if f.id == "seo.sitemap-health.dead-url"]
+    assert dead and dead[0].severity == "error"
+
+
+@respx.mock
+def test_redirecting_sitemap_url_is_a_warning_not_only_an_unreachable_error():
+    mock_site(page_status=301)
+    report = audit_site(default_config(SITE), make_client())
+    redirect = [f for f in report.findings if f.id == "seo.sitemap-health.redirect"]
+    assert redirect and redirect[0].severity == "warning"
+
+
+@respx.mock
+def test_a_healthy_sitemap_url_is_not_refetched_by_check_sitemap():
+    good = ("<!doctype html><html lang='en'><head><title>T</title>"
+            '<meta name="description" content="D."></head>'
+            "<body><h1>H</h1></body></html>")
+    route = respx.get(f"{SITE}/a").mock(return_value=httpx.Response(200, text=good))
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(
+        200, text='<?xml version="1.0"?><urlset>'
+                  f"<url><loc>{SITE}/a</loc></url></urlset>"))
+    for art in ("llms.txt", "llms-full.txt", "facts.json"):
+        respx.get(f"{SITE}/{art}").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(200, text="Allow: /"))
+
+    audit_site(default_config(SITE), make_client())
+    assert route.call_count == 1, (
+        "a URL _collect() already confirmed ok must not be re-fetched by "
+        "check_sitemap()")
+
+
 @respx.mock
 def test_audit_collects_pages_for_the_site_pass():
     from omnirank.audit import _collect

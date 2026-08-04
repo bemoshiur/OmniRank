@@ -51,6 +51,23 @@
           "autoFixable": { "type": "boolean" }
         }
       }
+    },
+    "notEvaluated": {
+      "type": "array",
+      "description": "Gates OmniRank could not actually run, so it does not stay silent about them. Additive/optional: a report generated before v0.2.1 has no notEvaluated key and still validates.",
+      "items": {
+        "type": "object",
+        "required": ["gate", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "gate": { "type": "string" },
+          "reason": {
+            "enum": ["no-sitemap", "page-unreachable", "not-applicable", "adapter-absent"]
+          },
+          "url": { "type": "string", "description": "Set for a per-page gate that could not run." },
+          "site": { "type": "string", "description": "Set for a site-level gate that could not run." }
+        }
+      }
     }
   }
 }

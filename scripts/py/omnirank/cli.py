@@ -52,6 +52,45 @@ def _format_group(g: dict) -> list[str]:
     ]
 
 
+def _group_not_evaluated(entries: list) -> list[dict]:
+    """Collapse notEvaluated entries that share a target (url or site) and reason.
+
+    A page that could not be fetched flags several gates (seo, aeo, perf) at once —
+    without grouping, that would print as three near-identical lines instead of one.
+    """
+    groups: dict[tuple[str | None, str], dict] = {}
+    order: list[tuple[str | None, str]] = []
+    for e in entries:
+        target = e.url if e.url is not None else e.site
+        key = (target, e.reason)
+        g = groups.get(key)
+        if g is None:
+            g = {"target": target, "reason": e.reason, "gates": []}
+            groups[key] = g
+            order.append(key)
+        g["gates"].append(e.gate)
+    return [groups[k] for k in order]
+
+
+def _format_not_evaluated(report: Report) -> list[str]:
+    """A short "what could not be checked" section — a silent gate is the one
+    thing this tool must never produce, so it must be visible in the console
+    summary, not only in the JSON report.
+    """
+    if not report.not_evaluated:
+        return []
+    groups = _group_not_evaluated(report.not_evaluated)
+    lines = [
+        "",
+        (f"  NOT EVALUATED ({len(report.not_evaluated)} gate(s) across "
+         f"{len(groups)} target(s) — see the JSON report for the reason enum)"),
+    ]
+    for g in groups:
+        gates = ", ".join(sorted(set(g["gates"])))
+        lines.append(f"    {gates} — {g['target']}  [{g['reason']}]")
+    return lines
+
+
 def _summarise(report: Report, fail_on: list[str], *,
                 detail: bool = False, top: int | None = None) -> str:
     score = report.score()
@@ -90,6 +129,8 @@ def _summarise(report: Report, fail_on: list[str], *,
         if hidden > 0:
             lines.append("")
             lines.append(f"  …and {hidden} more groups in the JSON report")
+
+    lines.extend(_format_not_evaluated(report))
 
     if fail_on:
         lines.append(f"  failOn gates: {', '.join(fail_on)}")

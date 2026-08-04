@@ -129,6 +129,33 @@ def test_clean_report_renders_sensibly():
     assert "WARNINGS" not in out
 
 
+# --- v0.2.1: the console summary must show what could not be checked ---
+
+def test_clean_report_has_no_not_evaluated_section():
+    out = _summarise(_report([]), [])
+    assert "NOT EVALUATED" not in out
+
+
+def test_not_evaluated_entries_appear_in_the_console_summary():
+    from omnirank.report import NotEvaluated
+
+    report = _report([])
+    report.flag_not_evaluated(NotEvaluated(
+        gate="aeo", url="https://x.example/broken", reason="page-unreachable"))
+    report.flag_not_evaluated(NotEvaluated(
+        gate="perf", url="https://x.example/broken", reason="page-unreachable"))
+    report.flag_not_evaluated(NotEvaluated(
+        gate="site", site="https://x.example", reason="no-sitemap"))
+    out = _summarise(report, [])
+    assert "NOT EVALUATED" in out
+    assert "https://x.example/broken" in out
+    assert "page-unreachable" in out
+    assert "no-sitemap" in out
+    # grouped: aeo and perf share a target and reason, so they must not each get
+    # their own line
+    assert out.count("https://x.example/broken") == 1
+
+
 @respx.mock
 def test_clean_site_console_has_no_group_sections(tmp_path, capsys):
     mock_site()
