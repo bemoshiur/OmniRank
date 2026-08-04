@@ -85,6 +85,11 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
        "schema-fabrication"),
     _r("seo.schema-fabrication.anonymous-review", "advisory", "error", "seo",
        "schema-fabrication"),
+    # `drafted`: the missing value is content -- a headline, an image URL, a
+    # postal address -- that a human must author or approve. There is no
+    # constant and no repo fact that supplies it.
+    _r("seo.schema-required.missing-property", "drafted", "warning", "seo",
+       "schema-required"),
     # --- gates/aeo.py -----------------------------------------------------
     _r("aeo.answer-block.missing", "drafted", "error", "aeo", "answer-block"),
     _r("aeo.answer-block.length", "drafted", "error", "aeo", "answer-block"),

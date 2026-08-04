@@ -16,7 +16,8 @@ PAGE = """<!doctype html><html lang="en"><head>
 <meta property="og:title" content="A Good Title">
 <meta property="og:image" content="https://x.example/og.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Organization","name":"X"}
+{"@context":"https://schema.org","@type":"Organization","name":"X",
+ "url":"https://x.example"}
 </script>
 </head><body><h1>A Good Title</h1>
 <div class="answer-block">%s</div>

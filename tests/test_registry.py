@@ -62,9 +62,10 @@ def test_registry_covers_all_forty_eight_findings():
     # (hsts fires two distinct ids). Task 4: +2 for mixed-content and
     # https-redirect. Task 6: +1 for seo.robots-sitemap.disallowed. Task 7: +3
     # for the three canonical-target ids. Task 8: +1 for
-    # seo.hreflang-noindex.alternate. Task 12 retitles/rebases this once the
-    # full v0.4.0 gate set has landed.
-    assert len(REGISTRY) == 60
+    # seo.hreflang-noindex.alternate. Task 9: +1 for
+    # seo.schema-required.missing-property. Task 12 retitles/rebases this once
+    # the full v0.4.0 gate set has landed.
+    assert len(REGISTRY) == 61
 
 
 def test_tier_distribution_matches_the_fixability_classification():
@@ -79,8 +80,9 @@ def test_tier_distribution_matches_the_fixability_classification():
     # advisory (seo.robots-sitemap.disallowed). Task 7: +2 advisory
     # (canonical-target .noindexed/.not-found) and +1 templated
     # (canonical-target .redirects). Task 8: +1 advisory
-    # (seo.hreflang-noindex.alternate).
-    assert counts == {"mechanical": 4, "templated": 17, "drafted": 12,
+    # (seo.hreflang-noindex.alternate). Task 9: +1 drafted
+    # (seo.schema-required.missing-property).
+    assert counts == {"mechanical": 4, "templated": 17, "drafted": 13,
                       "advisory": 15, "infrastructure": 12}
 
 
