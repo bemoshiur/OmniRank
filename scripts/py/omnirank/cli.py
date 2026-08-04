@@ -10,22 +10,87 @@ from .config import ConfigError, load_config
 from .report import Report
 
 SEVERITY_MARK = {"error": "FAIL", "warning": "WARN", "info": "INFO"}
+SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
+SEVERITY_SECTION = {"error": "ERRORS", "warning": "WARNINGS", "info": "INFO"}
+MAX_EXAMPLE_URLS = 3
 
 
-def _summarise(report: Report, fail_on: list[str]) -> str:
+def _group_findings(findings: list) -> list[dict]:
+    """Collapse findings that share an id into one group.
+
+    Grouping is by ``id`` (never by ``gate`` — several ids can share a gate
+    but mean different things). ``expected`` and ``fix`` are identical across
+    every finding in a group, so the first occurrence is kept as the
+    representative value.
+    """
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for f in findings:
+        g = groups.get(f.id)
+        if g is None:
+            g = {"id": f.id, "severity": f.severity, "expected": f.expected,
+                 "fix": f.fix, "urls": []}
+            groups[f.id] = g
+            order.append(f.id)
+        g["urls"].append(f.url)
+    ordered = [groups[i] for i in order]
+    ordered.sort(key=lambda g: (SEVERITY_RANK.get(g["severity"], 99), -len(g["urls"])))
+    return ordered
+
+
+def _format_group(g: dict) -> list[str]:
+    urls = g["urls"]
+    examples = urls[:MAX_EXAMPLE_URLS]
+    remainder = len(urls) - len(examples)
+    example_line = "        e.g. " + ", ".join(examples)
+    if remainder > 0:
+        example_line += f", …and {remainder} more"
+    return [
+        f"  [{len(urls)}×] {g['id']} — expected: {g['expected']}",
+        f"        fix: {g['fix']}",
+        example_line,
+    ]
+
+
+def _summarise(report: Report, fail_on: list[str], *,
+                detail: bool = False, top: int | None = None) -> str:
     score = report.score()
     lines = [
         f"OmniRank {__version__} — {report.site}",
         f"  overall {score['overall']}/100  "
         + "  ".join(f"{k} {v}" for k, v in sorted(score.items()) if k != "overall"),
-        f"  {report.urls_checked} URLs checked, {len(report.findings)} findings",
     ]
-    for f in report.findings[:25]:
-        lines.append(f"  [{SEVERITY_MARK[f.severity]}] {f.id}  {f.url}")
-        lines.append(f"         observed: {f.observed}")
-        lines.append(f"         fix: {f.fix}")
-    if len(report.findings) > 25:
-        lines.append(f"  ... {len(report.findings) - 25} more in the JSON report")
+
+    if detail:
+        lines.append(f"  {report.urls_checked} URLs checked, {len(report.findings)} findings")
+        for f in report.findings[:25]:
+            lines.append(f"  [{SEVERITY_MARK[f.severity]}] {f.id}  {f.url}")
+            lines.append(f"         observed: {f.observed}")
+            lines.append(f"         fix: {f.fix}")
+        if len(report.findings) > 25:
+            lines.append(f"  ... {len(report.findings) - 25} more findings in the JSON report")
+    else:
+        groups = _group_findings(report.findings)
+        summary = f"  {report.urls_checked} URLs checked · {len(report.findings)} findings"
+        if groups:
+            summary += f" in {len(groups)} groups"
+        lines.append(summary)
+
+        shown = groups[:top] if top is not None else groups
+        current_section: str | None = None
+        for g in shown:
+            section = SEVERITY_SECTION.get(g["severity"], "OTHER")
+            if section != current_section:
+                lines.append("")
+                lines.append(f"  {section}")
+                current_section = section
+            lines.extend(_format_group(g))
+
+        hidden = len(groups) - len(shown)
+        if hidden > 0:
+            lines.append("")
+            lines.append(f"  …and {hidden} more groups in the JSON report")
+
     if fail_on:
         lines.append(f"  failOn gates: {', '.join(fail_on)}")
     return "\n".join(lines)
@@ -42,6 +107,12 @@ def _build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--out", help="Report path (default .omnirank/reports/<date>-audit.json)")
     audit.add_argument("--fail-on", nargs="*", default=None,
                        help="Gate ids that force exit code 1. Overrides config.")
+    audit.add_argument("--detail", action="store_true",
+                       help="Print every finding individually instead of the grouped "
+                            "summary (capped at 25, same as before v0.2.1).")
+    audit.add_argument("--top", type=int, default=None,
+                       help="Limit the grouped summary to the top N groups "
+                            "(default: all). Ignored with --detail.")
 
     geo = sub.add_parser("geo", help="Generate llms.txt, llms-full.txt and facts.json")
     geo.add_argument("url", nargs="?", help="Site root. Omit when using --config.")
@@ -83,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or f".omnirank/reports/{datetime.now(UTC).date().isoformat()}-audit.json"
     written = report.write(out)
 
-    print(_summarise(report, fail_on))
+    print(_summarise(report, fail_on, detail=args.detail, top=args.top))
     print(f"  report: {written}")
 
     return 1 if report.has_failures(fail_on) else 0
