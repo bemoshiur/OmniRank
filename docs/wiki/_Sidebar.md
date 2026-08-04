@@ -15,10 +15,17 @@
 - [[Audit-Skill]]
 - [[GEO-Artifacts-Skill]]
 
+**Fix preview (v0.3.0)**
+
+- [[Fix-Preview]]
+- [[Fix-Tiers-and-Applicability]]
+- [[The-Locator]]
+
 **Reference**
 
 - [[Configuration-Reference]]
 - [[Report-Schema]]
+- [[Finding-Reference]]
 - [[CI-Recipes]]
 
 **Learn**

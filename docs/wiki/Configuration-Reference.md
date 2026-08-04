@@ -1,27 +1,24 @@
 # Configuration Reference
 
-This page lists every field `omnirank.config.json` accepts, generated directly from
-`schemas/omnirank.config.schema.json`, split by top-level section. Each row states the
-field's type, whether it is required, its default when code supplies one, and whether
-shipped code actually reads it yet or only validates and stores it.
+`omnirank.config.json` is optional: `omnirank audit <url>`, `omnirank geo <url>` and
+`omnirank fix <url>` all work with zero configuration. This page lists every field the
+schema accepts, generated directly from `schemas/omnirank.config.schema.json`, split by
+top-level section, each marked **Consumed** (a shipped code path reads it) or
+**Schema-only** (validated and stored, not yet read).
 
-`omnirank.config.json` is optional — `omnirank audit <url>` and `omnirank geo <url>` both
-work with zero configuration. Since the in-memory config a bare URL builds has no `geo`
-section, a bare `omnirank geo <url>` also has no configured `geo.license` — as of v0.2.1
-that generates the artifacts anyway (granting no reuse rights) and prints a notice to
-stderr saying so, rather than refusing to run — see [[GEO-Artifacts-Skill]]. A config
-file also unlocks CI gating (`audit.failOn`), first-party facts (`nap`, `identifiers`,
-`statistics`), and secret-backed integrations (`secrets`). The root object and every
-nested object set `"additionalProperties": false`, so a typo'd field name fails
-validation rather than being silently ignored.
+A config file unlocks three things a bare URL cannot give you: CI gating
+(`audit.failOn`), first-party facts (`nap`, `identifiers`, `statistics`), and
+secret-backed integrations (`secrets`). The root object and every nested object set
+`"additionalProperties": false`, so a typo'd field name fails validation rather than
+being silently ignored.
 
 ## What does "Consumed" vs "Schema-only" mean?
 
-Not every field the schema accepts is read by v0.2.0's shipped code. **Consumed** means a
+Not every field the schema accepts is read by v0.3.0's shipped code. **Consumed** means a
 shipped code path reads the field. **Schema-only** means the field is validated, stored,
-and forward-compatible with a roadmap skill, but nothing in `audit` or `geo-artifacts`
-reads it yet. Writing a schema-only field is not wasted — validation still checks it —
-but do not expect it to change behaviour today.
+and forward-compatible with a roadmap skill, but nothing in `audit`, `geo-artifacts`, or
+`fix` reads it yet. Writing a schema-only field is not wasted — validation still checks
+it — but do not expect it to change behaviour today.
 
 ## `site` (required)
 
@@ -51,10 +48,9 @@ non-empty. Not otherwise consumed.
 
 ## `identifiers`
 
-Free-form string map (`{"key": "value"}`, e.g. `{"bin": "123456", "tradeLicense":
-"789012"}`). **Consumed (passthrough)** into `facts.json`'s `identifiers` key when
-non-empty. Real registration numbers only — this field exists to say "a real registered
-entity exists," and no gate verifies what you put here.
+Free-form string map (`{"key": "value"}`). **Consumed (passthrough)** into `facts.json`'s
+`identifiers` key when non-empty. Real registration numbers only — no gate verifies what
+you put here.
 
 ## `sameAs`
 
@@ -64,17 +60,14 @@ Free-form map where each value is `string` or `null`:
 "sameAs": {
   "facebook": "https://facebook.com/YourBrand",
   "x": null,
-  "linkedin": null,
-  "youtube": null,
-  "wikidata": null,
-  "crunchbase": null
+  "linkedin": null
 }
 ```
 
 **Consumed.** `build_facts()` filters this map to its non-null values (in key order) and
-emits them as `facts.json`'s `sameAs` array — nulls are dropped entirely, never emitted
-as JSON `null`. A `null` value is not "not applicable"; it is the entity-linking gap the
-unshipped `offsite-entity` skill will eventually read. See [[Glossary#sameas]].
+emits them as `facts.json`'s `sameAs` array — nulls are dropped entirely. A `null` value
+is not "not applicable"; it is the entity-linking gap the unshipped `offsite-entity`
+skill will eventually read. See [[Glossary#sameas]].
 
 ## `stack`
 
@@ -83,11 +76,14 @@ unshipped `offsite-entity` skill will eventually read. See [[Glossary#sameas]].
 | `framework` | enum: `next-app-router`, `next-pages`, `astro`, `nuxt`, `sveltekit`, `wordpress`, `jekyll`, `shopify`, `static`, `other` | Declares the site's stack |
 | `srcDir` | string | Source directory |
 | `publicDir` | string | Static-asset output directory |
-| `builtHtml` | string | Path to server-rendered HTML output (e.g. `.next/server/app`) |
+| `builtHtml` | string | Path to server-rendered HTML output |
 
-**Schema-only.** None of these fields are read by `audit` or `geo-artifacts` in v0.2.0 —
-in particular, `geo`'s `--out` flag (default `public`) is independent of
-`stack.publicDir`. Pass `--out` explicitly if you want output to land elsewhere.
+**Schema-only for `audit` and `geo-artifacts`** — neither reads it. **`omnirank fix` does
+NOT read `stack.framework` either**: as of v0.3.0, framework detection
+(`omnirank.framework.detect()`) always re-derives the framework from files on disk and
+ignores this config field entirely — see [[The-Locator]]. `next-pages` remains the
+historical spelling of `next-pages-router` in the locator's own `Framework` enum; both
+resolve to the same detector output.
 
 ## `crawlers`
 
@@ -96,46 +92,46 @@ in particular, `geo`'s `--out` flag (default `public`) is independent of
 | `allowAI` | boolean | Declares intent to allow AI crawlers |
 | `disallow` | array of strings | Paths intended to be disallowed |
 
-**Schema-only.** The GEO layer's `ai-allowlist` gate reads your site's actual published
-`/robots.txt` over HTTP — it does not read this config section at all. Setting
-`crawlers.allowAI: true` documents intent; it has no effect on the gate result.
+**Schema-only.** The `ai-allowlist` gate reads your site's actual published `/robots.txt`
+over HTTP — it does not read this section at all.
 
 ## `geo`
 
 | Field | Type | Default (in code) | Description |
 |---|---|---|---|
-| `license` | string or `null` | `"none"` (grants nothing) | Licence string quoted in the citation-licence block and `facts.json`'s `license`. Unset resolves to `"none"` — see below. |
+| `license` | string or `null` | `"none"` (grants nothing) | Licence string quoted in the citation-licence block and `facts.json`'s `license` |
 | `attribution` | string | `site.legalName`, else `site.name` | Attribution string quoted in the citation block and `facts.json`'s `attribution` |
-| `answerBlockSelector` | string | `".answer-block"` | CSS selector the `aeo` gate and GEO harvester use to find each page's liftable answer paragraph |
+| `answerBlockSelector` | string | `".answer-block"` | CSS selector the `aeo` gate and GEO harvester use |
 
-**Consumed.** All three fields feed both the `audit` skill's AEO gate and the
-`geo-artifacts` skill's generation. See [[Audit-Skill]] and [[GEO-Artifacts-Skill]].
+**Consumed.** All three fields feed both `audit`'s AEO gate and `geo-artifacts`'s
+generation. See [[Audit-Skill]] and [[GEO-Artifacts-Skill]].
 
-**`license` defaults to no grant, never to a guessed licence.** These generated files
-are published into your site's public web root, so the licence text is a real, standing
-grant of reuse rights over your content, not a value OmniRank can safely guess. Omitting
-`geo.license` resolves to the same "grant nothing" behaviour as the explicit `"none"`
-opt-out — generation still succeeds — and the CLI prints a one-line stderr notice naming
-the key, so the choice isn't made silently. See [[GEO-Artifacts-Skill]] for details.
+**`license` no longer defaults to `CC-BY-4.0`, as of v0.2.1.** It used to: `omnirank geo`
+against a site with no `geo.license` configured silently published an irrevocable grant
+of commercial reuse rights the owner never made. Omitting `geo.license` now resolves to
+the same "grant nothing" behaviour as the explicit `"none"` opt-out — generation still
+succeeds — and the CLI prints a one-line stderr notice naming `geo.license`, so the
+"no rights" default is never chosen silently. Set a real licence string to actually grant
+reuse rights.
 
 ## `aeo`
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `answerBlock` | object | no | Sizing rules for the AnswerBlock the `answer-block` gate scores. See below. |
+| `answerBlock` | object | no | Sizing rules for the AnswerBlock the `answer-block` gate scores |
 
-**Consumed.** `bands.resolve_band(lang, config)` reads `aeo.answerBlock` on every page,
-keyed off that page's `<html lang>` value.
+**Consumed, new in v0.2.0.** `bands.resolve_band(lang, config)` reads `aeo.answerBlock`
+on every page, keyed off that page's `<html lang>` value.
 
 ### `aeo.answerBlock`
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `default` | band object `{unit, min, max}` | yes, if `answerBlock` is present at all | The band applied when no more specific match exists. |
-| `byScript` | object, `{scriptFamily: band}` | no | Per-script overrides. Valid keys: `latin`, `cjk`, `brahmic`, `arabic`, `cyrillic`. |
+| `default` | band object (`{unit, min, max}`) | yes, if `answerBlock` is present at all | The band applied to any script with no more specific match |
+| `byScript` | object, `{scriptFamily: band}` | no | Per-script overrides — valid keys: `latin`, `cjk`, `brahmic`, `arabic`, `cyrillic` |
 
-A band object is `{"unit": "words" | "chars", "min": <int ≥ 1>, "max": <int ≥ 1>}` with
-`min <= max` (enforced — `resolve_band()` raises `ConfigError` otherwise):
+A **band object** is `{"unit": "words" | "chars", "min": <integer ≥ 1>, "max": <integer ≥
+1>}`. `min` may not exceed `max`.
 
 ```json
 "aeo": {
@@ -149,30 +145,23 @@ A band object is `{"unit": "words" | "chars", "min": <int ≥ 1>, "max": <int �
 }
 ```
 
-**Why per-script bands exist.** The built-in default — 40–60 words — assumes
-space-delimited text. `str.split()` (how the `words` unit counts) returns a single
-token for an entire Chinese, Japanese, Korean, Thai, Lao, Khmer, Burmese, Tibetan or
-Dzongkha paragraph, since none of those scripts use spaces between words — word
-counting is meaningless there. Those languages form the `cjk` script family and
-OmniRank measures **characters** for them instead (whitespace stripped). Bengali,
-Hindi, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi, Odia, Sinhala, Nepali,
-Assamese and Marathi (`brahmic`) and Arabic, Persian, Urdu, Pashto, Sindhi and Kurdish
-(`arabic`) are space-delimited and keep **word** counting. See
-`scripts/py/omnirank/bands.py::script_of` for the exact language-tag mapping.
+**Why this section exists.** The 40–60 word default is calibrated for space-delimited
+Latin text. `str.split()` returns a single token for an entire Chinese, Japanese, Korean,
+Thai, Lao, Khmer, Burmese, Tibetan or Dzongkha paragraph, because none of those scripts
+use spaces to separate words — so those languages (the `cjk` family) are measured in
+**characters** instead. Bengali, Hindi, Tamil and the other Brahmic scripts, plus Arabic,
+Persian, Urdu and the other Arabic-script languages, remain space-delimited and keep word
+counting.
 
-**Band resolution order**, most specific first:
+**Band resolution order** (`bands.resolve_band`), most specific first:
 
-1. `aeo.answerBlock.byScript[script]` — an explicit config override for this page's
-   script family.
-2. The **built-in band** for that script, if OmniRank ships one — today only `cjk`
-   (80–200 characters). `latin`, `brahmic`, `arabic` and `cyrillic` have no built-in.
-3. `aeo.answerBlock.default` — the site's own general band.
-4. `DEFAULT_BAND` — the hard-coded fallback, 40–60 words.
+1. `aeo.answerBlock.byScript[script]` — an explicit config override for this script family.
+2. The **built-in band for that script** — today only `cjk` → 80–200 characters.
+3. `aeo.answerBlock.default` — the site's own general-purpose band.
+4. `DEFAULT_BAND` — OmniRank's hard-coded fallback, 40–60 words.
 
-Step 2 deliberately outranks step 3: a script-specific built-in beats a script-agnostic
-config `default` because a *words* band cannot validly apply to a script with no word
-separators. A site that genuinely wants a different CJK band sets `byScript.cjk`
-explicitly, which always wins as step 1.
+Step 2 outranks step 3 deliberately: `default` says nothing about which script it was
+written for, and a *words* band cannot validly apply to a script with no word separators.
 
 ## `indexing`
 
@@ -184,8 +173,7 @@ explicitly, which always wins as step 1.
 | `wayback` | boolean | Enable Wayback Machine submission |
 | `priorityUrls` | string | Path to a priority-URL list |
 
-**Schema-only.** This entire section belongs to the `indexing` skill on the roadmap
-(target v0.3) and is validated but not read by anything shipped in v0.2.0.
+**Schema-only.** Belongs to the `indexing` skill on the roadmap (target v0.3).
 
 ## `tracking`
 
@@ -196,27 +184,21 @@ Free-form string map. **Schema-only** — validated, not read.
 | Field | Type | Required | Default (in code) | Description |
 |---|---|---|---|---|
 | `sampleSize` | integer, minimum `0` | no | `200` | Maximum URLs pulled from the sitemap for a crawl. `0` means no limit. |
-| `failOn` | array of gate-name enum values | no | `[]` | Gate names that make `omnirank audit` exit `1` when they carry an error-severity finding. Overridden by the CLI's `--fail-on` flag whenever that flag is present at all, even with zero names. |
+| `failOn` | array of gate-name enum values | no | `[]` | Gate names that make `omnirank audit` exit `1` when they carry an error-severity finding. Overridden by `--fail-on` whenever that flag is present at all, even with zero names. |
 
-`failOn`'s allowed values (the full 28-name gate enum): `h1`, `canonical`,
-`title-length`, `description-length`, `hreflang`, `og`, `image-dims`, `answer-block`,
-`faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`,
-`citation-licence`, `sitemap-health`, `lastmod-inflation`, `schema`,
+`failOn`'s allowed values grew to **28 gate names** as of v0.2.0/v0.2.1: `h1`,
+`canonical`, `title-length`, `description-length`, `hreflang`, `og`, `image-dims`,
+`answer-block`, `faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`,
+`ai-allowlist`, `citation-licence`, `sitemap-health`, `lastmod-inflation`, `schema`,
 `schema-fabrication`, `duplicate-title`, `duplicate-description`, `noindex-in-sitemap`,
 `canonical-cluster`, `hreflang-reciprocity`, `response-time`, `page-weight`,
 `compression`, `render-blocking`.
 
-As of v0.2.1, `crawl-hygiene` is no longer one of these values. It used to validate
-successfully but matched **no finding a plain `omnirank audit` run could ever produce**:
-the check that would have emitted it (`hygiene.check_removed()`) is a real, tested Python
-function, but needs an explicit removed-URL list no config field supplies, so
-`audit_site()` had no way to call it automatically. A config-accepted gate name that can
-never fire is its own kind of fabrication, so it was removed from the enum rather than
-left inert — see [[Audit-Skill#crawl-hygiene-and-sitemap-health-as-of-v021]].
-`sitemap-health` is not inert: an unreachable target URL is reported as an error under
-`gate: "sitemap-health"` (`_collect()` in `audit.py`), and as of v0.2.1
-`hygiene.check_sitemap()` is also wired in, distinguishing a redirecting sitemap entry
-(warning) from a genuinely dead one (error).
+**`crawl-hygiene` was removed from this enum in v0.2.1** — it validated successfully but
+matched no finding a plain `omnirank audit` run could ever produce, since the check that
+would emit it needs an explicit removed-URL list no config field supplies. `sitemap-health`
+is not inert: `hygiene.check_sitemap()` is wired in as of v0.2.1, distinguishing a
+redirecting sitemap entry (warning) from a dead one (error).
 
 ## `smm`
 
@@ -230,8 +212,7 @@ left inert — see [[Audit-Skill#crawl-hygiene-and-sitemap-health-as-of-v021]].
 
 ## `competitors`
 
-Array of strings (e.g. domain names). **Schema-only** — validated, not read by any
-shipped code.
+Array of strings. **Schema-only** — validated, not read by any shipped code.
 
 ## `statistics`
 
@@ -240,7 +221,7 @@ Array of first-party benchmark objects.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Statistic label |
-| `value` | string | yes | The value, as a display string (e.g. `"BDT 42"`) |
+| `value` | string | yes | The value, as a display string |
 | `unit` | string | no | Unit |
 | `sampleSize` | integer, minimum `0` | no | Sample size backing the number |
 | `methodology` | string | no | How it was measured |
@@ -248,23 +229,17 @@ Array of first-party benchmark objects.
 | `source` | string | no | Where the number comes from |
 | `published` | boolean | no | **The real-only gate.** Absent or `false` means the entry renders nowhere. |
 
-Only entries with `published: true` are emitted to `facts.json`, under its `statistics`
-key. If no entry qualifies, the key is omitted from `facts.json` entirely rather than
-emitted as an empty array — this is deliberate, not a bug: first-party data is one of the
-strongest signals a site can offer a generative engine, and that advantage survives only
-as long as every published number is real.
+Only entries with `published: true` are emitted to `facts.json`. If no entry qualifies,
+the key is omitted entirely rather than emitted as an empty array — deliberate, since a
+false first-party number is worse than none.
 
 ## `secrets`
 
-Free-form map. **Every value must match the pattern `^env:[A-Z_][A-Z0-9_]*$`** — the
-literal string `env:` followed by an uppercase-with-underscores environment variable
-name, enforced by the schema itself at validation time:
+Free-form map. **Every value must match `^env:[A-Z_][A-Z0-9_]*$`** — enforced by the
+schema itself at validation time:
 
 ```json
-"secrets": {
-  "serpapi": "env:SERPAPI_KEY",
-  "perplexity": "env:PERPLEXITY_API_KEY"
-}
+"secrets": { "serpapi": "env:SERPAPI_KEY" }
 ```
 
 A literal secret is rejected outright, exit code `2`:
@@ -275,10 +250,8 @@ omnirank: Config failed validation: secrets/serpapi: 'sk-abc123literal' does not
 ```
 
 A missing environment variable fails loudly, not silently — `Config.secret(name)` raises
-`ConfigError: Environment variable SERPAPI_KEY is not set ... Refusing to continue: a
-skipped submission is indistinguishable from a successful one in logs.` `secret()` is not
-called anywhere in `audit` or `geo-artifacts` today; the mechanism is real and tested,
-and will back roadmap skills that need one.
+`ConfigError`. `secret()` is not called anywhere in `audit`, `geo-artifacts`, or `fix`
+today; the mechanism is real and tested, and will back roadmap skills that need one.
 
 ## A complete, valid example
 
@@ -293,33 +266,8 @@ This is `templates/omnirank.config.example.json`, verified to pass schema valida
     "legalName": "Public Pulse Agency",
     "url": "https://pulsetoday.com.bd",
     "entityType": "NewsMediaOrganization",
-    "parentOrganization": "Pulse Group",
-    "locales": [
-      { "code": "bn-BD", "path": "/bn", "default": true },
-      { "code": "en", "path": "/en" }
-    ]
+    "locales": [{ "code": "bn-BD", "path": "/bn", "default": true }]
   },
-  "nap": {
-    "city": "Dhaka",
-    "country": "BD",
-    "email": "editor@pulsetoday.com.bd",
-    "geo": { "lat": 23.8103, "lng": 90.4125 }
-  },
-  "sameAs": {
-    "facebook": "https://facebook.com/ThePulseToday",
-    "x": null,
-    "linkedin": null,
-    "youtube": null,
-    "wikidata": null,
-    "crunchbase": null
-  },
-  "stack": {
-    "framework": "next-app-router",
-    "srcDir": "src",
-    "publicDir": "public",
-    "builtHtml": ".next/server/app"
-  },
-  "crawlers": { "allowAI": true, "disallow": ["/manage", "/api/auth"] },
   "geo": {
     "license": "CC-BY-4.0",
     "attribution": "Public Pulse Agency",
@@ -329,11 +277,7 @@ This is `templates/omnirank.config.example.json`, verified to pass schema valida
     "sampleSize": 200,
     "failOn": ["h1", "canonical", "schema"]
   },
-  "competitors": ["prothomalo.com", "thedailystar.net", "bdnews24.com"],
-  "secrets": {
-    "serpapi": "env:SERPAPI_KEY",
-    "perplexity": "env:PERPLEXITY_API_KEY"
-  }
+  "secrets": { "serpapi": "env:SERPAPI_KEY" }
 }
 ```
 
@@ -345,9 +289,9 @@ cp templates/omnirank.config.example.json omnirank.config.json
 
 ## How do I validate my config before running?
 
-`omnirank audit --config ...` and `omnirank geo --config ...` both validate on load and
-refuse to proceed on failure (exit code `2`), so the fastest check is simply running one
-of them. To validate without auditing anything:
+`omnirank audit --config ...`, `omnirank geo --config ...`, and `omnirank fix --config
+...` all validate on load and refuse to proceed on failure (exit code `2`), so the
+fastest check is simply running one of them. To validate without auditing anything:
 
 ```bash
 python3 - <<'EOF'
@@ -371,3 +315,4 @@ EOF
 - [[Audit-Skill]] — every gate `audit.failOn` can reference
 - [[GEO-Artifacts-Skill]] — how `geo`, `nap`, `identifiers`, `sameAs`, and `statistics`
   become `llms.txt` / `llms-full.txt` / `facts.json`
+- [[Fix-Tiers-and-Applicability]] — why `stack.framework` is unread by the locator

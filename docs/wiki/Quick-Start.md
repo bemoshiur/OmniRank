@@ -1,11 +1,11 @@
 # Quick Start
 
-This page takes a fresh checkout of OmniRank from zero to a first audit report in six
+This page takes a fresh checkout of OmniRank from zero to a first audit report in seven
 numbered steps: clone the repository, create a virtual environment, install the CLI, run
-`omnirank audit` against a live URL, read the score and findings, then locate the JSON
-report OmniRank writes to disk.
+`omnirank audit` against a live URL, read the score and findings, locate the JSON report
+OmniRank writes to disk, and preview the one mechanical fix available in 0.3.0.
 
-Every command below was actually run against the real repository at v0.1.1, and the
+Every command below was actually run against the real repository at v0.3.0, and the
 output shown is pasted verbatim — nothing staged, nothing cropped.
 
 ## Prerequisites
@@ -16,7 +16,7 @@ output shown is pasted verbatim — nothing staged, nothing cropped.
 | git | any recent version | Cloning the repository |
 | Node.js | 22+ | Only if you use the in-repo GEO-artifacts generator (`scripts/node`) instead of the Python crawl path — see [[GEO-Artifacts-Skill]] |
 
-OmniRank is not published to PyPI, npm, or a container registry as of v0.1.1 — it
+OmniRank is not published to PyPI, npm, or a container registry as of v0.3.0 — it
 installs from source.
 
 ## 1. Clone the repository
@@ -52,7 +52,7 @@ Confirm the install:
 
 ```
 $ python3 -m omnirank.cli --version
-omnirank 0.1.1
+omnirank 0.3.0
 ```
 
 ## 4. Run the first audit
@@ -66,40 +66,45 @@ python3 -m omnirank.cli audit https://example.com
 Real output, captured on this machine against `https://example.com`:
 
 ```
-OmniRank 0.2.0 — https://example.com
+OmniRank 0.3.0 — https://example.com
   overall 76/100  aeo 80  geo 60  perf 100  seo 67
-  1 URLs checked, 10 findings
-  [FAIL] seo.canonical.missing  https://example.com/
-         observed: no rel=canonical
-         fix: Add <link rel="canonical" href="https://example.com/"> to <head>.
-  [FAIL] seo.description.missing  https://example.com/
-         observed: no meta description
-         fix: Add a meta description summarising the page.
-  [WARN] seo.og.missing  https://example.com/
-         observed: missing og:title, og:image
-         fix: Add the missing OpenGraph tags so social unfurls render.
-  [FAIL] aeo.answer-block.missing  https://example.com/
-         observed: no element matching '.answer-block'
-         fix: Add <div class="answer-block" data-speakable> with a 40-60 word plain-prose answer.
-  [FAIL] aeo.faq.too-few  https://example.com/
-         observed: 0 FAQ pairs
-         fix: Add FAQs as semantic <dl>/<dt>/<dd> or <details>, mirrored by FAQPage JSON-LD.
-  [FAIL] seo.schema.absent  https://example.com/
-         observed: no application/ld+json blocks
-         fix: Emit JSON-LD describing this page and cross-reference the site organisation by stable @id.
-  [FAIL] geo.llms.missing  https://example.com/llms.txt
-         observed: HTTP 404 at llms.txt
-         fix: Generate llms.txt at build time and serve it as a static file.
-  [FAIL] geo.llms-full.missing  https://example.com/llms-full.txt
-         observed: HTTP 404 at llms-full.txt
-         fix: Generate llms-full.txt at build time and serve it as a static file.
-  [FAIL] geo.facts.missing  https://example.com/facts.json
-         observed: HTTP 404 at facts.json
-         fix: Generate facts.json at build time and serve it as a static file.
-  [FAIL] geo.ai-allowlist.missing  https://example.com/robots.txt
-         observed: HTTP 404 at /robots.txt
-         fix: Publish a robots.txt that explicitly allows AI crawlers.
-  report: .omnirank/reports/2026-08-03-audit.json
+  1 URLs checked · 10 findings in 10 groups
+
+  ERRORS
+  [1×] seo.canonical.missing — expected: one absolute self-referencing canonical
+        fix: Add <link rel="canonical" href="..."> with an absolute URL.
+        e.g. https://example.com/
+  [1×] seo.description.missing — expected: a meta description
+        fix: Add a meta description summarising the page.
+        e.g. https://example.com/
+  [1×] aeo.answer-block.missing — expected: an element matching '.answer-block'
+        fix: Add <div class="answer-block" data-speakable> with a 40-60 word plain-prose answer.
+        e.g. https://example.com/
+  [1×] aeo.faq.too-few — expected: at least 3 FAQ pairs
+        fix: Add FAQs as semantic <dl>/<dt>/<dd> or <details>, mirrored by FAQPage JSON-LD.
+        e.g. https://example.com/
+  [1×] seo.schema.absent — expected: at least one application/ld+json block
+        fix: Emit JSON-LD describing this page and cross-reference the site organisation by stable @id.
+        e.g. https://example.com/
+  [1×] geo.llms.missing — expected: HTTP 200 at llms.txt
+        fix: Generate llms.txt at build time and serve it as a static file.
+        e.g. https://example.com/llms.txt
+  [1×] geo.llms-full.missing — expected: HTTP 200 at llms-full.txt
+        fix: Generate llms-full.txt at build time and serve it as a static file.
+        e.g. https://example.com/llms-full.txt
+  [1×] geo.facts.missing — expected: HTTP 200 at facts.json
+        fix: Generate facts.json at build time and serve it as a static file.
+        e.g. https://example.com/facts.json
+  [1×] geo.ai-allowlist.missing — expected: robots.txt allows AI crawlers
+        fix: Publish a robots.txt that explicitly allows AI crawlers.
+        e.g. https://example.com/robots.txt
+
+  WARNINGS
+  [1×] seo.og.missing — expected: og:title and og:image
+        fix: Add the missing OpenGraph tags so social unfurls render.
+        e.g. https://example.com/
+
+  report: .omnirank/reports/2026-08-04-audit.json
 ```
 
 `example.com` deliberately ships nothing but a static placeholder page, so this is close
@@ -107,9 +112,9 @@ to a worst case — real sites usually clear a handful of these on the first pas
 
 ## 5. Read the result
 
-**The score line** — `overall 76/100  aeo 80  geo 60  perf 100  seo 67` — is one score
-per layer that ran, plus an overall figure. Full formula:
-[[Audit-Skill#how-is-the-score-computed]].
+**The score line** — `overall 76/100  aeo 80  geo 60  perf 100  seo 67` — is one score per
+layer that ran, plus an overall figure; as of 0.2.0 there are four layers, not three.
+Full formula, including the v0.2.1 per-gate cap: [[Audit-Skill#how-is-the-score-computed]].
 
 **Each finding's three fields:**
 
@@ -121,7 +126,9 @@ per layer that ran, plus an overall figure. Full formula:
 
 `id` (e.g. `seo.canonical.missing`) is a stable identifier for tracking one specific
 check across runs. `gate` (`canonical`, `h1`, `schema`, ...) is the coarser grouping that
-`--fail-on` matches against — see [[Report-Schema]] for exactly how the two relate.
+`--fail-on` matches against — see [[Report-Schema]] for exactly how the two relate. Since
+v0.2.1 the console summary also groups repeated findings and prints a `NOT EVALUATED`
+section for any gate that could not actually run.
 
 ## 6. Where the JSON report lands
 
@@ -133,25 +140,29 @@ python3 -m omnirank.cli audit https://example.com --out /tmp/report.json
 ```
 
 The JSON holds every finding, not just the terminal's summary, validated against
-`schemas/report.schema.json` — see [[Report-Schema]] for the full shape.
+`schemas/report.schema.json` — see [[Report-Schema]] for the full shape, including the
+`fixTier` every finding now carries.
 
-## 7. Exit codes
+## 7. Preview a fix — without writing anything
+
+`omnirank fix` audits the site, locates each finding's source file, and prints the diff
+it would apply for the four `mechanical` findings. It never writes:
+
+```bash
+python3 -m omnirank.cli fix https://example.com --root .
+```
+
+Full model and worked example: [[Fix-Preview]].
+
+## 8. Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | Clean — no `--fail-on` gate had an error-severity finding, or `geo` finished writing its three artifacts (this includes a bare `omnirank geo <url>` with no config — see below) |
-| `1` | At least one gate named in `--fail-on` (or your config's `audit.failOn`) had an error-severity finding |
-| `2` | Usage or configuration error — missing/invalid config file, or neither a URL nor `--config` given |
+| `0` | Clean — no `--fail-on` gate had an error-severity finding (`audit`); nothing to fix (`fix`); artifacts written (`geo`) |
+| `1` | At least one gate in `--fail-on` had an error-severity finding (`audit`); at least one diff was produced (`fix`) |
+| `2` | Usage or configuration error, including passing `fix --write`, which does not exist in 0.3.0 |
 
 The run above returned `0` because no `--fail-on` gates were specified.
-
-**`geo` works with no config file, but says so.** A bare `omnirank geo <url>` with no
-`--config` uses an in-memory default config with no `geo` section, so `geo.license` is
-always unset — as of v0.2.1 that generates the three artifacts anyway (granting no reuse
-rights, same as the explicit `"none"`) and prints a one-line notice to stderr naming the
-config key, instead of choosing "no rights" silently. Write a config with `geo.license`
-set to a real licence and pass it with `--config` to actually grant reuse rights, or set
-it to `"none"` explicitly to make that choice permanent and silence the notice.
 
 ## Next: configure it for a real repo
 
@@ -168,4 +179,4 @@ See [[Configuration-Reference]] for every field, [[Audit-Skill]] for every gate,
 
 Go to [[Troubleshooting]] — it has the exact error text for `externally-managed-environment`,
 a missing or invalid config file, `ModuleNotFoundError`, a missing environment variable,
-and a 403 on GEO artifacts, each with the fix.
+a 403 on GEO artifacts, and a missing sitemap, each with the fix.
