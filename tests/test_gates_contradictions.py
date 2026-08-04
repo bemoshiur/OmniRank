@@ -243,3 +243,68 @@ def test_a_trailing_slash_difference_still_counts_as_the_crawled_page():
     findings, _ = contradictions.check_canonical_targets(make_client(), pages)
     assert [f.id for f in findings] == ["seo.canonical-target.noindexed"]
     assert not respx.calls, "canonical_key normalises the trailing slash"
+
+
+def alt_page(url: str, alternates: dict[str, str], noindex: bool = False) -> PageData:
+    head = "".join(f"<link rel='alternate' hreflang='{lang}' href='{href}'>"
+                   for lang, href in alternates.items())
+    if noindex:
+        head += "<meta name='robots' content='noindex'>"
+    return PageData(url=url, html=HEAD.format(head), status=200, elapsed_ms=1,
+                    headers={})
+
+
+def test_an_alternate_that_is_noindexed_is_an_error_on_the_declaring_page():
+    pages = [alt_page(f"{SITE}/en", {"en": f"{SITE}/en", "fr": f"{SITE}/fr"}),
+             alt_page(f"{SITE}/fr", {"en": f"{SITE}/en", "fr": f"{SITE}/fr"},
+                      noindex=True)]
+    findings = contradictions.check_hreflang_noindex(pages)
+    assert [(f.id, f.url) for f in findings] == [
+        ("seo.hreflang-noindex.alternate", f"{SITE}/en")]
+    assert findings[0].severity == "error"
+    assert findings[0].gate == "hreflang-noindex"
+    assert f"{SITE}/fr" in findings[0].observed
+
+
+def test_an_indexable_alternate_set_emits_nothing():
+    pages = [alt_page(f"{SITE}/en", {"en": f"{SITE}/en", "fr": f"{SITE}/fr"}),
+             alt_page(f"{SITE}/fr", {"en": f"{SITE}/en", "fr": f"{SITE}/fr"})]
+    assert contradictions.check_hreflang_noindex(pages) == []
+
+
+def test_a_noindexed_page_declaring_indexable_alternates_is_not_flagged():
+    # The contradiction belongs to whoever DECLARES a forbidden target, not to the
+    # page that opted itself out.
+    pages = [alt_page(f"{SITE}/en", {"fr": f"{SITE}/fr"}),
+             alt_page(f"{SITE}/fr", {"en": f"{SITE}/en"}, noindex=True)]
+    findings = contradictions.check_hreflang_noindex(pages)
+    assert [f.url for f in findings] == [f"{SITE}/en"]
+
+
+def test_an_alternate_outside_the_crawled_set_is_never_judged():
+    pages = [alt_page(f"{SITE}/en", {"de": "https://de.example/"})]
+    assert contradictions.check_hreflang_noindex(pages) == [], (
+        "OmniRank never guesses about a URL it did not fetch")
+
+
+def test_a_self_referencing_alternate_is_not_a_contradiction():
+    pages = [alt_page(f"{SITE}/en", {"en": f"{SITE}/en"}, noindex=True)]
+    assert contradictions.check_hreflang_noindex(pages) == []
+
+
+def test_x_default_is_exempt():
+    # x-default is a fallback pointer, not a language pair; site.alternates already
+    # excludes it, and this pins that so a change there turns this red.
+    pages = [alt_page(f"{SITE}/en", {"x-default": f"{SITE}/fr"}),
+             alt_page(f"{SITE}/fr", {}, noindex=True)]
+    assert contradictions.check_hreflang_noindex(pages) == []
+
+
+def test_one_finding_per_declaring_page_and_bad_target_pair():
+    pages = [alt_page(f"{SITE}/en", {"fr": f"{SITE}/fr", "de": f"{SITE}/de"}),
+             alt_page(f"{SITE}/fr", {}, noindex=True),
+             alt_page(f"{SITE}/de", {}, noindex=True)]
+    findings = contradictions.check_hreflang_noindex(pages)
+    assert len(findings) == 2
+    assert {f.url for f in findings} == {f"{SITE}/en"}
+    assert sorted(f.observed for f in findings) != [], "both targets are named"

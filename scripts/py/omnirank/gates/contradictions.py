@@ -31,6 +31,7 @@ from . import site
 
 GATE_ROBOTS_SITEMAP = "robots-sitemap"
 GATE_CANONICAL_TARGET = "canonical-target"
+GATE_HREFLANG_NOINDEX = "hreflang-noindex"
 
 # How many canonical targets outside the crawled set OmniRank will fetch in one
 # audit. A cap rather than an unbounded pass: a 200-page site whose every canonical
@@ -218,3 +219,43 @@ def check_canonical_targets(
                 gate=GATE_CANONICAL_TARGET, url=target, reason="page-unreachable"))
 
     return findings, not_evaluated
+
+
+def check_hreflang_noindex(pages: list[PageData]) -> list[Finding]:
+    """Pages that declare a noindexed page as their locale alternate.
+
+    An hreflang set asserts that these URLs are intentional per-locale versions of
+    one another. Naming a page engines are forbidden to index nullifies the pair:
+    engines discard hreflang annotations whose target they cannot resolve, so the
+    DECLARING page loses its international targeting too -- which is why the
+    finding attaches there rather than to the noindexed page.
+
+    Crawled-set only, and no network I/O, so this gate can never fail to run and
+    returns a bare list. x-default is exempt: site.alternates excludes it, because
+    it is a fallback pointer rather than a language pair.
+    """
+    by_key = {site.canonical_key(p.url): p for p in pages}
+    findings: list[Finding] = []
+
+    for page in pages:
+        page_key = site.canonical_key(page.url)
+        for href in sorted(site.alternates(page)):
+            target_key = site.canonical_key(href)
+            if target_key == page_key:
+                continue                              # self-reference is normal
+            target = by_key.get(target_key)
+            if target is None:
+                continue                              # outside the crawled set
+            if not site.is_noindex(target):
+                continue
+            findings.append(_f(
+                "seo.hreflang-noindex.alternate", GATE_HREFLANG_NOINDEX, page.url,
+                "error",
+                f"declares {href} as a locale alternate, and that page carries a "
+                "noindex directive",
+                "every hreflang alternate indexable",
+                f"Remove the noindex on {href}, or drop it from this page's hreflang "
+                "set. An alternate engines may not index cannot be returned for any "
+                "locale, and an annotation whose target cannot be resolved is "
+                "discarded -- taking this page's international targeting with it."))
+    return findings

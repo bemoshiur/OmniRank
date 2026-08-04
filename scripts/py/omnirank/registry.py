@@ -167,6 +167,10 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     # ships no new fix generator (see test_generators_cover_exactly_the_mechanical_tier).
     _r("seo.canonical-target.redirects", "templated", "warning", "seo",
        "canonical-target"),
+    # `advisory`: un-noindex the target, or drop it from the set. And an hreflang
+    # SET is an enumerated protected surface (see PROTECTED_SURFACES below).
+    _r("seo.hreflang-noindex.alternate", "advisory", "error", "seo",
+       "hreflang-noindex"),
 )
 
 REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}
@@ -228,6 +232,7 @@ PROTECTED_SURFACES: frozenset[str] = frozenset({
     "seo.hreflang.not-reciprocal",
     "geo.citation-licence.missing",
     "seo.robots-sitemap.disallowed",
+    "seo.hreflang-noindex.alternate",
 })
 
 # Capped at display-only permanently, at any tier, under any flag. Reversing a

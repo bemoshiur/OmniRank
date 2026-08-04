@@ -141,6 +141,8 @@ def audit_site(config: Config, client: httpx.Client | None = None,
         for entry in canonical_not_evaluated:
             report.flag_not_evaluated(entry)
 
+        report.extend(contradictions.check_hreflang_noindex(pages))
+
         report.urls_checked = len(targets)
         report.extend(geo.run(client, config.site_url))
 

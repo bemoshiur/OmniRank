@@ -245,3 +245,4 @@ def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Fi
 canonical_key = _canonical_key
 canonical_target = _canonical_target
 is_noindex = _is_noindex
+alternates = _alternates
