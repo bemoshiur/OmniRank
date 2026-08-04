@@ -141,7 +141,8 @@
                      "duplicate-title", "duplicate-description", "noindex-in-sitemap",
                      "canonical-cluster", "hreflang-reciprocity",
                      "response-time", "page-weight", "compression", "render-blocking",
-                     "hsts", "nosniff", "csp", "referrer-policy"]
+                     "hsts", "nosniff", "csp", "referrer-policy",
+                     "mixed-content", "https-redirect"]
           }
         }
       }

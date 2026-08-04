@@ -1,3 +1,6 @@
+import httpx
+import respx
+from omnirank.fetch import make_client
 from omnirank.gates import security
 from omnirank.gates.security import HSTS_MIN_MAX_AGE
 from omnirank.page import PageData
@@ -97,3 +100,105 @@ def test_csp_absence_is_reported_without_grading_the_policy():
     assert "no Content-Security-Policy" in found[0].observed
     assert "weak" not in found[0].fix.lower(), (
         "grading a policy's strength is a judgement OmniRank must not make")
+
+
+MIXED = ("<!doctype html><html lang='en'><head>"
+         "<link rel='stylesheet' href='http://cdn.example/a.css'>"
+         "<script src='http://cdn.example/a.js'></script>"
+         "</head><body>"
+         "<img src='http://cdn.example/a.png'>"
+         "<iframe src='http://cdn.example/f'></iframe>"
+         "</body></html>")
+
+
+def test_http_subresources_on_an_https_page_are_an_error():
+    found = [f for f in security.run_page(page(html=MIXED))
+             if f.id == "security.mixed-content.subresource"]
+    assert len(found) == 1, "one finding per page, not one per subresource"
+    assert found[0].severity == "error", "browsers block this; the page is broken"
+    assert found[0].gate == "mixed-content"
+    assert "4" in found[0].observed
+    for fragment in ("script", "link", "img", "iframe"):
+        assert fragment in found[0].observed, fragment
+
+
+def test_mixed_content_is_not_reported_on_a_plain_http_page():
+    found = security.run_page(page(html=MIXED, url="http://x.example/"))
+    assert "security.mixed-content.subresource" not in ids(found)
+
+
+def test_upgrade_insecure_requests_suppresses_mixed_content():
+    headers = dict(CLEAN_HEADERS,
+                   **{"content-security-policy": "upgrade-insecure-requests"})
+    found = security.run_page(page(headers=headers, html=MIXED))
+    assert "security.mixed-content.subresource" not in ids(found), (
+        "the browser rewrites these to https before requesting them")
+
+
+def test_a_non_subresource_http_link_is_not_mixed_content():
+    # A canonical or an hreflang alternate is not a subresource: the browser never
+    # fetches it while rendering, so it is not mixed content. Flagging it would be
+    # a fabricated error, and seo.canonical.* already owns that judgement.
+    html = ("<!doctype html><html lang='en'><head>"
+            "<link rel='canonical' href='http://x.example/'>"
+            "<link rel='alternate' hreflang='fr' href='http://x.example/fr'>"
+            "<a href='http://x.example/other'>x</a>"
+            "</head><body></body></html>")
+    assert "security.mixed-content.subresource" not in ids(security.run_page(page(html=html)))
+
+
+def test_protocol_relative_subresources_are_not_mixed_content():
+    # //cdn.example/a.js inherits the page's scheme, so on an https page it is https.
+    html = ("<!doctype html><html lang='en'><head>"
+            "<script src='//cdn.example/a.js'></script></head><body></body></html>")
+    assert "security.mixed-content.subresource" not in ids(security.run_page(page(html=html)))
+
+
+@respx.mock
+def test_http_that_redirects_to_https_emits_nothing():
+    respx.get("http://x.example/").mock(return_value=httpx.Response(
+        301, headers={"location": "https://x.example/"}))
+    findings, not_evaluated = security.check_https_redirect(make_client(),
+                                                            "https://x.example")
+    assert findings == []
+    assert not_evaluated == []
+
+
+@respx.mock
+def test_http_serving_200_is_an_error():
+    respx.get("http://x.example/").mock(return_value=httpx.Response(200, text="hi"))
+    findings, not_evaluated = security.check_https_redirect(make_client(),
+                                                            "https://x.example")
+    assert not_evaluated == []
+    assert [f.id for f in findings] == ["security.https-redirect.missing"]
+    assert findings[0].severity == "error"
+    assert findings[0].gate == "https-redirect"
+    assert findings[0].url == "http://x.example/"
+
+
+@respx.mock
+def test_http_redirecting_to_another_http_url_is_still_an_error():
+    respx.get("http://x.example/").mock(return_value=httpx.Response(
+        302, headers={"location": "http://x.example/home"}))
+    findings, _ = security.check_https_redirect(make_client(), "https://x.example")
+    assert [f.id for f in findings] == ["security.https-redirect.missing"]
+    assert "http://x.example/home" in findings[0].observed
+
+
+@respx.mock
+def test_an_http_url_that_cannot_be_reached_is_not_evaluated_rather_than_passed():
+    respx.get("http://x.example/").mock(side_effect=httpx.ConnectError("refused"))
+    findings, not_evaluated = security.check_https_redirect(make_client(),
+                                                            "https://x.example")
+    assert findings == [], "a gate that could not run must never emit a verdict"
+    assert [(e.gate, e.reason) for e in not_evaluated] == [
+        ("https-redirect", "page-unreachable")]
+
+
+def test_the_probe_is_not_applicable_to_an_http_site():
+    findings, not_evaluated = security.check_https_redirect(make_client(),
+                                                            "http://x.example")
+    assert findings == []
+    assert [(e.gate, e.reason) for e in not_evaluated] == [
+        ("https-redirect", "not-applicable")]
+    assert not_evaluated[0].site == "http://x.example"
