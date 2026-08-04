@@ -214,8 +214,8 @@ def test_no_context_declines_on_a_tsx_location(tmp_path):
     made = schema.no_context(
         finding(), Location(path="page.tsx", confidence="exact"), tmp_path, 1, [])
     assert not made.fixed
-    assert "v0.4.0" in made.reason
     assert "metadataBase" in made.reason
+    assert "v0." not in made.reason, "deferral text must not name a version"
 
 
 def test_no_context_declines_on_a_markdown_location_with_markdown_specific_wording(tmp_path):
@@ -227,9 +227,9 @@ def test_no_context_declines_on_a_markdown_location_with_markdown_specific_wordi
     made = schema.no_context(
         finding(), Location(path="pricing.md", confidence="exact"), tmp_path, 1, [])
     assert not made.fixed
-    assert "v0.4.0" in made.reason
     assert "metadataBase" not in made.reason
     assert "markdown" in made.reason.lower()
+    assert "v0." not in made.reason
 
 
 def test_no_context_preserves_every_other_byte(tmp_path):

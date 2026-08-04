@@ -150,8 +150,8 @@ def test_canonical_missing_refuses_a_tsx_location(tmp_path):
     location = write(tmp_path, "app/page.tsx", "export default function P() {}\n")
     made = canonical.missing(finding(), location, tmp_path, 1, [])
     assert not made.fixed
-    assert "v0.4.0" in made.reason
     assert "metadataBase" in made.reason
+    assert "v0." not in made.reason, "deferral text must not name a version"
 
 
 def test_canonical_missing_refuses_a_markdown_location_with_markdown_specific_wording(tmp_path):
@@ -162,10 +162,10 @@ def test_canonical_missing_refuses_a_markdown_location_with_markdown_specific_wo
     location = write(tmp_path, "pricing.md", "---\nlayout: page\n---\n# Pricing\n")
     made = canonical.missing(finding(), location, tmp_path, 1, [])
     assert not made.fixed
-    assert "v0.4.0" in made.reason
     assert "metadataBase" not in made.reason
     assert "metadata.alternates.canonical" not in made.reason
     assert "markdown" in made.reason.lower()
+    assert "v0." not in made.reason
 
 
 def test_canonical_missing_refuses_a_file_with_no_head(tmp_path):

@@ -79,9 +79,11 @@ existing site source files.
 
 ### Will OmniRank edit my files?
 
-Not in 0.3.0. `omnirank fix` locates each finding, prints the unified diff it would
+Not yet. `omnirank fix` locates each finding, prints the unified diff it would
 apply, and stops — there is no `--write` flag, and passing one exits `2`. File
-modification arrives in v0.4.0. See [fix-preview.md](fix-preview.md).
+modification ships once the locator is proven against real repositories and the
+write guarantees it depends on are implemented and tested. See
+[fix-preview.md](fix-preview.md).
 
 ### What's the difference between `audit` and `geo-artifacts`?
 

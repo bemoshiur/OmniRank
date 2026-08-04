@@ -19,13 +19,14 @@ SEVERITY_SECTION = {"error": "ERRORS", "warning": "WARNINGS", "info": "INFO"}
 MAX_EXAMPLE_URLS = 3
 
 WRITE_UNAVAILABLE = (
-    "omnirank fix has no --write path in 0.3.0. This release locates findings and "
-    "prints the diff it would apply; it modifies nothing. File modification arrives "
-    "in v0.4.0, behind the write guarantees in "
-    "docs/research/2026-08-04-automation-architecture.md section 2.5. Shipping "
-    "--write as a no-op would be worse than not shipping it."
+    "omnirank fix has no --write path. This release locates findings and prints "
+    "the diff it would apply; it writes nothing. Writing ships once the locator "
+    "has been proven against real repositories and the write guarantees in "
+    "docs/research/2026-08-04-automation-architecture.md section 2.5 are "
+    "implemented and tested -- not on a release number. Shipping --write as a "
+    "no-op, or before those guarantees exist, would be worse than not shipping it."
 )
-NOTHING_WRITTEN = "This release writes nothing. --write arrives in v0.4.0."
+NOTHING_WRITTEN = "This release writes nothing; --write is not available."
 
 
 def _group_findings(findings: list) -> list[dict]:
@@ -285,8 +286,8 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="Limit the grouped NOT FIXED summary to the top N "
                           "groups (default: all). Ignored with --json.")
     fix.add_argument("--write", action="store_true",
-                     help="Not available in 0.3.0: exits 2 with an explanation. "
-                          "File modification arrives in v0.4.0.")
+                     help="Not available: exits 2 with an explanation. This "
+                          "release previews diffs and modifies nothing.")
     return parser
 
 

@@ -343,16 +343,17 @@ def mock_fixable_site():
     respx.get(f"{SITE}/").mock(return_value=httpx.Response(200, text=FIXABLE_PAGE))
 
 
-def test_fix_rejects_write_before_touching_the_network(tmp_path, capsys):
+def test_write_flag_explains_itself_without_promising_a_version(tmp_path, capsys):
     # No respx.mock decorator on purpose: if this reached audit_site() the test
     # would error on an unmocked request instead of passing.
     assert main(["fix", SITE, "--root", str(tmp_path), "--write"]) == 2
-    assert "v0.4.0" in capsys.readouterr().err
-
-
-def test_write_unavailable_message_names_the_release_and_the_reason():
-    assert "v0.4.0" in WRITE_UNAVAILABLE
-    assert "--write" in WRITE_UNAVAILABLE
+    err = capsys.readouterr().err
+    assert "writes nothing" in err
+    assert "v0.4.0" not in err, (
+        "v0.4.0 IS this release and it ships no --write; the string would be a "
+        "promise the running binary is already breaking")
+    assert "v0." not in WRITE_UNAVAILABLE, (
+        "name the condition writing ships under, never a version number")
 
 
 @respx.mock

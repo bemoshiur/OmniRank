@@ -99,9 +99,12 @@ def test_docs_no_longer_present_auto_fixable_as_a_current_field():
 
 def test_fix_preview_doc_states_that_nothing_is_written():
     body = (ROOT / "docs" / "fix-preview.md").read_text()
-    assert "v0.4.0" in body
     assert "--write" in body
     assert "omnirank fix" in body
+    assert "writes nothing" in body
+    assert "v0.4.0" not in body, (
+        "0.4.0 broadens the audit and deliberately ships no writing; the doc must "
+        "not carry a promise the release is not keeping")
     for tier in ("mechanical", "templated", "drafted", "advisory", "infrastructure"):
         assert tier in body, tier
 

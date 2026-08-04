@@ -1,8 +1,8 @@
 """Fix generators for the MECHANICAL tier.
 
 This release PREVIEWS fixes: every generator returns a unified diff and nothing
-in this package opens a file for writing. Actual modification arrives in
-v0.4.0, and the split is deliberate -- the locator is the riskiest component in
+in this package opens a file for writing. Actual modification ships in a later
+release, and the split is deliberate -- the locator is the riskiest component in
 the product, so it ships and gets proven before anything gains write access.
 
 `generate()` is the ONLY entry point, and it is where applicability is
