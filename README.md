@@ -110,18 +110,27 @@ Exit codes: `0` clean · `1` a `--fail-on` gate failed · `2` usage or config er
 non-zero exit is what makes it a CI gate, not just a report — see
 [Use OmniRank as a CI gate](#use-omnirank-as-a-ci-gate) below.
 
-## What ships in v0.3.0
+## What ships in v0.4.0
 
 | Skill | Status | What it does |
 |---|---|---|
-| `audit` | **Shipped** | Scores SEO, AEO, GEO, perf and structured-data gates against a site's real HTML — including a cross-URL pass over the whole crawled set — and reports `observed` / `expected` / `fix` for every gap |
+| `audit` | **Shipped** | Scores SEO, AEO, GEO, perf, security and structured-data gates against a site's real HTML — including a cross-URL pass over the whole crawled set — and reports `observed` / `expected` / `fix` for every gap |
 | `geo-artifacts` | **Shipped** | Generates `llms.txt`, `llms-full.txt` and `facts.json`, each with an explicit citation licence |
-| `fix` *(preview)* | **Shipped** | Resolves a finding's URL to the source file that owns it and prints the unified diff it would apply for the four `mechanical` findings. Writes nothing — there is no `--write` flag in 0.3.0 |
+| `fix` *(preview)* | **Shipped** | Resolves a finding's URL to the source file that owns it and prints the unified diff it would apply for the four `mechanical` findings. Writes nothing — there is no `--write` flag |
 
-Still exactly two skills. 0.3.0 added the locator — URL to source file — plus a
-`fixTier` on every finding and the `omnirank fix` diff preview. **This release writes
-nothing to your project.** File modification arrives in v0.4.0, deliberately after the
-locator has been proven. Everything under Roadmap below is not present in v0.3.0.
+Still exactly two skills. v0.4.0 adds 18 new finding ids across four groups: a new
+`security` layer (HSTS, `nosniff`, CSP absence, `Referrer-Policy`, mixed content, and a
+missing HTTP→HTTPS redirect); indexability contradictions provable from a site's own
+declarations (a sitemap URL its own `robots.txt` disallows, a canonical pointing at a
+noindexed/redirecting/missing page, a `hreflang` alternate that is itself noindexed);
+Google's required rich-result properties for eight structured-data types; and on-page
+accessibility overlap (missing `alt`, skipped heading levels, empty or generic link
+text, missing `lang`). It also normalises the score model so a layer's budget scales
+with its own gate count instead of a flat constant — **scores from 0.3.0 and 0.4.0 are
+not comparable.** `omnirank fix` still writes nothing to your project; file
+modification ships once the locator is proven against real repositories and the write
+guarantees in `docs/research/2026-08-04-automation-architecture.md` §2.5 are
+implemented and tested. Everything under Roadmap below is not present in v0.4.0.
 
 ## Roadmap
 

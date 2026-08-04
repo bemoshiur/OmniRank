@@ -104,13 +104,17 @@ def test_changelog_documents_v0_3_0():
     assert "## [0.3.0]" in (ROOT / "CHANGELOG.md").read_text()
 
 
+def test_changelog_documents_v0_4_0():
+    assert "## [0.4.0]" in (ROOT / "CHANGELOG.md").read_text()
+
+
 def test_every_version_declaration_agrees():
     import json
     import re
 
     init = (ROOT / "scripts" / "py" / "omnirank" / "__init__.py").read_text()
     version = re.search(r'__version__ = "([^"]+)"', init).group(1)
-    assert version == "0.3.0"
+    assert version == "0.4.0"
 
     pyproject = (ROOT / "scripts" / "py" / "pyproject.toml").read_text()
     assert f'version = "{version}"' in pyproject

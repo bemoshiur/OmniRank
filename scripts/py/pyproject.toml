@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnirank"
-version = "0.3.0"
+version = "0.4.0"
 description = "SEO, AEO, GEO and SMM growth engine"
 requires-python = ">=3.11"
 license = { text = "MIT" }

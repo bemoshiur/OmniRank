@@ -120,4 +120,4 @@ def test_gate_reference_documents_every_mechanical_fix():
 def test_readme_documents_the_fix_subcommand():
     body = (ROOT / "README.md").read_text()
     assert "omnirank fix" in body
-    assert "v0.3.0" in body
+    assert "v0.4.0" in body
