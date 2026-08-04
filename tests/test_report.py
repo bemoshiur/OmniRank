@@ -104,10 +104,75 @@ def test_passed_never_negative():
     assert r.to_dict()["stats"]["passed"] == 0
 
 
-def test_auto_fixable_serialises_to_camel_case():
+def test_fix_tier_is_derived_from_the_registry_not_passed_in():
+    # canonical.missing is MECHANICAL; h1.multiple is ADVISORY even though the
+    # old boolean marked both auto-fixable.
+    assert f(id="seo.canonical.missing", gate="canonical").fix_tier == "mechanical"
+    assert f(id="seo.h1.multiple", gate="h1").fix_tier == "advisory"
+    assert f(id="seo.description.long", gate="description-length").fix_tier == "drafted"
+    assert f(id="seo.schema.no-context", gate="schema").fix_tier == "mechanical"
+
+
+def test_fix_tier_serialises_as_camel_case():
     r = Report(site="https://x.example", kind="audit")
-    r.add(f(auto_fixable=True))
-    assert r.to_dict()["findings"][0]["autoFixable"] is True
+    r.add(f(id="seo.canonical.missing", gate="canonical"))
+    assert r.to_dict()["findings"][0]["fixTier"] == "mechanical"
+
+
+def test_auto_fixable_is_gone_from_the_model_and_the_output():
+    r = Report(site="https://x.example", kind="audit")
+    r.add(f())
+    assert "autoFixable" not in r.to_dict()["findings"][0]
+    with pytest.raises(TypeError):
+        Finding(id="seo.h1.multiple", severity="error", layer="seo",
+                url="https://x.example/", gate="h1", observed="3", expected="1",
+                fix="x", auto_fixable=True)
+
+
+def test_an_unregistered_id_falls_back_to_the_conservative_tier():
+    assert f(id="seo.not-a-real.finding").fix_tier == "advisory"
+
+
+def test_applicability_is_omitted_when_unset():
+    r = Report(site="https://x.example", kind="audit")
+    r.add(f())
+    assert "applicability" not in r.to_dict()["findings"][0]
+
+
+def test_applicability_serialises_when_set():
+    r = Report(site="https://x.example", kind="audit")
+    r.add(f(id="seo.canonical.missing", gate="canonical", applicability="safe"))
+    assert r.to_dict()["findings"][0]["applicability"] == "safe"
+
+
+def test_a_report_carrying_fix_tier_validates_against_the_schema():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.add("seo")
+    r.add(f(id="seo.canonical.missing", gate="canonical", applicability="safe"))
+    errors = list(Draft202012Validator(
+        SCHEMA, format_checker=FormatChecker()).iter_errors(r.to_dict()))
+    assert errors == [], errors
+
+
+def test_a_pre_0_3_0_report_carrying_auto_fixable_still_validates():
+    # additionalProperties is false on a finding, so dropping autoFixable from
+    # the schema would invalidate every report written before this release.
+    legacy = {
+        "generatedAt": "2026-08-03T00:00:00Z",
+        "tool": {"name": "omnirank", "version": "0.2.1"},
+        "site": "https://x.example", "kind": "audit",
+        "score": {"overall": 100},
+        "stats": {"urlsChecked": 1, "passed": 1, "failed": 0, "warned": 0},
+        "findings": [{
+            "id": "seo.canonical.missing", "severity": "error", "layer": "seo",
+            "url": "https://x.example/", "gate": "canonical",
+            "observed": "no rel=canonical", "expected": "one canonical",
+            "fix": "Add one.", "autoFixable": True,
+        }],
+    }
+    errors = list(Draft202012Validator(
+        SCHEMA, format_checker=FormatChecker()).iter_errors(legacy))
+    assert errors == [], errors
 
 
 def test_clean_layer_that_ran_scores_100():

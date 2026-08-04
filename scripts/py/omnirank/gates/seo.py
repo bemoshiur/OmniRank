@@ -10,9 +10,9 @@ MAX_DESCRIPTION = 160
 
 
 def _f(id_: str, gate: str, url: str, severity: str, observed: str,
-       expected: str, fix: str, auto: bool = False) -> Finding:
+       expected: str, fix: str) -> Finding:
     return Finding(id=id_, severity=severity, layer="seo", url=url, gate=gate,
-                   observed=observed, expected=expected, fix=fix, auto_fixable=auto)
+                   observed=observed, expected=expected, fix=fix)
 
 
 def _h1(soup: BeautifulSoup, url: str) -> list[Finding]:
@@ -23,7 +23,7 @@ def _h1(soup: BeautifulSoup, url: str) -> list[Finding]:
     if len(tags) > 1:
         return [_f("seo.h1.multiple", "h1", url, "error",
                    f"{len(tags)} <h1> elements", "exactly 1",
-                   "Keep the first <h1>; demote the others to <h2>.", auto=True)]
+                   "Keep the first <h1>; demote the others to <h2>.")]
     return []
 
 
@@ -35,13 +35,12 @@ def _canonical(soup: BeautifulSoup, url: str) -> list[Finding]:
     if not tag or not tag.get("href"):
         return [_f("seo.canonical.missing", "canonical", url, "error",
                    "no rel=canonical", "one absolute self-referencing canonical",
-                   f'Add <link rel="canonical" href="{url}"> to <head>.', auto=True)]
+                   f'Add <link rel="canonical" href="{url}"> to <head>.')]
     href = tag["href"]
     if not href.startswith(("http://", "https://")):
         return [_f("seo.canonical.relative", "canonical", url, "error",
                    f"relative canonical {href!r}", "an absolute URL",
-                   "Emit the canonical as an absolute URL including scheme and host.",
-                   auto=True)]
+                   "Emit the canonical as an absolute URL including scheme and host.")]
     return []
 
 
@@ -70,8 +69,7 @@ def _description(soup: BeautifulSoup, url: str) -> list[Finding]:
     if len(text) > MAX_DESCRIPTION:
         return [_f("seo.description.long", "description-length", url, "warning",
                    f"{len(text)} characters", f"<= {MAX_DESCRIPTION}",
-                   "Clamp the description to 160 characters at a word boundary.",
-                   auto=True)]
+                   "Clamp the description to 160 characters at a word boundary.")]
     return []
 
 
