@@ -60,9 +60,9 @@ def test_every_registered_id_is_emitted_by_some_gate():
 def test_registry_covers_all_forty_eight_findings():
     # v0.4.0 Task 3: +5 for gates/security.py's four response-header gates
     # (hsts fires two distinct ids). Task 4: +2 for mixed-content and
-    # https-redirect. Task 12 retitles/rebases this once the full v0.4.0 gate
-    # set has landed.
-    assert len(REGISTRY) == 55
+    # https-redirect. Task 6: +1 for seo.robots-sitemap.disallowed. Task 12
+    # retitles/rebases this once the full v0.4.0 gate set has landed.
+    assert len(REGISTRY) == 56
 
 
 def test_tier_distribution_matches_the_fixability_classification():
@@ -73,9 +73,10 @@ def test_tier_distribution_matches_the_fixability_classification():
     # v0.4.0 Task 3: +5 infrastructure (all five security header gates are
     # infrastructure -- the fix is an origin/CDN response-header change).
     # Task 4: +1 templated (mixed-content, a markup scheme rewrite) and +1
-    # infrastructure (https-redirect, an origin-level redirect).
+    # infrastructure (https-redirect, an origin-level redirect). Task 6: +1
+    # advisory (seo.robots-sitemap.disallowed).
     assert counts == {"mechanical": 4, "templated": 16, "drafted": 12,
-                      "advisory": 11, "infrastructure": 12}
+                      "advisory": 12, "infrastructure": 12}
 
 
 def test_mechanical_tier_is_exactly_the_four_documented_ids():

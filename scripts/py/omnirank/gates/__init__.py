@@ -32,4 +32,11 @@ header and markup gates, plus `check_https_redirect(client: httpx.Client, site_u
 str) -> tuple[list[Finding], list[NotEvaluated]]` for the one site-level probe. It
 returns notEvaluated entries alongside findings rather than mutating a Report,
 keeping the gate testable without one.
+
+`contradictions` has no `run`, for the same reason `hygiene` does not: its checks
+take different inputs. It exposes `check_sitemap_vs_robots(client, site_url,
+sitemap_urls) -> tuple[list[Finding], list[NotEvaluated]]`,
+`check_canonical_targets(client, pages) -> tuple[list[Finding], list[NotEvaluated]]`
+and `check_hreflang_noindex(pages) -> list[Finding]`. The first two return
+notEvaluated entries because they depend on network I/O that can fail.
 """
