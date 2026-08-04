@@ -218,3 +218,101 @@ def test_the_fixes_package_never_writes():
     for forbidden in ("write_text(", "open(", "shutil", "os.replace", "mkdir("):
         assert forbidden not in source, (
             f"{forbidden} appears in omnirank/fixes -- this release writes nothing")
+
+
+from omnirank.fixes import GENERATORS, generate   # noqa: E402
+from omnirank.gates import site as site_gate      # noqa: E402
+from omnirank.page import PageData                # noqa: E402
+
+CHAINED_PAGE = PAGE.replace(
+    "    <title>Home</title>\n",
+    '    <title>Home</title>\n    <link rel="canonical" href="https://x.example/b">\n')
+
+
+def chained_finding(**kw) -> Finding:
+    base = dict(
+        id="seo.canonical.chained", severity="warning", layer="seo",
+        url="https://x.example/a", gate="canonical-cluster",
+        observed=("canonical points to https://x.example/b, which itself "
+                  "canonicalises to https://x.example/c"),
+        expected="a canonical pointing directly at a self-canonical page",
+        fix="Point this page's canonical straight at https://x.example/c.")
+    base.update(kw)
+    return Finding(**base)
+
+
+def test_chained_repoints_at_the_terminal_target(tmp_path):
+    location = write(tmp_path, "a.html", CHAINED_PAGE)
+    made = canonical.chained(chained_finding(), location, tmp_path, 1, [])
+    assert made.fixed, made.reason
+    assert '-    <link rel="canonical" href="https://x.example/b">' in made.diff
+    assert '+    <link rel="canonical" href="https://x.example/c">' in made.diff
+
+
+def test_chained_declines_when_the_onward_target_is_itself_chained(tmp_path):
+    location = write(tmp_path, "a.html", CHAINED_PAGE)
+    onward_is_chained = chained_finding(
+        url="https://x.example/c",
+        observed=("canonical points to https://x.example/d, which itself "
+                  "canonicalises to https://x.example/e"))
+    made = canonical.chained(chained_finding(), location, tmp_path, 1,
+                             [chained_finding(), onward_is_chained])
+    assert not made.fixed
+    assert "not terminal" in made.reason
+
+
+def test_chained_declines_when_the_onward_target_cannot_be_recovered(tmp_path):
+    location = write(tmp_path, "a.html", CHAINED_PAGE)
+    made = canonical.chained(
+        chained_finding(observed="something else entirely"), location, tmp_path, 1, [])
+    assert not made.fixed
+    assert "onward" in made.reason
+
+
+def test_the_chained_regex_matches_what_the_gate_actually_emits():
+    # A coupling test, on purpose: the onward URL exists only in this prose, so
+    # rewording gates/site.py must turn this red rather than silently disabling
+    # the fix.
+    def page(url: str, canonical_href: str) -> PageData:
+        html = f'<html><head><link rel="canonical" href="{canonical_href}">' \
+               "</head><body></body></html>"
+        return PageData(url=url, html=html, status=200, elapsed_ms=1, headers={})
+
+    findings = site_gate.run([
+        page("https://x.example/a", "https://x.example/b"),
+        page("https://x.example/b", "https://x.example/c"),
+        page("https://x.example/c", "https://x.example/c"),
+    ])
+    chained = [f for f in findings if f.id == "seo.canonical.chained"]
+    assert chained, "the gate must still emit seo.canonical.chained"
+    assert canonical.onward_target(chained[0].observed) == "https://x.example/c"
+
+
+def test_generators_cover_exactly_the_mechanical_tier():
+    from omnirank.registry import MECHANICAL_IDS
+
+    assert set(GENERATORS) == set(MECHANICAL_IDS)
+
+
+def test_generate_refuses_anything_that_is_not_safe(tmp_path):
+    location = write(tmp_path, "index.html", PAGE)
+    made = generate(finding(), location, root=tmp_path, routes_served=9000,
+                    findings=[])
+    assert not made.fixed
+    assert made.applicability == "display-only"
+    assert "display-only" in made.reason
+
+
+def test_generate_refuses_a_finding_with_no_generator(tmp_path):
+    location = write(tmp_path, "index.html", PAGE)
+    made = generate(finding(id="seo.h1.multiple", gate="h1"), location,
+                    root=tmp_path, routes_served=1, findings=[])
+    assert not made.fixed
+    assert "advisory" in made.reason
+
+
+def test_generate_produces_a_diff_on_the_happy_path(tmp_path):
+    location = write(tmp_path, "index.html", PAGE)
+    made = generate(finding(), location, root=tmp_path, routes_served=1, findings=[])
+    assert made.fixed, made.reason
+    assert made.applicability == "safe"
