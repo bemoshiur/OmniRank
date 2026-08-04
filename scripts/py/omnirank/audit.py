@@ -5,16 +5,28 @@ import httpx
 from .bands import resolve_band
 from .config import Config
 from .fetch import fetch, make_client, read_sitemap
-from .gates import aeo, contradictions, geo, hygiene, jsonld, perf, security, seo, site
+from .gates import (
+    aeo,
+    contradictions,
+    geo,
+    hygiene,
+    jsonld,
+    onpage,
+    perf,
+    security,
+    seo,
+    site,
+)
 from .page import PageData
 from .report import Finding, NotEvaluated, Report
 
 # The per-page gate modules whose findings all carry layer="seo" (seo.py AND
-# jsonld.py -- schema findings are seo.* too), plus aeo, perf and security. When a
-# page cannot be fetched, none of these ran for it, and each is recorded as its own
-# notEvaluated entry rather than merged into one -- a caller filtering
-# notEvaluated by gate (e.g. "did aeo run for this URL?") needs them distinct.
-PER_PAGE_GATES = ("seo", "aeo", "perf", "security")
+# jsonld.py -- schema findings are seo.* too), plus aeo, perf, security and
+# onpage. When a page cannot be fetched, none of these ran for it, and each is
+# recorded as its own notEvaluated entry rather than merged into one -- a caller
+# filtering notEvaluated by gate (e.g. "did aeo run for this URL?") needs them
+# distinct.
+PER_PAGE_GATES = ("seo", "aeo", "perf", "security", "onpage")
 
 
 def default_config(url: str) -> Config:
@@ -114,6 +126,7 @@ def audit_site(config: Config, client: httpx.Client | None = None,
             report.extend(jsonld.run(page.html, page.url))
             report.extend(perf.run(page))
             report.extend(security.run_page(page))
+            report.extend(onpage.run(page.html, page.url))
 
         https_findings, https_not_evaluated = security.check_https_redirect(
             client, config.site_url)
