@@ -77,6 +77,12 @@ does write files, but only the three GEO artifacts it generates (`llms.txt`,
 `llms-full.txt`, `facts.json`) into the output directory you specify — it never touches
 existing site source files.
 
+### Will OmniRank edit my files?
+
+Not in 0.3.0. `omnirank fix` locates each finding, prints the unified diff it would
+apply, and stops — there is no `--write` flag, and passing one exits `2`. File
+modification arrives in v0.4.0. See [fix-preview.md](fix-preview.md).
+
 ### What's the difference between `audit` and `geo-artifacts`?
 
 `audit` reads your site and reports what's wrong, with no side effects.
@@ -189,7 +195,7 @@ To `.omnirank/reports/<UTC-date>-audit.json` by default (override with `--out`),
 validated against `schemas/report.schema.json` — `generatedAt`, `tool`, `site`, `kind`,
 `score` (per layer plus `overall`), `stats` (`urlsChecked`/`passed`/`failed`/`warned`),
 and the full `findings` array, each with `id`, `severity`, `layer`, `url`, `gate`,
-`observed`, `expected`, `fix`, and `autoFixable`. See
+`observed`, `expected`, `fix`, and `fixTier`. See
 [getting-started.md#6-where-the-json-report-lands](getting-started.md#6-where-the-json-report-lands).
 
 ### Is the code and the documentation under the same licence?

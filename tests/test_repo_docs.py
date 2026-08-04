@@ -98,3 +98,27 @@ def test_og_template_claims_only_shipped_capabilities():
 def test_pyproject_author_matches_canonical_name():
     body = (ROOT / "scripts" / "py" / "pyproject.toml").read_text()
     assert "S M Moshiur Rahman" in body
+
+
+def test_changelog_documents_v0_3_0():
+    assert "## [0.3.0]" in (ROOT / "CHANGELOG.md").read_text()
+
+
+def test_every_version_declaration_agrees():
+    import json
+    import re
+
+    init = (ROOT / "scripts" / "py" / "omnirank" / "__init__.py").read_text()
+    version = re.search(r'__version__ = "([^"]+)"', init).group(1)
+    assert version == "0.3.0"
+
+    pyproject = (ROOT / "scripts" / "py" / "pyproject.toml").read_text()
+    assert f'version = "{version}"' in pyproject
+
+    plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+    assert plugin["version"] == version
+
+    node = json.loads((ROOT / "scripts" / "node" / "package.json").read_text())
+    assert node["version"] == version
+
+    assert f"version: {version}" in (ROOT / "CITATION.cff").read_text()

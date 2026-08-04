@@ -121,3 +121,18 @@ def test_band_requires_min_and_max():
     cfg = minimal()
     cfg["aeo"] = {"answerBlock": {"default": {"unit": "words", "min": 40}}}
     assert list(validator().iter_errors(cfg))
+
+
+def test_new_framework_values_are_accepted():
+    for name in ("next-pages-router", "hugo", "eleventy"):
+        cfg = minimal()
+        cfg["stack"] = {"framework": name}
+        assert list(validator().iter_errors(cfg)) == [], name
+
+
+def test_the_original_framework_values_still_validate():
+    for name in ("next-app-router", "next-pages", "astro", "nuxt", "sveltekit",
+                 "wordpress", "jekyll", "shopify", "static", "other"):
+        cfg = minimal()
+        cfg["stack"] = {"framework": name}
+        assert list(validator().iter_errors(cfg)) == [], name

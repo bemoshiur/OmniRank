@@ -141,3 +141,19 @@ user actually experienced.
 depend on `brotli` or `zstandard`, so it never requests `br` or `zstd` via
 `Accept-Encoding` — an origin will not choose to send either back in response to a
 request that never asked for them.
+
+## Fix tiers
+
+Every finding id carries a static `fixTier` in the report. Only `mechanical` findings
+can produce a diff, and only when the locator, the blast radius and the surface all
+agree:
+
+| Finding id | Tier | What the diff does |
+|---|---|---|
+| `seo.canonical.missing` | mechanical | Inserts a self-referencing canonical, single-route files only |
+| `seo.canonical.relative` | mechanical | Resolves the href against the page's own URL |
+| `seo.canonical.chained` | mechanical | Repoints at the terminal target, when it is provably terminal |
+| `seo.schema.no-context` | mechanical | Adds `"@context": "https://schema.org"` to an unambiguous node |
+
+Everything else is `templated`, `drafted`, `advisory` or `infrastructure`, and is
+reported rather than patched. `omnirank fix` writes nothing in 0.3.0.

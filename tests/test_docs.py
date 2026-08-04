@@ -12,6 +12,7 @@ DOC_PAGES = [
     "getting-started.md",
     "configuration.md",
     "audit-guide.md",
+    "fix-preview.md",
     "geo-artifacts-guide.md",
     "ci-integration.md",
     "claude-code-setup.md",
@@ -77,3 +78,43 @@ def test_configuration_docs_cover_answer_block_bands():
 def test_perf_layer_is_no_longer_described_as_empty():
     body = (ROOT / "docs" / "audit-guide.md").read_text().lower()
     assert "perf" in body
+
+
+def test_report_schema_wiki_documents_the_two_axis_model():
+    body = (ROOT / "docs" / "wiki" / "Report-Schema.md").read_text()
+    assert "fixTier" in body
+    assert "applicability" in body
+    for tier in ("mechanical", "templated", "drafted", "advisory", "infrastructure"):
+        assert tier in body, tier
+    for verdict in ("safe", "unsafe", "display-only"):
+        assert verdict in body, verdict
+
+
+def test_docs_no_longer_present_auto_fixable_as_a_current_field():
+    body = (ROOT / "docs" / "wiki" / "Report-Schema.md").read_text()
+    assert "Never emitted since 0.3.0" in body, (
+        "autoFixable must be documented as retired, not as a live field")
+    assert "autoFixable" not in (ROOT / "docs" / "faq.md").read_text()
+
+
+def test_fix_preview_doc_states_that_nothing_is_written():
+    body = (ROOT / "docs" / "fix-preview.md").read_text()
+    assert "v0.4.0" in body
+    assert "--write" in body
+    assert "omnirank fix" in body
+    for tier in ("mechanical", "templated", "drafted", "advisory", "infrastructure"):
+        assert tier in body, tier
+
+
+def test_gate_reference_documents_every_mechanical_fix():
+    from omnirank.registry import MECHANICAL_IDS
+
+    body = (ROOT / "skills" / "audit" / "references" / "gates.md").read_text()
+    missing = sorted(i for i in MECHANICAL_IDS if i not in body)
+    assert not missing, f"undocumented mechanical fixes: {missing}"
+
+
+def test_readme_documents_the_fix_subcommand():
+    body = (ROOT / "README.md").read_text()
+    assert "omnirank fix" in body
+    assert "v0.3.0" in body
