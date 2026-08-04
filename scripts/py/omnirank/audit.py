@@ -104,7 +104,18 @@ def audit_site(config: Config, client: httpx.Client | None = None,
 
         pages = _collect(client, targets, report)
         if pages:
-            report.layers_run.update({"aeo", "perf"})
+            # `security` follows the exact same rule as `aeo` and `perf`: it is a
+            # per-page layer (security.run_page() is called only inside the `for
+            # page in pages` loop below), so it must not be marked run -- and
+            # therefore must not be eligible to score a fabricated 100 -- until at
+            # least one page was actually parsed. `check_https_redirect()` below is
+            # the one site-level exception: a REAL finding from it still reaches
+            # the score map on its own merits (Report.score() admits any layer
+            # that produced an actual finding, regardless of layers_run), but a
+            # clean or not-applicable verdict from it must not, by itself, count
+            # as "security ran" when mixed-content -- one of only two scoring
+            # gates -- never got a single page to look at (S5).
+            report.layers_run.update({"aeo", "perf", "security"})
 
         if urls is None and sitemap_urls:
             # hygiene.check_sitemap() distinguishes a redirecting sitemap entry
@@ -133,12 +144,6 @@ def audit_site(config: Config, client: httpx.Client | None = None,
         report.extend(https_findings)
         for entry in https_not_evaluated:
             report.flag_not_evaluated(entry)
-        if pages or not https_not_evaluated:
-            # `security` enters layers_run when at least one of its gates actually
-            # ran: the per-page header gates need a page, the site-level probe does
-            # not. An empty https_not_evaluated means the probe reached the origin
-            # and reached a verdict, so the layer ran even on a zero-page audit.
-            report.layers_run.add("security")
 
         report.extend(site.run(pages, sitemap_urls))
 

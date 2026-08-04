@@ -281,9 +281,44 @@ def test_layers_that_never_ran_are_absent_when_every_target_404s():
         "zero pages were parsed; aeo must not be scored a silent 100")
     assert "perf" not in score, (
         "zero pages were parsed; perf must not be scored a silent 100")
+    # S5: security is a per-page layer exactly like aeo/perf (security.run_page()
+    # only runs inside the pages loop) -- it must not score a silent 100 just
+    # because check_https_redirect()'s site-level probe happened to come back
+    # clean. The `http://x.example/` mock above redirects cleanly (301 to
+    # https), so before the fix this reproduced the real rust-lang.org report:
+    # `security: 100` with `urlsChecked: 1` and zero pages parsed.
+    assert "security" not in score, (
+        "zero pages were parsed; security must not be scored a silent 100 just "
+        "because the https-redirect probe alone came back clean")
     assert "seo" in score, "seo.page.unreachable and the sitemap gates always run"
     assert "geo" in score, "geo probes site-level artifacts regardless of page fetches"
     assert any(f.id == "seo.page.unreachable" for f in report.findings)
+
+
+@respx.mock
+def test_a_real_https_redirect_finding_still_scores_security_with_zero_pages():
+    # The flip side of S5: layers_run gating a fabricated 100 must not also hide a
+    # REAL security problem. Report.score() admits any layer with an actual
+    # finding on its own merits regardless of layers_run, so a genuine
+    # https-redirect error still reaches the score map even though zero pages
+    # were parsed and mixed-content therefore never ran.
+    respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/llms.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/llms-full.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/facts.json").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE}/robots.txt").mock(return_value=httpx.Response(404))
+    # http:// origin serves content directly instead of redirecting -- a real
+    # security.https-redirect.missing error.
+    respx.get("http://x.example/").mock(return_value=httpx.Response(200, text="hi"))
+
+    report = audit_site(default_config(SITE), make_client())
+    score = report.score()
+
+    assert any(f.id == "security.https-redirect.missing" for f in report.findings)
+    assert "security" in score, (
+        "a real finding must reach the score map even with zero pages parsed")
+    assert score["security"] < 100
 
 
 @respx.mock

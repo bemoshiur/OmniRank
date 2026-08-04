@@ -57,9 +57,10 @@ def test_every_registered_id_is_emitted_by_some_gate():
     assert not orphans, f"registered but never emitted: {orphans}"
 
 
-def test_registry_covers_all_sixty_six_findings():
-    assert len(REGISTRY) == 66, (
-        "48 through v0.3.0, plus 18 in v0.4.0: 7 security, 5 contradictions, "
+def test_registry_covers_all_sixty_seven_findings():
+    assert len(REGISTRY) == 67, (
+        "48 through v0.3.0, plus 19 in v0.4.0: 8 security (S4's final-review fix "
+        "split mixed-content into an active/passive pair), 5 contradictions, "
         "1 schema-required, 5 onpage")
 
 
@@ -71,9 +72,9 @@ def test_tier_distribution_matches_the_fixability_classification():
     # mechanical stays at exactly 4: a new mechanical id would need a new fix
     # generator (test_generators_cover_exactly_the_mechanical_tier), and v0.4.0
     # deliberately adds no fix surface.
-    assert counts == {"mechanical": 4, "templated": 18, "drafted": 16,
+    assert counts == {"mechanical": 4, "templated": 19, "drafted": 16,
                       "advisory": 16, "infrastructure": 12}
-    assert sum(counts.values()) == 66
+    assert sum(counts.values()) == 67
 
 
 def test_the_seo_layer_has_twenty_four_scoring_gates_after_v0_4_0():
