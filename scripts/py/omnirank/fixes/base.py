@@ -173,9 +173,13 @@ def read_text(path: Path) -> str | None:
     against a string that is not the bytes on disk -- and git rejects the
     result the moment a context or "-" line has to match the real file byte for
     byte. Reading raw keeps CRLF and lone-CR files diffable at all.
+
+    `Path.read_text()` only grew a `newline` parameter in Python 3.13, and this
+    package supports 3.11, so go through `open()` -- which has always accepted it.
     """
     try:
-        return path.read_text(encoding="utf-8", newline="")
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            return handle.read()
     except (OSError, UnicodeDecodeError):
         return None
 
