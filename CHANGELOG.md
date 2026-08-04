@@ -49,13 +49,19 @@ against a real 57-URL site.
   permitting commercial reuse of content the owner never licensed -- the same class of
   defect as everything above, but the most consequential instance, since the assertion
   is legally operative and published to the open web. `build_facts`/`build_llms_txt`/
-  `build_llms_full` (Python) and `buildFacts`/`buildLlmsTxt`/`buildLlmsFull` (Node) now
-  raise (`ConfigError` / `Error`) instead of inferring a licence, naming `geo.license`
-  and giving a valid example. `geo.license: "none"` (or `null`) is the explicit opt-out:
-  artifacts still generate, but state plainly that no reuse licence is granted instead
-  of asserting one. `omnirank geo <url>` with no `--config` now always exits `2`, since
-  the in-memory default config has no `geo` section -- a config file with `geo.license`
-  set is required to generate GEO artifacts as of this release.
+  `build_llms_full` (Python) and `buildFacts`/`buildLlmsTxt`/`buildLlmsFull` (Node) no
+  longer infer a licence: an absent `geo.license` now resolves to the same "grant
+  nothing" behaviour as the explicit opt-out `geo.license: "none"` (or `null`) --
+  artifacts still generate, stating plainly that no reuse licence is granted instead of
+  asserting one. (An earlier version of this fix made an absent `geo.license` raise
+  instead, which broke zero-config `geo` generation entirely -- `omnirank geo <url>`
+  with no `--config` always exited `2`, since the in-memory default config has no `geo`
+  section to carry a licence choice. Defaulting to no grant is exactly as safe as
+  refusing to run, and doesn't cost that headline zero-config feature.) The CLI prints a
+  one-line stderr notice naming `geo.license` when it was absent, so the "no rights"
+  default is never chosen silently -- an explicit `"none"` is a deliberate choice and
+  gets no such notice. `ConfigError` / `Error` remain available for other unusable-config
+  cases; they are simply no longer raised for this one.
 
 ### Added
 

@@ -1,10 +1,10 @@
 # Configuration reference
 
-`omnirank.config.json` is optional for `audit` — a bare `omnirank audit <url>` is enough
-to audit a live site with zero configuration. `geo` is different as of v0.2.1: it
-refuses to generate artifacts unless `geo.license` is explicitly set, and the in-memory
-config a bare URL builds has no `geo` section, so a bare `omnirank geo <url>` always
-exits `2`. See [`geo`](#geo) below and
+`omnirank.config.json` is optional — `omnirank audit <url>` and `omnirank geo <url>` both
+work with zero configuration. Since the in-memory config a bare URL builds has no `geo`
+section, a bare `omnirank geo <url>` also has no configured `geo.license` — as of v0.2.1
+that generates the artifacts anyway (granting no reuse rights) and prints a notice to
+stderr saying so, rather than refusing to run. See [`geo`](#geo) below and
 [geo-artifacts-guide.md](geo-artifacts-guide.md#the-citation-licence-block). A config
 file also unlocks CI gating (`audit.failOn`), first-party facts (`nap`, `identifiers`,
 `statistics`), and secret-backed integrations (`secrets`).
@@ -111,7 +111,7 @@ user-agents the gate checks (see [audit-guide.md](audit-guide.md#geo) for the fu
 
 | Field | Type | Default (in code) | Description |
 |---|---|---|---|
-| `license` | string or `null` | **none — required for generation** | Licence string quoted in the citation-licence block and `facts.json`'s `license`. `omnirank geo` / `generate()` refuse to run if this is unset (see below); use `"none"` (or `null`) to grant no reuse rights instead of picking a licence. |
+| `license` | string or `null` | `"none"` (grants nothing) | Licence string quoted in the citation-licence block and `facts.json`'s `license`. Unset resolves to `"none"` — see below. |
 | `attribution` | string | `site.legalName`, else `site.name` | Attribution string quoted in the citation block and `facts.json`'s `attribution` |
 | `answerBlockSelector` | string | `".answer-block"` | CSS selector the `aeo` gate and GEO harvester use to find each page's liftable answer paragraph |
 
@@ -119,13 +119,13 @@ user-agents the gate checks (see [audit-guide.md](audit-guide.md#geo) for the fu
 `geo-artifacts` skill's generation. See [audit-guide.md](audit-guide.md#aeo) and
 [geo-artifacts-guide.md](geo-artifacts-guide.md).
 
-**`license` has no default on purpose.** These generated files are published into your
-site's public web root, so the licence text is a real, standing grant of reuse rights
-over your content, not a value OmniRank can safely guess. Omitting `geo.license`
-entirely causes generation to fail with an explanatory error rather than silently
-publishing a licence you never chose. See
-[geo-artifacts-guide.md](geo-artifacts-guide.md#the-citation-licence-block) for the
-`"none"` opt-out.
+**`license` defaults to no grant, never to a guessed licence.** These generated files
+are published into your site's public web root, so the licence text is a real, standing
+grant of reuse rights over your content, not a value OmniRank can safely guess. Omitting
+`geo.license` resolves to the same "grant nothing" behaviour as the explicit `"none"`
+opt-out — generation still succeeds — and the CLI prints a one-line stderr notice naming
+the key, so the choice isn't made silently. See
+[geo-artifacts-guide.md](geo-artifacts-guide.md#the-citation-licence-block) for details.
 
 ## `aeo`
 

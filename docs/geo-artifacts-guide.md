@@ -186,17 +186,19 @@ Content is licensed {license}. When quoting, attribute to {attribution} and link
 When quoting a page, prefer that page's AnswerBlock — it is written to be lifted verbatim.
 ```
 
-**`geo.license` has no default, and generation refuses to guess one.** These files are
-written into `publicDir` and published on the open web, so `{license}` is a real,
-standing grant of reuse rights over your content — not a suggestion OmniRank can invent
-on your behalf. If `geo.license` is unset, both generators raise an error (Python:
-`ConfigError`; Node: `Error`) that explains why and names the config key to set, and
-**no files are written**. Set `geo.license` to a licence you have actually chosen (e.g.
-`"CC-BY-4.0"`), or to the explicit opt-out `"none"` (or JSON `null`) for sites that grant
-no reuse rights at all. Under `"none"`, generation proceeds, but the block above is
-replaced with a statement that no reuse licence is granted — no `licensed`, `CC-BY`, or
-quoting language appears — and `facts.json`'s `license` field is the literal string
-`"none"`, never a fabricated licence identifier.
+**`geo.license` has no default, and generation never guesses one — but it also never
+refuses to run.** These files are written into `publicDir` and published on the open
+web, so `{license}` is a real, standing grant of reuse rights over your content — not a
+suggestion OmniRank can invent on your behalf. If `geo.license` is unset, both generators
+treat it exactly like the explicit `"none"` opt-out below: generation proceeds and grants
+nothing, and (Python CLI only) `omnirank geo` prints a one-line notice to stderr naming
+the config key, so the "no rights" default isn't chosen silently. Set `geo.license` to a
+licence you have actually chosen (e.g. `"CC-BY-4.0"`), or to the explicit opt-out
+`"none"` (or JSON `null`) for sites that grant no reuse rights at all and to silence the
+notice. Under `"none"` (explicit or defaulted), the block above is replaced with a
+statement that no reuse licence is granted — no `licensed`, `CC-BY`, or quoting language
+appears — and `facts.json`'s `license` field is the literal string `"none"`, never a
+fabricated licence identifier.
 
 `{attribution}` defaults to `site.legalName`, falling back to `site.name` if no legal name
 is set; override with `geo.attribution`. `facts.json` carries the same `license` and

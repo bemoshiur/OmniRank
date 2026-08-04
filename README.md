@@ -378,14 +378,15 @@ evidence-backed bet, not a guarantee.
 <details>
 <summary>Can I run an audit without writing a config file first?</summary>
 
-For `audit`, yes — `omnirank audit <url>` works with just a URL, using an in-memory
-default config. `geo` is different as of v0.2.1: it refuses to generate artifacts unless
-`geo.license` is explicitly set, and the in-memory default config used by a bare
-`omnirank geo <url>` has no `geo` section at all, so that invocation always exits `2`.
-This is deliberate — the generated files are published to your site, and their licence
-text is a real grant of reuse rights that OmniRank will not choose on your behalf. Write
-a config with `geo.license` set (a real licence, or `"none"` to grant none) and pass it
-with `--config` to actually generate `geo` artifacts; see
+Yes, for both commands — `omnirank audit <url>` and `omnirank geo <url>` both work with
+just a URL, using an in-memory default config. Since the in-memory default config has no
+`geo` section, a bare `omnirank geo <url>` has no configured `geo.license` either — as of
+v0.2.1 that generates the artifacts anyway, stating plainly that no reuse licence is
+granted, and prints a one-line notice to stderr saying so (a config's generated files are
+published to your site, so OmniRank tells you rather than silently choosing "no rights"
+on your behalf). Write a config with `geo.license` set to a real licence and pass it with
+`--config` to actually grant reuse rights, or set it to `"none"` explicitly to make that
+choice permanent and silence the notice; see
 [geo-artifacts-guide.md](docs/geo-artifacts-guide.md#the-citation-licence-block). Beyond
 that, a config file is also needed for CI gating with a committed `audit.failOn`,
 first-party facts (`nap`, `identifiers`, `statistics`), or anything the roadmap skills

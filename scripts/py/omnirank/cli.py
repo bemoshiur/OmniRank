@@ -181,7 +181,14 @@ def main(argv: list[str] | None = None) -> int:
         config = default_config(args.url.rstrip("/"))
 
     if args.command == "geo":
-        from .geo_artifacts import generate
+        from .geo_artifacts import LICENSE_ABSENT_NOTICE, generate, license_is_absent
+
+        # An absent geo.license generates fine (it resolves to "grant nothing"), but
+        # the owner didn't actually choose that -- unlike an explicit "none", which
+        # is a deliberate choice and needs no notice. Say so on stderr so the choice
+        # isn't made silently, without touching the generated files or exit code.
+        if license_is_absent(config):
+            print(f"omnirank: {LICENSE_ABSENT_NOTICE}", file=sys.stderr)
 
         try:
             written = generate(config, args.out)

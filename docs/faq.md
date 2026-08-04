@@ -135,16 +135,18 @@ are actually present in the score line, before trusting a report.
 
 ### Can I run OmniRank without a config file?
 
-For `audit`, yes — `omnirank audit <url>` works with just a URL, using a minimal
-in-memory config from `default_config()` (`entityType: "Organization"`, the URL as both
-name and site URL). `geo` is different as of v0.2.1: it refuses to generate artifacts
-unless `geo.license` is explicitly set, and `default_config()` has no `geo` section at
-all, so a bare `omnirank geo <url>` always exits `2`. This is deliberate — the generated
-files are published to your site, and OmniRank will not choose their licence text for
-you. Write a config with `geo.license` set (a real licence, or `"none"` to grant none)
-and pass it with `--config`. Beyond that, a config file is also required for CI gating
-with a committed `audit.failOn`, first-party facts (`nap`, `identifiers`, `statistics`),
-and anything the roadmap skills will need from `secrets`.
+Yes, for both commands. `omnirank audit <url>` and `omnirank geo <url>` both work with
+just a URL — `default_config()` builds a minimal in-memory config (`entityType:
+"Organization"`, the URL as both name and site URL). Since that config has no `geo`
+section, a bare `omnirank geo <url>` has no configured `geo.license` either — as of
+v0.2.1 that generates the artifacts anyway, granting no reuse rights, and prints a
+one-line notice to stderr saying so, rather than refusing to run: the generated files
+are published to your site, so OmniRank tells you it defaulted to "no rights" instead of
+choosing that silently. Write a config with `geo.license` set to a real licence and pass
+it with `--config` to actually grant reuse rights, or set it to `"none"` explicitly to
+make that choice permanent and silence the notice. Beyond that, a config file is also
+required for CI gating with a committed `audit.failOn`, first-party facts (`nap`,
+`identifiers`, `statistics`), and anything the roadmap skills will need from `secrets`.
 
 ### Is OmniRank on PyPI or npm?
 

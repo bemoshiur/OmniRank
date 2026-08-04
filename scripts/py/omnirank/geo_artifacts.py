@@ -8,20 +8,31 @@ from pathlib import Path
 import httpx
 from bs4 import BeautifulSoup
 
-from .config import Config, ConfigError
+from .config import Config
 from .fetch import fetch, make_client, read_sitemap
 
 NO_LICENSE_SENTINEL = "none"
 
-_MISSING_LICENSE_MESSAGE = (
-    "geo.license is not set. `omnirank geo` writes llms.txt, llms-full.txt and "
-    "facts.json into your publicDir, where they are published on the open web -- the "
-    "licence text inside them is a real, standing grant of reuse rights over your "
-    "content, not a suggestion. OmniRank will not choose one on your behalf: doing so "
-    "would mean the tool grants permissions you never actually gave. Set "
-    '"geo": {"license": "CC-BY-4.0"} in your config to a licence you have actually '
-    'chosen, or set "geo": {"license": "none"} if this site grants no reuse rights at '
-    "all."
+# v0.2.1 history: geo.license used to default to "CC-BY-4.0" when unset, so a site
+# with no licence configured got an irrevocable grant of commercial reuse it never
+# actually gave. The fix for that went one step too far and made an absent
+# geo.license a hard ConfigError -- which meant `omnirank geo <url>` with no config
+# file (the project's other zero-config headline command, alongside `audit`) always
+# exited 2, since there is no config file to carry a licence choice.
+#
+# Neither extreme is right. The actual defect was defaulting to a PERMISSIVE grant.
+# Defaulting to NO grant instead is equally safe -- it asserts nothing on the
+# owner's behalf -- and has no downside, so an absent geo.license now resolves
+# exactly like the explicit "none" opt-out instead of refusing to run at all, which
+# is stricter than the problem requires and costs a real feature. The CLI still
+# tells the user this happened: silently choosing "none" would just be a quieter
+# version of the same "assert something the owner didn't say" problem. See
+# `license_is_absent` and `LICENSE_ABSENT_NOTICE` below.
+LICENSE_ABSENT_NOTICE = (
+    "geo.license is not set, so no reuse licence was granted (the citation block "
+    'states none). Set "geo": {"license": "<licence>"} in your config to grant '
+    'reuse rights, or "geo": {"license": "none"} to make the no-grant choice '
+    "explicit and silence this notice."
 )
 
 
@@ -57,20 +68,29 @@ def harvest(client: httpx.Client, config: Config) -> list[Page]:
 
 
 def _resolve_license(config: Config) -> str | None:
-    """The chosen licence string, or ``None`` for the explicit "grant nothing" opt-out.
+    """The chosen licence string, or ``None`` for "grant nothing".
 
-    Raises ``ConfigError`` if ``geo.license`` was never set -- OmniRank must never
-    infer a licence, because the generated files are published to the site's public
-    web root and the licence text is a real, standing grant over the owner's content.
+    An absent ``geo.license`` resolves identically to an explicit ``"none"``/
+    ``null`` -- see the module comment above for why. Callers that need to tell
+    the two cases apart (currently only the CLI's stderr notice) use
+    ``license_is_absent`` instead.
     """
-    geo = config.raw.get("geo", {})
-    if "license" not in geo:
-        raise ConfigError(_MISSING_LICENSE_MESSAGE)
-    value = geo["license"]
+    value = config.raw.get("geo", {}).get("license")
     if value is None or (isinstance(value, str) and value.strip().lower() ==
                           NO_LICENSE_SENTINEL):
         return None
     return value
+
+
+def license_is_absent(config: Config) -> bool:
+    """True when ``geo.license`` was never set at all, as opposed to an explicit
+    ``"none"``/``null``.
+
+    Used by the CLI to decide whether to print the "no reuse rights granted"
+    notice: an absent key gets it (the owner made no choice at all), an explicit
+    "none" does not (they made a deliberate one and don't need telling).
+    """
+    return "license" not in config.raw.get("geo", {})
 
 
 def _licence_block(config: Config) -> str:

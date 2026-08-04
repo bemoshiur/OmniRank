@@ -85,7 +85,7 @@
       "properties": {
         "license": {
           "type": ["string", "null"],
-          "description": "Content reuse licence to state in llms.txt/llms-full.txt and facts.json (e.g. \"CC-BY-4.0\"). This key is optional in the schema, but `omnirank geo` REFUSES to generate artifacts if it is absent: the generated files are published into your publicDir on the open web, so asserting a licence you never chose would grant reuse rights over your content you never actually gave. Set this to the string \"none\" (or JSON null) as the explicit opt-out for sites that grant no reuse rights at all -- generation then proceeds and states plainly that no licence is granted, instead of inventing one."
+          "description": "Content reuse licence to state in llms.txt/llms-full.txt and facts.json (e.g. \"CC-BY-4.0\"). Absent: `omnirank geo` grants no reuse rights (same as \"none\" below) and prints a one-line stderr notice naming this key, so the choice isn't made silently. Set to a real licence string to grant reuse rights. Set to the string \"none\" (or JSON null) to state the no-grant choice explicitly and silence the notice -- functionally identical to leaving it unset, but a deliberate record of the choice."
         },
         "attribution": { "type": "string" },
         "answerBlockSelector": { "type": "string" }

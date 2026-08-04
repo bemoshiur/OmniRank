@@ -33,6 +33,10 @@ export interface OmniRankConfig {
 /**
  * Raised when the config is unusable for generation. Mirrors Python's
  * `omnirank.config.ConfigError` -- never swallowed.
+ *
+ * As of v0.2.1 an absent `geo.license` no longer raises this (see below) -- it is
+ * kept exported as public API for any other unusable-config case, present or
+ * future.
  */
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -41,16 +45,19 @@ export class ConfigError extends Error {
   }
 }
 
+// v0.2.1 history: geo.license used to default to "CC-BY-4.0" when unset, so a site
+// with no licence configured got an irrevocable grant of commercial reuse it never
+// actually gave. The fix for that went one step too far and made an absent
+// geo.license throw -- which meant generating for a site with no licence choice at
+// all refused to run rather than producing anything.
+//
+// Neither extreme is right. The actual defect was defaulting to a PERMISSIVE grant.
+// Defaulting to NO grant instead is equally safe -- it asserts nothing on the
+// owner's behalf -- and has no downside, so an absent geo.license now resolves
+// exactly like the explicit "none" opt-out instead of throwing. (The Python CLI
+// surfaces a one-line stderr notice for this case; this library has no CLI of its
+// own, so there is nothing analogous to add here -- see scripts/py/omnirank/cli.py.)
 export const NO_LICENSE_SENTINEL = "none";
-
-const MISSING_LICENSE_MESSAGE =
-  "geo.license is not set. `generate()` writes llms.txt, llms-full.txt and facts.json " +
-  "into your publicDir, where they are published on the open web -- the licence text " +
-  "inside them is a real, standing grant of reuse rights over your content, not a " +
-  "suggestion. OmniRank will not choose one on your behalf: doing so would mean the " +
-  'tool grants permissions you never actually gave. Set "geo": { "license": ' +
-  '"CC-BY-4.0" } in your config to a licence you have actually chosen, or set "geo": ' +
-  '{ "license": "none" } if this site grants no reuse rights at all.';
 
 const siteUrl = (c: OmniRankConfig) => c.site.url.replace(/\/+$/, "");
 
@@ -58,17 +65,13 @@ const attribution = (c: OmniRankConfig) =>
   c.geo?.attribution ?? c.site.legalName ?? c.site.name;
 
 /**
- * The chosen licence string, or `null` for the explicit "grant nothing" opt-out.
+ * The chosen licence string, or `null` for "grant nothing".
  *
- * Throws `ConfigError` if `geo.license` was never set -- OmniRank must never infer a
- * licence, because the generated files are published to the site's public web root
- * and the licence text is a real, standing grant over the owner's content.
+ * An absent `geo.license` resolves identically to an explicit `"none"`/`null` --
+ * see the comment above `NO_LICENSE_SENTINEL` for why.
  */
 function resolveLicense(c: OmniRankConfig): string | null {
-  if (!c.geo || !("license" in c.geo)) {
-    throw new ConfigError(MISSING_LICENSE_MESSAGE);
-  }
-  const value = c.geo.license;
+  const value = c.geo?.license;
   if (value === null || value === undefined) return null;
   if (typeof value === "string" && value.trim().toLowerCase() === NO_LICENSE_SENTINEL) {
     return null;

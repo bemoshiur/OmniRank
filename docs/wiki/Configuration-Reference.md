@@ -5,13 +5,14 @@ This page lists every field `omnirank.config.json` accepts, generated directly f
 field's type, whether it is required, its default when code supplies one, and whether
 shipped code actually reads it yet or only validates and stores it.
 
-`omnirank.config.json` is optional for `audit` — a bare `omnirank audit <url>` works with
-zero configuration. `geo` is different as of v0.2.1: it refuses to generate artifacts
-unless `geo.license` is explicitly set, and the in-memory config a bare URL builds has no
-`geo` section, so a bare `omnirank geo <url>` always exits `2` — see [[GEO-Artifacts-Skill]].
-A config file also unlocks CI gating (`audit.failOn`), first-party facts (`nap`,
-`identifiers`, `statistics`), and secret-backed integrations (`secrets`). The root object
-and every nested object set `"additionalProperties": false`, so a typo'd field name fails
+`omnirank.config.json` is optional — `omnirank audit <url>` and `omnirank geo <url>` both
+work with zero configuration. Since the in-memory config a bare URL builds has no `geo`
+section, a bare `omnirank geo <url>` also has no configured `geo.license` — as of v0.2.1
+that generates the artifacts anyway (granting no reuse rights) and prints a notice to
+stderr saying so, rather than refusing to run — see [[GEO-Artifacts-Skill]]. A config
+file also unlocks CI gating (`audit.failOn`), first-party facts (`nap`, `identifiers`,
+`statistics`), and secret-backed integrations (`secrets`). The root object and every
+nested object set `"additionalProperties": false`, so a typo'd field name fails
 validation rather than being silently ignored.
 
 ## What does "Consumed" vs "Schema-only" mean?
@@ -103,19 +104,19 @@ in particular, `geo`'s `--out` flag (default `public`) is independent of
 
 | Field | Type | Default (in code) | Description |
 |---|---|---|---|
-| `license` | string or `null` | **none — required for generation** | Licence string quoted in the citation-licence block and `facts.json`'s `license`. `omnirank geo` / `generate()` refuse to run if this is unset; use `"none"` (or `null`) to grant no reuse rights instead of picking a licence. |
+| `license` | string or `null` | `"none"` (grants nothing) | Licence string quoted in the citation-licence block and `facts.json`'s `license`. Unset resolves to `"none"` — see below. |
 | `attribution` | string | `site.legalName`, else `site.name` | Attribution string quoted in the citation block and `facts.json`'s `attribution` |
 | `answerBlockSelector` | string | `".answer-block"` | CSS selector the `aeo` gate and GEO harvester use to find each page's liftable answer paragraph |
 
 **Consumed.** All three fields feed both the `audit` skill's AEO gate and the
 `geo-artifacts` skill's generation. See [[Audit-Skill]] and [[GEO-Artifacts-Skill]].
 
-**`license` has no default on purpose.** These generated files are published into your
-site's public web root, so the licence text is a real, standing grant of reuse rights
-over your content, not a value OmniRank can safely guess. Omitting `geo.license`
-entirely causes generation to fail with an explanatory error rather than silently
-publishing a licence you never chose. See [[GEO-Artifacts-Skill]] for the `"none"`
-opt-out.
+**`license` defaults to no grant, never to a guessed licence.** These generated files
+are published into your site's public web root, so the licence text is a real, standing
+grant of reuse rights over your content, not a value OmniRank can safely guess. Omitting
+`geo.license` resolves to the same "grant nothing" behaviour as the explicit `"none"`
+opt-out — generation still succeeds — and the CLI prints a one-line stderr notice naming
+the key, so the choice isn't made silently. See [[GEO-Artifacts-Skill]] for details.
 
 ## `aeo`
 
