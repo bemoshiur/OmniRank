@@ -142,3 +142,60 @@ def relative(finding: Finding, location: Location, root: Path,
             "byte-exact edit"))
     return outcome(finding, location,
                    diff=unified_diff(location.path, text, after))
+
+
+# gates/site.py builds this string as
+#   f"canonical points to {target}, which itself canonicalises to {onward}"
+# and the onward URL exists nowhere else on the finding. Matching our own
+# emitter's exact sentence is a deliberate coupling, locked in by a test that
+# runs the live gate -- rewording the gate turns that test red rather than
+# silently disabling this fix. A structured field on Finding is the right
+# long-term answer and is out of scope for this release.
+_ONWARD = re.compile(
+    r"^canonical points to (\S+), which itself canonicalises to (\S+)$")
+
+
+def onward_target(observed: str) -> str | None:
+    """The terminal URL named in a chained finding's `observed`, or None."""
+    match = _ONWARD.match(observed.strip())
+    return match.group(2) if match else None
+
+
+def chained(finding: Finding, location: Location, root: Path,
+            routes_served: int | None, findings: Sequence[Finding]) -> FixOutcome:
+    """Repoint a chained canonical straight at its terminal target.
+
+    Only when that target is terminal. The gate resolves exactly one hop, so
+    terminality is checked against the rest of the report: another
+    seo.canonical.chained finding ON the onward URL proves it is not terminal.
+    A chain longer than the crawl can still slip through and is detected by
+    re-running -- the documented behaviour for this finding.
+    """
+    onward = onward_target(finding.observed)
+    if onward is None:
+        return outcome(finding, location, reason=(
+            "the onward target could not be recovered from the finding text; "
+            "refusing to guess which URL this canonical should point at"))
+
+    if any(other.id == "seo.canonical.chained" and other.url == onward
+           for other in findings):
+        return outcome(finding, location, reason=(
+            f"{onward} is not terminal -- it canonicalises onward too, so "
+            "repointing here would land mid-chain again"))
+
+    text, declined = _load(finding, location, root)
+    if declined is not None:
+        return declined
+
+    tag = _canonical_tag(BeautifulSoup(text, "lxml"))
+    if tag is None or not (tag.get("href") or "").strip():
+        return outcome(finding, location,
+                       reason="the file declares no rel=canonical with an href")
+
+    after = _replace_href(text, onward)
+    if after is None:
+        return outcome(finding, location, reason=(
+            "the canonical tag's source text could not be located for a "
+            "byte-exact edit"))
+    return outcome(finding, location,
+                   diff=unified_diff(location.path, text, after))
