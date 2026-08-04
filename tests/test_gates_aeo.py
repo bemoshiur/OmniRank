@@ -50,12 +50,15 @@ def test_list_markup_inside_answer_block_is_an_error():
     assert found and found[0].severity == "error"
 
 
-def test_fewer_than_three_faqs_is_an_error():
+def test_fewer_than_three_faqs_is_a_warning():
+    # v0.2.1: downgraded from error -- demanding 3+ FAQs on every page (pricing,
+    # about, 404s included) is not defensible advice.
     html = clean().replace(
         "<dt>How fast?</dt><dd>Setup completes within five working days.</dd>", "")
     found = [f for f in aeo.run(html, URL) if f.id == "aeo.faq.too-few"]
     assert found and found[0].observed == "2 FAQ pairs"
     assert found[0].gate == "faq"
+    assert found[0].severity == "warning"
 
 
 def test_details_markup_counts_as_faq():
@@ -66,6 +69,22 @@ def test_details_markup_counts_as_faq():
         f"<details><summary>Q{i}</summary><p>A{i}</p></details>" for i in range(3))
     html = html[:start] + details + html[end:]
     assert "aeo.faq.too-few" not in ids(aeo.run(html, URL))
+
+
+def test_dt_and_details_pairs_are_summed_not_or_ed():
+    # v0.2.1 bug fix: `len(dt) or len(details)` short-circuited on any non-zero
+    # <dt> count, so a page with 2 <dt> pairs PLUS 20 real <details>-based FAQs
+    # reported only "2 FAQ pairs" (too few) and completely ignored the 20 that
+    # were genuinely there. A <dt> is never itself a <details>, so summing both
+    # never double-counts a single pair. Under the old code this scenario WOULD
+    # (wrongly) fire aeo.faq.too-few; under the fix it correctly does not.
+    html = clean().replace(
+        "<dt>How fast?</dt><dd>Setup completes within five working days.</dd>", "")
+    details = "".join(
+        f"<details><summary>Q{i}</summary><p>A{i}</p></details>" for i in range(20))
+    html = html.replace("</dl>", "</dl>" + details, 1)
+    found = [f for f in aeo.run(html, URL) if f.id == "aeo.faq.too-few"]
+    assert not found, "2 dt + 20 details = 22 FAQ pairs, well above the minimum"
 
 
 def test_speakable_selector_that_matches_nothing_is_an_error():
