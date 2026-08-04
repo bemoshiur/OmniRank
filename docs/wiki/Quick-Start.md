@@ -139,16 +139,19 @@ The JSON holds every finding, not just the terminal's summary, validated against
 
 | Code | Meaning |
 |---|---|
-| `0` | Clean — no `--fail-on` gate had an error-severity finding, or `geo` finished writing its three artifacts |
+| `0` | Clean — no `--fail-on` gate had an error-severity finding, or `geo` finished writing its three artifacts (this includes a bare `omnirank geo <url>` with no config — see below) |
 | `1` | At least one gate named in `--fail-on` (or your config's `audit.failOn`) had an error-severity finding |
-| `2` | Usage or configuration error — missing/invalid config file, neither a URL nor `--config` given, or (as of v0.2.1) `geo` refusing to run because `geo.license` is unset — see [[GEO-Artifacts-Skill]] |
+| `2` | Usage or configuration error — missing/invalid config file, or neither a URL nor `--config` given |
 
 The run above returned `0` because no `--fail-on` gates were specified.
 
-**`geo` needs a config file in practice.** A bare `omnirank geo <url>` with no `--config`
-uses an in-memory default config with no `geo` section, so `geo.license` is always unset
-and the command always exits `2`. Write a config with `geo.license` set (a real licence,
-or `"none"` to grant none) and pass it with `--config` to actually generate artifacts.
+**`geo` works with no config file, but says so.** A bare `omnirank geo <url>` with no
+`--config` uses an in-memory default config with no `geo` section, so `geo.license` is
+always unset — as of v0.2.1 that generates the three artifacts anyway (granting no reuse
+rights, same as the explicit `"none"`) and prints a one-line notice to stderr naming the
+config key, instead of choosing "no rights" silently. Write a config with `geo.license`
+set to a real licence and pass it with `--config` to actually grant reuse rights, or set
+it to `"none"` explicitly to make that choice permanent and silence the notice.
 
 ## Next: configure it for a real repo
 

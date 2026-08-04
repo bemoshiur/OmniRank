@@ -5,7 +5,7 @@ import pytest
 import respx
 
 from omnirank.audit import default_config
-from omnirank.config import Config, ConfigError
+from omnirank.config import Config
 from omnirank.fetch import make_client
 from omnirank.geo_artifacts import (Page, build_facts, build_llms_full,
                                     build_llms_txt, generate, harvest)
@@ -120,10 +120,10 @@ def test_statistics_config_passes_real_load_config(tmp_path):
     raw = {
         "site": {"name": "X", "url": "https://x.example",
                  "entityType": "Organization"},
-        # geo.license: "none" here is incidental to this test -- it only exists so
-        # build_facts() doesn't raise ConfigError. What this test actually guards is
-        # that statistics filtering survives the real load_config() path, not just a
-        # hand-built Config().
+        # geo.license: "none" here is incidental to this test -- an absent key would
+        # work identically. What this test actually guards is that statistics
+        # filtering survives the real load_config() path, not just a hand-built
+        # Config().
         "geo": {"license": "none"},
         "statistics": [
             {"name": "CPM", "value": "BDT 42", "published": True},
@@ -142,8 +142,13 @@ def test_statistics_config_passes_real_load_config(tmp_path):
 # geo.license used to default to "CC-BY-4.0" when unset. That meant running `omnirank
 # geo` against a config with no licence configured published an irrevocable grant
 # permitting reuse of the site owner's content, over their own signature, that they
-# never actually gave. Generation must now fail loudly instead of guessing, and
-# geo.license: "none" is the explicit opt-out for sites that grant no reuse rights.
+# never actually gave. That was fixed by raising instead of guessing -- but the raise
+# went one step too far and made `omnirank geo <url>` with no config file (which has
+# no `geo` section at all) always exit 2, breaking zero-config `geo` generation
+# entirely. An absent geo.license now resolves exactly like the explicit "none"
+# opt-out: it generates, and grants nothing. Only the CLI, not this module, tells the
+# user that happened (see tests/test_cli.py) -- an explicit "none" is a deliberate
+# choice and gets no such notice.
 
 def _cfg_without_geo() -> Config:
     return Config({
@@ -166,29 +171,50 @@ def _cfg_with_license(value) -> Config:
 
 
 @pytest.mark.parametrize("cfg_factory", [_cfg_without_geo, _cfg_with_geo_but_no_license])
-def test_build_facts_raises_when_license_unset(cfg_factory):
-    with pytest.raises(ConfigError, match="geo.license"):
-        build_facts(cfg_factory())
+def test_build_facts_with_absent_license_grants_nothing(cfg_factory):
+    assert build_facts(cfg_factory())["license"] == "none"
 
 
 @pytest.mark.parametrize("cfg_factory", [_cfg_without_geo, _cfg_with_geo_but_no_license])
-def test_build_llms_txt_raises_when_license_unset(cfg_factory):
-    with pytest.raises(ConfigError, match="geo.license"):
-        build_llms_txt(cfg_factory(), PAGES)
+def test_build_llms_txt_with_absent_license_grants_nothing(cfg_factory):
+    out = build_llms_txt(cfg_factory(), PAGES)
+    assert "licensed" not in out
+    assert "CC-BY" not in out
+    assert "may quote" not in out
+    assert "No reuse licence is granted" in out
 
 
-def test_build_llms_full_raises_when_license_unset():
-    with pytest.raises(ConfigError, match="geo.license"):
-        build_llms_full(_cfg_without_geo(), PAGES)
+def test_build_llms_full_with_absent_license_grants_nothing():
+    out = build_llms_full(_cfg_without_geo(), PAGES)
+    assert "licensed" not in out
+    assert "CC-BY" not in out
+    assert "may quote" not in out
+    assert "No reuse licence is granted" in out
 
 
-def test_missing_license_error_explains_why_and_gives_an_example():
-    with pytest.raises(ConfigError) as excinfo:
-        build_facts(_cfg_without_geo())
-    message = str(excinfo.value)
-    assert "publish" in message.lower()
-    assert "CC-BY-4.0" in message
-    assert '"none"' in message
+def test_absent_license_matches_explicit_none_in_facts_json():
+    # Absent must resolve to exactly the same representation as "none" -- never a
+    # third value like null or "" that downstream tooling would have to special-case.
+    absent = build_facts(_cfg_without_geo())["license"]
+    explicit = build_facts(_cfg_with_license("none"))["license"]
+    assert absent == explicit == "none"
+
+
+def test_absent_license_is_byte_identical_to_explicit_none():
+    assert (build_llms_txt(_cfg_without_geo(), PAGES)
+            == build_llms_txt(_cfg_with_license("none"), PAGES))
+    assert (build_llms_full(_cfg_without_geo(), PAGES)
+            == build_llms_full(_cfg_with_license("none"), PAGES))
+
+
+def test_license_is_absent_true_only_when_the_key_is_truly_missing():
+    from omnirank.geo_artifacts import license_is_absent
+
+    assert license_is_absent(_cfg_without_geo()) is True
+    assert license_is_absent(_cfg_with_geo_but_no_license()) is True
+    assert license_is_absent(_cfg_with_license("none")) is False
+    assert license_is_absent(_cfg_with_license(None)) is False
+    assert license_is_absent(cfg()) is False  # a real licence is also not "absent"
 
 
 def test_real_license_behaviour_unchanged():
@@ -242,10 +268,15 @@ def test_generate_succeeds_with_license_none(tmp_path):
 
 
 @respx.mock
-def test_generate_raises_before_writing_any_file_when_license_unset(tmp_path):
+def test_generate_succeeds_with_license_absent(tmp_path):
+    # Mirrors test_generate_succeeds_with_license_none above: an absent geo.license
+    # must generate exactly as successfully as an explicit "none", not refuse to run.
     respx.get(f"{SITE}/sitemap.xml").mock(return_value=httpx.Response(200, text=SITEMAP))
     respx.get(f"{SITE}/a").mock(return_value=httpx.Response(200, text=PAGE_HTML))
-    with pytest.raises(ConfigError, match="geo.license"):
-        generate(_cfg_without_geo(), tmp_path, make_client())
-    # No partial/half-published artifacts left behind on disk.
-    assert list(tmp_path.iterdir()) == []
+    paths = generate(_cfg_without_geo(), tmp_path, make_client())
+    assert len(paths) == 3
+    facts = json.loads((tmp_path / "facts.json").read_text())
+    assert facts["license"] == "none"
+    llms = (tmp_path / "llms.txt").read_text()
+    assert "licensed" not in llms
+    assert "No reuse licence is granted" in llms

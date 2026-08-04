@@ -48,23 +48,27 @@ through into `facts.json` unchanged; nothing is stripped before it reaches the f
 | `license` + `attribution` | Always present. `license` is a real, standing grant over your content — see below. |
 | `generatedAt` | Regenerated every build, so staleness is visible. |
 
-## `license` has no default — generation refuses to guess
+## `license` has no default — but an unset one still generates
 
-`geo.license` must be set explicitly in `omnirank.config.json`. Unlike every other
-field here, this is not a cosmetic omission: `facts.json` is written into `publicDir`
-and published on the open web, so its `license` value is a real, standing grant of
-reuse rights over the site owner's content, not a suggestion. If `geo.license` is
-missing, generation raises an error explaining why and naming the key to set — it never
-falls back to a default licence on your behalf.
+`geo.license` is not required in `omnirank.config.json`, but it is never guessed either:
+`facts.json` is written into `publicDir` and published on the open web, so its `license`
+value is a real, standing grant of reuse rights over the site owner's content, not a
+suggestion. If `geo.license` is missing, generation treats it exactly like the explicit
+`"none"` opt-out below — it still runs, and grants nothing — and (Python CLI only)
+`omnirank geo` prints a one-line notice to stderr naming the key, so the "no rights"
+default isn't chosen silently. It never falls back to a permissive default licence on
+your behalf.
 
-Two valid choices:
+Two deliberate choices, either of which silences the notice:
 
 - A licence you have actually chosen, e.g. `"geo": { "license": "CC-BY-4.0" }` —
   `facts.json`'s `license` field carries that string.
 - The explicit opt-out, `"geo": { "license": "none" }` (or JSON `null`) — for sites that
   grant no reuse rights. `facts.json`'s `license` field is then the literal string
   `"none"`, and the citation block in `llms.txt`/`llms-full.txt` states plainly that no
-  reuse licence is granted instead of asserting one.
+  reuse licence is granted instead of asserting one. This is functionally identical to
+  leaving `geo.license` unset — it just records the choice explicitly and skips the
+  stderr notice.
 
 ## Why the published gate matters
 

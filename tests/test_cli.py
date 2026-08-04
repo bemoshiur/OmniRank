@@ -46,33 +46,61 @@ def test_no_url_and_no_config_exits_two():
     assert main(["audit"]) == 2
 
 
-# --- v0.2.1: `omnirank geo` must never silently grant a licence ------------------
+# --- v0.2.1: `omnirank geo` must never silently grant a licence, but must also -----
+# --- keep working with zero config (a headline feature the first fix broke) -------
+#
+# geo.license used to default to "CC-BY-4.0" when unset, silently publishing a reuse
+# grant the site owner never gave. That was fixed by raising -- but the raise made
+# `omnirank geo <url>` with no config file (there is no config to carry a licence
+# choice) always exit 2, breaking zero-config `geo` generation the same way
+# zero-config `audit` still works. An absent geo.license now behaves exactly like
+# the explicit "none" opt-out: it generates and grants nothing, at exit 0, with a
+# stderr notice (not present for an explicit "none", which was a deliberate choice).
 
 @respx.mock
-def test_geo_command_without_config_exits_two_and_explains(tmp_path, capsys):
+def test_geo_command_without_config_exits_zero_and_writes_all_three_files(tmp_path):
     # A bare URL invocation has no `geo` section at all (default_config carries only
-    # `site`), so this must fail loudly instead of silently publishing CC-BY-4.0.
+    # `site`), which used to always exit 2. Zero-config `geo` must work, same as
+    # zero-config `audit`.
     mock_site()
-    assert main(["geo", SITE, "--out", str(tmp_path / "public")]) == 2
+    out_dir = tmp_path / "public"
+    assert main(["geo", SITE, "--out", str(out_dir)]) == 0
+    assert {p.name for p in out_dir.iterdir()} == {"llms.txt", "llms-full.txt", "facts.json"}
+
+
+@respx.mock
+def test_geo_command_without_config_prints_the_no_licence_notice_and_grants_nothing(tmp_path, capsys):
+    mock_site()
+    out_dir = tmp_path / "public"
+    assert main(["geo", SITE, "--out", str(out_dir)]) == 0
     err = capsys.readouterr().err
     assert "geo.license" in err
+    assert "no reuse licence was granted" in err
+    facts = json.loads((out_dir / "facts.json").read_text())
+    assert facts["license"] == "none"
+    llms = (out_dir / "llms.txt").read_text()
+    assert "licensed" not in llms
+    assert "No reuse licence is granted" in llms
 
 
 @respx.mock
-def test_geo_command_with_config_missing_license_exits_two(tmp_path, capsys):
+def test_geo_command_with_config_missing_license_exits_zero_with_notice(tmp_path, capsys):
     mock_site()
     config_path = tmp_path / "omnirank.config.json"
     config_path.write_text(json.dumps({
         "site": {"name": "X", "url": SITE, "entityType": "Organization"},
         "geo": {"answerBlockSelector": ".answer-block"},
     }))
-    assert main(["geo", "--config", str(config_path),
-                 "--out", str(tmp_path / "public")]) == 2
-    assert "geo.license" in capsys.readouterr().err
+    out_dir = tmp_path / "public"
+    assert main(["geo", "--config", str(config_path), "--out", str(out_dir)]) == 0
+    err = capsys.readouterr().err
+    assert "geo.license" in err
+    facts = json.loads((out_dir / "facts.json").read_text())
+    assert facts["license"] == "none"
 
 
 @respx.mock
-def test_geo_command_with_license_none_writes_artifacts_with_no_grant(tmp_path):
+def test_geo_command_with_license_none_writes_artifacts_with_no_grant(tmp_path, capsys):
     mock_site()
     config_path = tmp_path / "omnirank.config.json"
     config_path.write_text(json.dumps({
@@ -86,10 +114,13 @@ def test_geo_command_with_license_none_writes_artifacts_with_no_grant(tmp_path):
     llms = (out_dir / "llms.txt").read_text()
     assert "licensed" not in llms
     assert "No reuse licence is granted" in llms
+    # An explicit "none" is a deliberate choice, unlike an absent key -- it must NOT
+    # get the "you didn't configure a licence" notice.
+    assert "geo.license" not in capsys.readouterr().err
 
 
 @respx.mock
-def test_geo_command_with_real_license_unchanged(tmp_path):
+def test_geo_command_with_real_license_unchanged(tmp_path, capsys):
     mock_site()
     config_path = tmp_path / "omnirank.config.json"
     config_path.write_text(json.dumps({
@@ -100,6 +131,7 @@ def test_geo_command_with_real_license_unchanged(tmp_path):
     assert main(["geo", "--config", str(config_path), "--out", str(out_dir)]) == 0
     facts = json.loads((out_dir / "facts.json").read_text())
     assert facts["license"] == "CC-BY-4.0"
+    assert capsys.readouterr().err == ""
 
 
 # --- grouped console summary -------------------------------------------------
