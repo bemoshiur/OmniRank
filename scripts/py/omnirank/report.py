@@ -12,6 +12,17 @@ from . import __version__
 Severity = Literal["error", "warning", "info"]
 Layer = Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]
 
+# Closed enum, mirrored in schemas/report.schema.json. "no-sitemap" and
+# "page-unreachable" are populated starting v0.2.1 (see audit.py). "not-applicable"
+# and "adapter-absent" are reserved now so the shape never needs a breaking change
+# later: a future gate that depends on a data source this config doesn't wire up
+# (an SMM platform with no adapter yet, a check that only applies to some stacks)
+# has a reason to report from day one instead of staying silent until someone
+# remembers to extend the enum.
+NotEvaluatedReason = Literal[
+    "no-sitemap", "page-unreachable", "not-applicable", "adapter-absent"
+]
+
 ERROR_COST = 10
 WARNING_COST = 3
 
@@ -54,6 +65,31 @@ class Finding:
         }
 
 
+@dataclass(frozen=True)
+class NotEvaluated:
+    """A gate OmniRank could not actually run, recorded instead of staying silent.
+
+    A gate that could not run is never reported as passing (see Finding), but a
+    site- or page-level gate that never ran at all previously produced no signal
+    whatsoever -- indistinguishable in the report from a gate that ran and found
+    nothing wrong. Exactly one of `url` (a specific page) or `site` (the whole
+    site) is set, matching whether the un-run gate was per-page or site-level.
+    """
+
+    gate: str
+    reason: NotEvaluatedReason
+    url: str | None = None
+    site: str | None = None
+
+    def to_dict(self) -> dict:
+        d: dict = {"gate": self.gate, "reason": self.reason}
+        if self.url is not None:
+            d["url"] = self.url
+        if self.site is not None:
+            d["site"] = self.site
+        return d
+
+
 @dataclass
 class Report:
     site: str
@@ -61,12 +97,16 @@ class Report:
     urls_checked: int = 0
     findings: list[Finding] = field(default_factory=list)
     layers_run: set[str] = field(default_factory=set)
+    not_evaluated: list[NotEvaluated] = field(default_factory=list)
 
     def add(self, finding: Finding) -> None:
         self.findings.append(finding)
 
     def extend(self, findings: list[Finding]) -> None:
         self.findings.extend(findings)
+
+    def flag_not_evaluated(self, entry: NotEvaluated) -> None:
+        self.not_evaluated.append(entry)
 
     def score(self) -> dict[str, int]:
         """Per-layer score, with each gate's cost capped before summing (GATE_CAP).
@@ -111,6 +151,7 @@ class Report:
                 "warned": warned,
             },
             "findings": [f.to_dict() for f in self.findings],
+            "notEvaluated": [e.to_dict() for e in self.not_evaluated],
         }
 
     def write(self, path: str | Path) -> Path:

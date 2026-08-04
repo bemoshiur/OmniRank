@@ -90,6 +90,16 @@ def test_unknown_gate_still_rejected():
     assert list(validator().iter_errors(cfg))
 
 
+def test_crawl_hygiene_is_no_longer_a_valid_fail_on_gate():
+    # v0.2.1: crawl-hygiene's only source, hygiene.check_removed(), needs a
+    # removed-URL list no config field supplies, so audit_site() never calls it --
+    # a user-configurable gate name that can never fire is its own kind of
+    # fabrication. Removed from the enum rather than left in unreachable.
+    cfg = minimal()
+    cfg["audit"] = {"failOn": ["crawl-hygiene"]}
+    assert list(validator().iter_errors(cfg))
+
+
 def test_answer_block_bands_validate():
     cfg = minimal()
     cfg["aeo"] = {
