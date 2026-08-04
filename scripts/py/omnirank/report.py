@@ -9,7 +9,7 @@ from typing import Literal
 
 from . import __version__
 from .applicability import Applicability
-from .registry import FixTier, tier_for
+from .registry import FixTier, scoring_gate_count, tier_for
 
 Severity = Literal["error", "warning", "info"]
 Layer = Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]
@@ -134,11 +134,38 @@ class Report:
         self.not_evaluated.append(entry)
 
     def score(self) -> dict[str, int]:
-        """Per-layer score, with each gate's cost capped before summing (GATE_CAP).
+        """Per-layer score: capped per gate, then normalised by the layer's surface.
+
+        Two stages, and they answer different questions.
+
+        GATE_CAP (v0.2.1) answers "how much can ONE gate cost?" -- one gate failing
+        on every page of a site is ONE problem to fix, not fifty.
+
+        The surface divisor (v0.4.0) answers "how much is one gate WORTH?" -- and
+        the answer has to be 1/N of the layer, not a fixed 15 out of 100. Under the
+        flat budget, seven maxed gates zeroed a layer whether that layer had seven
+        gates or thirty, so every gate added made saturation cheaper: at `seo`'s
+        pre-0.4.0 count of 16 it took 44% of the layer to floor it, and at 24 it
+        would have taken 29%. The same constant also put an unreachable FLOOR under
+        small layers -- `security` ships 2 scoring gates, so its worst possible
+        score under the flat budget was 70. Both symptoms are the same defect: a
+        constant budget divided among a variable number of gates.
+
+        `surface` is floored at the number of gates actually seen, so a finding on
+        an unregistered gate (tests, or a gate added to code before the registry)
+        can never cost more than the layer has room for, and can never divide by
+        zero. It counts REGISTERED gates rather than gates that ran, which biases
+        the score upward for an audit where some gates could not run -- the
+        conservative direction, and `notEvaluated` is where that is reported.
 
         Grouped by (layer, gate) rather than just gate: two different layers could
         in principle share a gate id, and each layer's cap must apply independently
         to its own cost, not be shared across layers.
+
+        The penalty is integer round-half-up, never float or `round()`: `round()`
+        is banker's rounding, and float division would make the result depend on
+        IEEE 754 detail. Both are monotone, so `min`, the sum and this division
+        together guarantee that adding a finding can never RAISE a score.
         """
         raw_per_gate: dict[tuple[str, str], int] = defaultdict(int)
         for f in self.findings:
@@ -148,10 +175,18 @@ class Report:
             raw_per_gate[(f.layer, f.gate)] += cost
 
         costs: dict[str, int] = {layer: 0 for layer in self.layers_run}
-        for (layer, _gate), raw in raw_per_gate.items():
+        seen_gates: dict[str, set[str]] = defaultdict(set)
+        for (layer, gate), raw in raw_per_gate.items():
             costs[layer] = costs.get(layer, 0) + min(GATE_CAP, raw)
+            seen_gates[layer].add(gate)
 
-        scores = {layer: max(0, 100 - cost) for layer, cost in costs.items()}
+        scores: dict[str, int] = {}
+        for layer, cost in costs.items():
+            surface = max(1, scoring_gate_count(layer), len(seen_gates[layer]))
+            denominator = GATE_CAP * surface
+            penalty = (100 * cost + denominator // 2) // denominator
+            scores[layer] = max(0, 100 - penalty)
+
         overall = sum(scores.values()) // len(scores) if scores else 100
         return {**scores, "overall": overall}
 

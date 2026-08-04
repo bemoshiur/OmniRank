@@ -140,6 +140,41 @@ REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}
 MECHANICAL_IDS: frozenset[str] = frozenset(
     entry.id for entry in _ENTRIES if entry.tier == "mechanical")
 
+# Severities that can move a layer's score. `info` findings are inventory facts
+# (see ERROR_COST/WARNING_COST in report.py, where info costs 0), so a gate whose
+# every id is `info` can never contribute cost -- counting it in the denominator
+# would put a floor under the layer's score that it could never cross.
+_SCORING_SEVERITIES: frozenset[str] = frozenset({"error", "warning"})
+
+# The scoring SURFACE of each layer: how many distinct gates could move its score.
+# `Report.score()` divides the layer's capped cost by GATE_CAP * len(this), so one
+# maxed gate always costs 1/N of its layer and a layer floors only when every one
+# of its gates is maxed. Before v0.4.0 the budget was a flat 100 per layer, which
+# meant seven maxed gates zeroed a layer whether it had seven gates or thirty --
+# so every gate added made saturation cheaper, and v0.4.0 adds eight to `seo`.
+# Unreachable gates are excluded: a gate that can never fire must not inflate
+# every score by sitting in the denominator.
+SCORING_GATES_BY_LAYER: dict[str, frozenset[str]] = {
+    layer: frozenset(
+        entry.gate for entry in _ENTRIES
+        if entry.layer == layer and entry.reachable
+        and entry.severity in _SCORING_SEVERITIES
+    )
+    for layer in sorted({entry.layer for entry in _ENTRIES})
+}
+
+
+def scoring_gate_count(layer: str) -> int:
+    """How many gates could move `layer`'s score; 0 for an unknown layer.
+
+    0 is a legitimate answer, not an error: `offsite` and `smm` are declared in
+    the Layer enum and ship no gates yet. `Report.score()` floors the surface at
+    the number of gates it actually saw, so a zero here can never divide by zero
+    and can never make a real finding free.
+    """
+    return len(SCORING_GATES_BY_LAYER.get(layer, frozenset()))
+
+
 # Surfaces where a wrong write de-indexes a business. Hard-capped at `unsafe`
 # regardless of tier or locator confidence, and never writable -- they can only
 # ever arrive as a reviewed change. Enumerated in
