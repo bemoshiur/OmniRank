@@ -26,4 +26,10 @@ from the single HTTP response already captured on `page` (`page.elapsed_ms`,
 `hygiene` has no `run`. It exposes three functions instead, each returning
 `list[Finding]`: `check_removed(client, urls)`, `check_sitemap(client, site_url,
 sample)` and `check_lastmod(sitemap_xml, site_url)`.
+
+`security` exposes `run_page(page: PageData) -> list[Finding]` for the per-response
+header and markup gates, plus `check_https_redirect(client: httpx.Client, site_url:
+str) -> tuple[list[Finding], list[NotEvaluated]]` for the one site-level probe. It
+returns notEvaluated entries alongside findings rather than mutating a Report,
+keeping the gate testable without one.
 """

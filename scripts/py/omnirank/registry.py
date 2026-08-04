@@ -133,6 +133,15 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     # --- audit.py ---------------------------------------------------------
     _r("seo.page.unreachable", "advisory", "error", "seo", "sitemap-health"),
     _r("seo.sitemap.missing", "templated", "error", "seo", "sitemap-health"),
+    # --- gates/security.py (v0.4.0) ---------------------------------------
+    # All five are `infrastructure`: the fix is an origin/CDN response-header
+    # change, and no edit to any file in the user's repo produces it.
+    _r("security.hsts.missing", "infrastructure", "info", "security", "hsts"),
+    _r("security.hsts.short-max-age", "infrastructure", "info", "security", "hsts"),
+    _r("security.nosniff.missing", "infrastructure", "info", "security", "nosniff"),
+    _r("security.csp.absent", "infrastructure", "info", "security", "csp"),
+    _r("security.referrer-policy.missing", "infrastructure", "info", "security",
+       "referrer-policy"),
 )
 
 REGISTRY: dict[str, RegisteredFinding] = {entry.id: entry for entry in _ENTRIES}
