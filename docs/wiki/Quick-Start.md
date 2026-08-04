@@ -139,11 +139,16 @@ The JSON holds every finding, not just the terminal's summary, validated against
 
 | Code | Meaning |
 |---|---|
-| `0` | Clean — no `--fail-on` gate had an error-severity finding. (The `geo` subcommand always returns `0`.) |
+| `0` | Clean — no `--fail-on` gate had an error-severity finding, or `geo` finished writing its three artifacts |
 | `1` | At least one gate named in `--fail-on` (or your config's `audit.failOn`) had an error-severity finding |
-| `2` | Usage or configuration error — missing/invalid config file, or neither a URL nor `--config` given |
+| `2` | Usage or configuration error — missing/invalid config file, neither a URL nor `--config` given, or (as of v0.2.1) `geo` refusing to run because `geo.license` is unset — see [[GEO-Artifacts-Skill]] |
 
 The run above returned `0` because no `--fail-on` gates were specified.
+
+**`geo` needs a config file in practice.** A bare `omnirank geo <url>` with no `--config`
+uses an in-memory default config with no `geo` section, so `geo.license` is always unset
+and the command always exits `2`. Write a config with `geo.license` set (a real licence,
+or `"none"` to grant none) and pass it with `--config` to actually generate artifacts.
 
 ## Next: configure it for a real repo
 

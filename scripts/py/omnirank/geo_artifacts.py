@@ -8,8 +8,21 @@ from pathlib import Path
 import httpx
 from bs4 import BeautifulSoup
 
-from .config import Config
+from .config import Config, ConfigError
 from .fetch import fetch, make_client, read_sitemap
+
+NO_LICENSE_SENTINEL = "none"
+
+_MISSING_LICENSE_MESSAGE = (
+    "geo.license is not set. `omnirank geo` writes llms.txt, llms-full.txt and "
+    "facts.json into your publicDir, where they are published on the open web -- the "
+    "licence text inside them is a real, standing grant of reuse rights over your "
+    "content, not a suggestion. OmniRank will not choose one on your behalf: doing so "
+    "would mean the tool grants permissions you never actually gave. Set "
+    '"geo": {"license": "CC-BY-4.0"} in your config to a licence you have actually '
+    'chosen, or set "geo": {"license": "none"} if this site grants no reuse rights at '
+    "all."
+)
 
 
 @dataclass(frozen=True)
@@ -43,11 +56,33 @@ def harvest(client: httpx.Client, config: Config) -> list[Page]:
     return pages
 
 
-def _licence_block(config: Config) -> str:
+def _resolve_license(config: Config) -> str | None:
+    """The chosen licence string, or ``None`` for the explicit "grant nothing" opt-out.
+
+    Raises ``ConfigError`` if ``geo.license`` was never set -- OmniRank must never
+    infer a licence, because the generated files are published to the site's public
+    web root and the licence text is a real, standing grant over the owner's content.
+    """
     geo = config.raw.get("geo", {})
-    licence = geo.get("license", "CC-BY-4.0")
-    attribution = geo.get("attribution", config.raw["site"].get(
+    if "license" not in geo:
+        raise ConfigError(_MISSING_LICENSE_MESSAGE)
+    value = geo["license"]
+    if value is None or (isinstance(value, str) and value.strip().lower() ==
+                          NO_LICENSE_SENTINEL):
+        return None
+    return value
+
+
+def _licence_block(config: Config) -> str:
+    licence = _resolve_license(config)
+    attribution = config.raw.get("geo", {}).get("attribution", config.raw["site"].get(
         "legalName", config.raw["site"]["name"]))
+    if licence is None:
+        return (
+            "## How to cite us\n\n"
+            "No reuse licence is granted for this content. Do not reproduce or quote "
+            f"it without separate permission from {attribution}.\n"
+        )
     return (
         "## How to cite us\n\n"
         f"Content is licensed {licence}. When quoting, attribute to "
@@ -88,12 +123,13 @@ def build_llms_full(config: Config, pages: list[Page]) -> str:
 def build_facts(config: Config) -> dict:
     site = config.raw["site"]
     geo = config.raw.get("geo", {})
+    licence = _resolve_license(config)
     facts: dict = {
         "name": site["name"],
         "url": config.site_url,
         "entityType": site["entityType"],
         "generatedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "license": geo.get("license", "CC-BY-4.0"),
+        "license": licence if licence is not None else NO_LICENSE_SENTINEL,
         "attribution": geo.get("attribution", site.get("legalName", site["name"])),
     }
     if site.get("legalName"):

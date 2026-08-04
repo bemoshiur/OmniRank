@@ -58,8 +58,15 @@ microseconds, Node emits milliseconds — both valid RFC 3339 UTC).
    empty.
 4. **Null `sameAs` values are dropped, not emitted as null.** A null is an entity gap to
    fill, and `offsite-entity` *(planned, not in v0.1.0)* reports on it.
-5. **Always include the licence block.** Both generators append it unconditionally.
-   Without an explicit grant, a cautious model will decline to quote.
+5. **Never infer a content licence.** `geo.license` has no default. These files are
+   written into `publicDir` and published on the open web, so the licence text inside
+   them is a real, standing grant of reuse rights over the site owner's content — not a
+   suggestion OmniRank can guess. If `geo.license` is unset, generation **refuses** and
+   raises an error (Python: `ConfigError`; Node: `Error`) explaining why and naming the
+   config key to set. Set `geo.license` to a licence you have actually chosen (e.g.
+   `"CC-BY-4.0"`), or to the explicit opt-out `"none"` (or JSON `null`) for sites that
+   grant no reuse rights at all — that still generates the artifacts, but the citation
+   block states plainly that no licence is granted instead of inventing one.
 
 ## After generating
 

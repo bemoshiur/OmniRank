@@ -378,10 +378,18 @@ evidence-backed bet, not a guarantee.
 <details>
 <summary>Can I run an audit without writing a config file first?</summary>
 
-Yes, for both commands — `omnirank audit <url>` and `omnirank geo <url>` both work with
-just a URL, using an in-memory default config. A config file is required only for CI
-gating with a committed `audit.failOn`, first-party facts (`nap`, `identifiers`,
-`statistics`), or anything the roadmap skills will eventually read from `secrets`.
+For `audit`, yes — `omnirank audit <url>` works with just a URL, using an in-memory
+default config. `geo` is different as of v0.2.1: it refuses to generate artifacts unless
+`geo.license` is explicitly set, and the in-memory default config used by a bare
+`omnirank geo <url>` has no `geo` section at all, so that invocation always exits `2`.
+This is deliberate — the generated files are published to your site, and their licence
+text is a real grant of reuse rights that OmniRank will not choose on your behalf. Write
+a config with `geo.license` set (a real licence, or `"none"` to grant none) and pass it
+with `--config` to actually generate `geo` artifacts; see
+[geo-artifacts-guide.md](docs/geo-artifacts-guide.md#the-citation-licence-block). Beyond
+that, a config file is also needed for CI gating with a committed `audit.failOn`,
+first-party facts (`nap`, `identifiers`, `statistics`), or anything the roadmap skills
+will eventually read from `secrets`.
 </details>
 
 <details>

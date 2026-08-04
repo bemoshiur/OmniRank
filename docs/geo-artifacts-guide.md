@@ -175,9 +175,9 @@ nothing about a green build tells you that happened.
 
 ## The citation licence block
 
-Both generators append this block unconditionally to `llms.txt` and `llms-full.txt`,
-verbatim (from `geo_artifacts.py`'s `_licence_block()` — the Node version emits
-functionally identical text):
+Both generators append this block to `llms.txt` and `llms-full.txt`, verbatim (from
+`geo_artifacts.py`'s `_licence_block()` — the Node version emits functionally identical
+text):
 
 ```
 ## How to cite us
@@ -186,16 +186,30 @@ Content is licensed {license}. When quoting, attribute to {attribution} and link
 When quoting a page, prefer that page's AnswerBlock — it is written to be lifted verbatim.
 ```
 
-`{license}` defaults to `CC-BY-4.0`; override with `geo.license` in your config.
+**`geo.license` has no default, and generation refuses to guess one.** These files are
+written into `publicDir` and published on the open web, so `{license}` is a real,
+standing grant of reuse rights over your content — not a suggestion OmniRank can invent
+on your behalf. If `geo.license` is unset, both generators raise an error (Python:
+`ConfigError`; Node: `Error`) that explains why and names the config key to set, and
+**no files are written**. Set `geo.license` to a licence you have actually chosen (e.g.
+`"CC-BY-4.0"`), or to the explicit opt-out `"none"` (or JSON `null`) for sites that grant
+no reuse rights at all. Under `"none"`, generation proceeds, but the block above is
+replaced with a statement that no reuse licence is granted — no `licensed`, `CC-BY`, or
+quoting language appears — and `facts.json`'s `license` field is the literal string
+`"none"`, never a fabricated licence identifier.
+
 `{attribution}` defaults to `site.legalName`, falling back to `site.name` if no legal name
-is set; override with `geo.attribution`. `facts.json` carries the same two values under
-its `license` and `attribution` keys, always present.
+is set; override with `geo.attribution`. `facts.json` carries the same `license` and
+`attribution` keys, always present.
 
 Without an explicit citation grant, a cautious model is likely to decline to quote your
 content even when it would otherwise be useful ground truth — this block exists to remove
-that ambiguity. `audit`'s `citation-licence` gate checks for one of several licence/
-attribution markers in `llms.txt` (`cc by`, `cc-by`, `creative commons`, `licence`,
-`license`, `attribution`, `how to cite`, case-insensitively) and warns if none are found.
+that ambiguity for sites that choose to grant one. `audit`'s `citation-licence` gate
+checks for one of several licence/attribution markers in `llms.txt` (`cc by`, `cc-by`,
+`creative commons`, `licence`, `license`, `attribution`, `how to cite`,
+case-insensitively) and warns if none are found — this also fires for a deliberate
+`"none"` site, which is expected: the gate cannot distinguish "forgot to configure a
+licence" from "chose to grant none," so treat the warning as informational there.
 
 ## Verifying the files actually serve in production
 
