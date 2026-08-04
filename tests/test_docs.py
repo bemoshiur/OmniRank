@@ -50,12 +50,20 @@ def test_readme_index_links_every_page():
         assert name in body, f"docs/README.md does not reference {name}"
 
 
+# One representative finding id per gate ADDED in v0.4.0 -- 14 new gates: 6 security
+# (gates/security.py), 3 contradictions (gates/contradictions.py), 1 schema-required
+# (gates/jsonld.py), 4 onpage (gates/onpage.py). Was a stale v0.3.0-era list (S1, final
+# review) that let test_audit_guide_documents_the_new_gates pass despite audit-guide.md
+# having zero v0.4.0 content.
 NEW_GATE_IDS = [
-    "seo.duplicate-title.shared", "seo.duplicate-description.shared",
-    "seo.noindex.in-sitemap", "seo.canonical.chained",
-    "seo.hreflang.not-reciprocal",
-    "perf.response-time.slow", "perf.page-weight.heavy",
-    "perf.compression.missing", "perf.render-blocking.head-scripts",
+    "security.hsts.missing", "security.nosniff.missing", "security.csp.absent",
+    "security.referrer-policy.missing", "security.mixed-content.subresource",
+    "security.https-redirect.missing",
+    "seo.robots-sitemap.disallowed", "seo.canonical-target.noindexed",
+    "seo.hreflang-noindex.alternate",
+    "seo.schema-required.missing-property",
+    "seo.image-alt.missing", "seo.heading-order.skipped", "seo.link-text.empty",
+    "seo.lang.missing",
 ]
 
 
@@ -123,6 +131,46 @@ def test_readme_documents_the_fix_subcommand():
     body = (ROOT / "README.md").read_text()
     assert "omnirank fix" in body
     assert "v0.4.0" in body
+
+
+# S3: gate counts documented across primary docs were stale (28/15/13, a v0.2.0/v0.2.1
+# figure) even after v0.4.0 added 14 new gates. Computed here directly from the source
+# of truth -- the config schema's failOn enum and the finding registry -- rather than
+# hardcoded, so the count self-heals: whichever number is correct after the NEXT gate
+# lands is the number this test requires, not today's 42/21.
+GATE_COUNT_DOCS = [
+    ROOT / "README.md",
+    ROOT / "docs" / "ci-integration.md",
+    ROOT / "docs" / "troubleshooting.md",
+    WIKI / "Configuration-Reference.md",
+    WIKI / "CI-Recipes.md",
+    WIKI / "Audit-Skill.md",
+]
+
+
+@pytest.mark.parametrize("path", GATE_COUNT_DOCS, ids=lambda p: p.name)
+def test_documented_gate_counts_match_the_registry(path):
+    import json
+
+    from omnirank.registry import REGISTRY
+
+    schema = json.loads(
+        (ROOT / "schemas" / "omnirank.config.schema.json").read_text())
+    enum_gates = schema["properties"]["audit"]["properties"]["failOn"]["items"]["enum"]
+    total_gates = len(enum_gates)
+    error_capable = len({
+        entry.gate for entry in REGISTRY.values()
+        if entry.reachable and entry.severity == "error"
+    })
+
+    body = path.read_text()
+    assert str(total_gates) in body, (
+        f"{path.relative_to(ROOT)} does not mention the real failOn gate count "
+        f"({total_gates}) -- it has drifted, or the doc still names a stale one")
+    assert str(error_capable) in body, (
+        f"{path.relative_to(ROOT)} does not mention the real error-capable gate "
+        f"count ({error_capable}) -- it has drifted, or the doc still names a "
+        f"stale one")
 
 
 # B3: commit 32209f7 stopped `docs/` and `skills/` promising "--write arrives in

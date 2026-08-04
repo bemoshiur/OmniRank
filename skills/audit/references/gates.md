@@ -126,22 +126,32 @@ an SEO tool scoring CSP strength would be doing a job it cannot do well.
 | `nosniff` | `security.nosniff.missing` | `X-Content-Type-Options` is not exactly `nosniff` | info |
 | `csp` | `security.csp.absent` | No `Content-Security-Policy`, by header or `<meta http-equiv>` | info |
 | `referrer-policy` | `security.referrer-policy.missing` | No `Referrer-Policy` header | info |
-| `mixed-content` | `security.mixed-content.subresource` | An `https://` page requests a `script`/`link`/`img`/`iframe` subresource over literal `http://` | **error** |
+| `mixed-content` | `security.mixed-content.subresource` | An `https://` page requests a BLOCKABLE subresource (`script`, `iframe`, or `link rel=stylesheet\|preload\|modulepreload`) over literal `http://` | **error** |
+| `mixed-content` | `security.mixed-content.passive-subresource` | An `https://` page requests an OPTIONALLY-BLOCKABLE subresource (`img`, or `link rel=icon\|apple-touch-icon\|manifest\|prefetch`) over literal `http://` | warning |
 | `https-redirect` | `security.https-redirect.missing` | The site's `http://` origin does not 3xx-redirect to `https://` | **error** |
 
-**Four of the six gates are `info` and cost zero points — they can never fail a build.**
+**Four of the eight ids are `info` and cost zero points — they can never fail a build.**
 They are reported as inventory facts, not graded: whether a given HSTS `max-age` or CSP is
 *adequate* is a judgement about your threat model that an SEO auditor has no business
-making. Only `mixed-content` and `https-redirect` are `error`, because only those two break
-something OmniRank can observe — browsers block mixed active content outright, and a
-non-redirecting `http://` origin gives every page a live duplicate that splits canonical
-signal between two URLs. `security` enters the report's `layersRun` only when at least one
-of its gates actually ran (a per-page header check, or a reachable `https-redirect` probe).
+making. Only `mixed-content`'s active-subresource id and `https-redirect` are `error`,
+because only those two break something OmniRank can actually observe — browsers block
+mixed *active* content outright, and a non-redirecting `http://` origin gives every page a
+live duplicate that splits canonical signal between two URLs. The passive-subresource id
+(v0.4.0 final review, S4) is `warning`: browsers silently rewrite an `img` or icon request
+to `https://` before fetching it, so it is only a confirmed failure when no `https://`
+version exists at that path — something OmniRank cannot verify from the HTML alone, so it
+does not claim the resource "is not loading" the way the active-content id does.
+`security` enters the report's `layersRun` the same way `aeo` and `perf` do — only after
+at least one page was actually fetched (v0.4.0 final review, S5; a successful
+`https-redirect` probe alone no longer admits the layer, since that let `mixed-content`
+be silently counted clean on a zero-page audit). A genuine `https-redirect` finding still
+reaches the score map on its own merits regardless, since `Report.score()` scores any
+layer with an actual finding independent of `layersRun`.
 
 CSP is parsed for exactly one thing beyond noting its total absence:
 `upgrade-insecure-requests`, which browsers use to rewrite `http://` subresources before
-requesting them, and which therefore suppresses `mixed-content` — this module never grades
-a policy's contents.
+requesting them, and which therefore suppresses BOTH `mixed-content` ids — this module
+never grades a policy's contents.
 
 ## Site-level (cross-URL)
 

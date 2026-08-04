@@ -186,19 +186,28 @@ Free-form string map. **Schema-only** — validated, not read.
 | `sampleSize` | integer, minimum `0` | no | `200` | Maximum URLs pulled from the sitemap for a crawl. `0` means no limit. |
 | `failOn` | array of gate-name enum values | no | `[]` | Gate names that make `omnirank audit` exit `1` when they carry an error-severity finding. Overridden by `--fail-on` whenever that flag is present at all, even with zero names. |
 
-`failOn`'s allowed values grew to **28 gate names** as of v0.2.0/v0.2.1: `h1`,
+`failOn`'s allowed values grew to **42 gate names** as of v0.4.0: `h1`,
 `canonical`, `title-length`, `description-length`, `hreflang`, `og`, `image-dims`,
 `answer-block`, `faq`, `speakable`, `llms-txt`, `llms-full`, `facts-json`,
 `ai-allowlist`, `citation-licence`, `sitemap-health`, `lastmod-inflation`, `schema`,
 `schema-fabrication`, `duplicate-title`, `duplicate-description`, `noindex-in-sitemap`,
 `canonical-cluster`, `hreflang-reciprocity`, `response-time`, `page-weight`,
-`compression`, `render-blocking`.
+`compression`, `render-blocking` (28 through v0.3.0), plus 14 in v0.4.0: `hsts`,
+`nosniff`, `csp`, `referrer-policy`, `mixed-content`, `https-redirect` (`security`),
+`robots-sitemap`, `canonical-target`, `hreflang-noindex` (indexability contradictions),
+`schema-required` (structured data), and `image-alt`, `heading-order`, `link-text`,
+`lang` (on-page).
 
 **`crawl-hygiene` was removed from this enum in v0.2.1** — it validated successfully but
 matched no finding a plain `omnirank audit` run could ever produce, since the check that
 would emit it needs an explicit removed-URL list no config field supplies. `sitemap-health`
 is not inert: `hygiene.check_sitemap()` is wired in as of v0.2.1, distinguishing a
 redirecting sitemap entry (warning) from a dead one (error).
+
+Only **21 of the 42** can actually produce an error-severity finding and gate a build —
+see [[CI-Recipes#which-gates-can-actually-fail-a-build-with---fail-on]] for the full
+breakdown, including the four v0.4.0 security gates that are `info`-severity and can
+never fail a build regardless of what you list.
 
 ## `smm`
 

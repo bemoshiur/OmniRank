@@ -109,14 +109,16 @@ run cleanup after a failure, as shown here.
 ## Which gates can actually fail a build with `--fail-on`?
 
 Not every gate name in the schema's `audit.failOn` enum can actually cause `--fail-on` to
-fail a build, and putting all 28 in the list creates false confidence rather than more
+fail a build, and putting all 42 in the list creates false confidence rather than more
 protection. Verified directly against every gate's severity in `scripts/py/omnirank/gates/`:
 
 | Group | Gates | Effect on `--fail-on` |
 |---|---|---|
-| Warning-only (13) | `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`, `render-blocking` | Every finding these gates can produce is `severity: "warning"`; `has_failures()` only counts errors. Listing them has zero effect on the exit code, ever. |
+| Warning-only (16) | `og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`, `render-blocking`, `heading-order`, `image-alt`, `schema-required` (last three new in v0.4.0) | Every finding these gates can produce is `severity: "warning"`; `has_failures()` only counts errors. Listing them has zero effect on the exit code, ever. |
+| Info-only (4, all new in v0.4.0) | `hsts`, `nosniff`, `csp`, `referrer-policy` | Every finding these gates can produce is `severity: "info"`. OmniRank reports your security headers as inventory facts and never grades them — see [[Audit-Skill#security-v040]]. |
+| Mixed, but never error (1, new in v0.4.0) | `link-text` | Its `.empty` id is `warning`, its `.generic` id is `info` — neither is ever `error`, so the gate as a whole cannot gate a build. |
 | Removed from the enum entirely (v0.2.1) | `crawl-hygiene` | Its dedicated check (`hygiene.check_removed()`) needs a removed-URL list no config field supplies, so it could never fire from a plain run — v0.2.1 dropped it from the schema rather than ship a dead gate name. |
-| Can actually fail a build (15) | `h1`, `canonical`, `title-length` (missing only), `description-length` (missing only), `answer-block`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema`, `schema-fabrication`, `noindex-in-sitemap`, `response-time`, `sitemap-health` | These can produce an error-severity finding and gate a build |
+| Can actually fail a build (21) | `h1`, `canonical`, `title-length` (missing only), `description-length` (missing only), `answer-block`, `speakable`, `llms-txt`, `llms-full`, `facts-json`, `ai-allowlist`, `schema`, `schema-fabrication`, `noindex-in-sitemap`, `response-time`, `sitemap-health`, and — new in v0.4.0 — `lang`, `robots-sitemap`, `canonical-target` (its `.redirects` id is a warning; `.noindexed`/`.not-found` are errors), `hreflang-noindex`, `mixed-content` (active-subresource id only), `https-redirect` | These can produce an error-severity finding and gate a build |
 
 **The practical guidance:** pick gates that map to problems severe enough to block a
 merge, not the full list. A reasonable starting set for most sites is `h1 canonical
@@ -125,8 +127,8 @@ schema` (structural SEO baseline) plus, once `geo-artifacts` is wired into your 
 production — this is the check that would have caught the OpenNext/CloudFront 403 trap
 described in [[GEO-Artifacts-Skill#what-is-the-opennextcloudfront-403-trap]] before a
 human noticed). Add `answer-block` once you have deliberately built AEO-oriented pages —
-gating on it before you have any answer blocks just fails every build. Leave the 13
-warning-only gates out of `--fail-on` entirely.
+gating on it before you have any answer blocks just fails every build. Leave the 21
+warning- or info-only gates out of `--fail-on` entirely.
 
 Findings from gates you did **not** list in `--fail-on` are still computed and still land
 in the JSON report and terminal summary — they just do not fail the build. Nothing is

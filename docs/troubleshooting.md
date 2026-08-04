@@ -148,13 +148,19 @@ Exit code `1`. Read the finding lines above `failOn gates:` — every `[FAIL]` l
 Apply the `fix` text for the flagged gate(s) and re-run.
 
 If a gate you listed in `--fail-on` never seems to go red no matter what you do, check
-whether it is one of the 13 gates that only ever produce warning-severity findings
-(`og`, `hreflang`, `image-dims`, `citation-licence`, `lastmod-inflation`, `faq`
-(downgraded from error in v0.2.1), `duplicate-title`, `duplicate-description`,
-`canonical-cluster`, `hreflang-reciprocity`, `page-weight`, `compression`,
-`render-blocking`). `crawl-hygiene` no longer exists as a `--fail-on` gate name at all as
-of v0.2.1 — it was removed from the schema because its dedicated check needs a
-removed-URL list no config field supplies, so it could never trigger exit code `1`.
+whether it is one of the 21 (of 42 total) gates that can never produce an
+error-severity finding: 16
+that only ever produce warning findings (`og`, `hreflang`, `image-dims`,
+`citation-licence`, `lastmod-inflation`, `faq` (downgraded from error in v0.2.1),
+`duplicate-title`, `duplicate-description`, `canonical-cluster`, `hreflang-reciprocity`,
+`page-weight`, `compression`, `render-blocking`, and — new in v0.4.0 — `heading-order`,
+`image-alt`, `schema-required`); 4 that only ever produce info findings (`hsts`,
+`nosniff`, `csp`, `referrer-policy`, all new in v0.4.0 — OmniRank reports these as
+inventory facts about your security headers and never grades them); and `link-text`
+(`.empty` is warning, `.generic` is info, neither is ever error). `crawl-hygiene` no
+longer exists as a `--fail-on` gate name at all as of v0.2.1 — it was removed from the
+schema because its dedicated check needs a removed-URL list no config field supplies, so
+it could never trigger exit code `1`.
 `sitemap-health` is not inert: an unreachable target is reported as an error under `gate:
 "sitemap-health"`, and as of v0.2.1 `hygiene.check_sitemap()` is also wired in,
 distinguishing a redirecting sitemap entry (warning) from a genuinely dead one (error).

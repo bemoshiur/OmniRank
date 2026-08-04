@@ -1,10 +1,11 @@
 # Audit guide
 
-`audit` scores a site across four content layers — SEO, AEO, GEO, and perf — plus a
-site-level cross-URL pass and one sitemap-hygiene check, and produces a prioritised,
-actionable fix list. It never edits the site; it only diagnoses. This page documents
-the CLI flags, every gate, the exact scoring formula, and a worked example, all verified
-against the source in `scripts/py/omnirank/` and `schemas/`.
+`audit` scores a site across five content layers — SEO, AEO, GEO, perf and security —
+plus a site-level cross-URL pass, an indexability-contradictions pass, and one
+sitemap-hygiene check, and produces a prioritised, actionable fix list. It never edits
+the site; it only diagnoses. This page documents the CLI flags, every gate, the exact
+scoring formula, and a worked example, all verified against the source in
+`scripts/py/omnirank/` and `schemas/`.
 
 As of 0.2.0, `audit_site()` keeps every fetched page's HTML alive as a `PageData` record
 instead of discarding it after the per-page gates run. That is what makes the site-level
@@ -78,21 +79,26 @@ per-finding `id` (`seo.h1.missing`, `seo.canonical.relative`, ...). `has_failure
 matches on `finding.gate`, never on `finding.id`. The distinction matters because several
 gates emit multiple different `id`s under one `gate` name — see the tables below.
 
-## The four layers, plus one cross-URL pass
+## The five layers, plus two cross-URL passes
 
 | Layer | Audience | What it wants |
 |---|---|---|
-| SEO | Googlebot, Bingbot | Crawlable, canonical, correctly sized metadata, valid structured data |
+| SEO | Googlebot, Bingbot | Crawlable, canonical, correctly sized metadata, valid structured data, and no self-contradictions between what the site submits and what it forbids |
 | AEO | AI Overviews, Copilot, voice assistants | A short, liftable, factual answer near the top of the page, sized for the page's script (see [configuration.md#aeoanswerblock](configuration.md#aeoanswerblock)) |
 | GEO | ChatGPT, Claude, Perplexity, Gemini | Machine-ingestible ground truth (`llms.txt`, `facts.json`) plus explicit permission to cite |
 | perf | Every crawler and user agent | A fast time-to-first-byte, reasonable HTML weight, compression, and no excess render-blocking `<head>` scripts — derived from one HTTP response, no browser involved |
+| security | Browsers rendering the page | No mixed content and an http→https redirect (the two that break crawling/rendering); response headers reported as inventory, never graded (v0.4.0) |
 
-Crawl hygiene and the site-level cross-URL pass
-([below](#site-level-cross-url-gates--seo-layer)) both carry `layer: "seo"` in the report — there is no separate `"hygiene"` or `"site"`
-value in the `Layer` type (`report.py` defines `Layer = Literal["seo", "aeo", "geo",
-"offsite", "smm", "perf"]`). As of 0.2.0 `perf` is a real, populated layer — every
-audited page runs `perf.run(page)`. `offsite` and `smm` remain reserved for roadmap
-skills and are unused by any gate today.
+Crawl hygiene, the site-level cross-URL pass
+([below](#site-level-cross-url-gates--seo-layer)) and the indexability-contradictions
+pass ([below](#indexability-contradictions-v040)) all carry `layer: "seo"` in the
+report — there is no separate `"hygiene"`, `"site"` or `"contradictions"` value in the
+`Layer` type (`report.py` defines `Layer = Literal["seo", "aeo", "geo", "offsite", "smm",
+"perf", "security"]`). `perf` has been a real, populated layer since 0.2.0 — every
+audited page runs `perf.run(page)`. `security` is new in v0.4.0 and is populated the
+same way (`security.run_page(page)` per page, plus one site-level `http://` redirect
+probe). `offsite` and `smm` remain reserved for roadmap skills and are unused by any gate
+today.
 
 ## Gate reference
 
@@ -189,6 +195,16 @@ block trips this gate.
 | `schema` | Every top-level node has `@context` | warning |
 | `schema-fabrication` | Every `AggregateRating` node has a non-zero `ratingCount` (or `reviewCount`) | error |
 | `schema-fabrication` | Every `Review` node has an `author` | error |
+| `schema-required` | Google's documented rich-result properties are present for Article/NewsArticle/BlogPosting, Product, FAQPage, BreadcrumbList, Organization and LocalBusiness (v0.4.0) | warning |
+
+**`schema-required` (v0.4.0) checks GOOGLE's requirement, not schema.org's.** schema.org
+marks no property required at all, so a node can be perfectly valid schema.org and still
+miss a Google rich result — every `seo.schema-required.missing-property` finding says so
+explicitly, and names both `RICH_RESULT_RULES` and the date the table was transcribed
+(`RICH_RESULT_RULES_AS_OF` in `gates/jsonld.py`). It is `warning`, not `error`, because
+the table is a hand-transcribed snapshot with no freshness test yet, and a stale
+required-property table would produce fabricated errors at `error` severity. One finding
+per node, listing every missing property.
 
 "Top-level node" means each `<script type="application/ld+json">` payload, or each child
 of a `@graph` array. A `@graph` container's `@context` is propagated down to its children
@@ -202,6 +218,52 @@ for a bare `@type`/`@context`.
 The fabrication gates are not a style preference. An `AggregateRating` with no real
 `ratingCount` is a manual-action risk with Google, and it corrodes the trust the markup
 exists to build in the first place.
+
+### Security (v0.4.0)
+
+`security.run_page(page)` derives four gates from the already-fetched response's headers
+(plus a CSP `<meta http-equiv>` fallback), and `security.check_https_redirect()` makes one
+extra request per audit against the site's `http://` origin. All findings carry
+`layer: "security"` — a layer that did not exist before v0.4.0.
+
+Scope is deliberately narrow: OmniRank checks security only where insecurity
+demonstrably breaks crawling, indexing or rendering. Mozilla Observatory and testssl.sh
+already grade headers properly; an SEO tool scoring CSP strength would be doing a job it
+cannot do well.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `hsts` | `security.hsts.missing` | An `https://` response carries no `Strict-Transport-Security` header | info |
+| `hsts` | `security.hsts.short-max-age` | `Strict-Transport-Security` present but `max-age` below `HSTS_MIN_MAX_AGE` (15,552,000 seconds / 180 days — OmniRank's own floor, not a vendor requirement) | info |
+| `nosniff` | `security.nosniff.missing` | `X-Content-Type-Options` is not exactly `nosniff` | info |
+| `csp` | `security.csp.absent` | No `Content-Security-Policy`, by header or `<meta http-equiv>` | info |
+| `referrer-policy` | `security.referrer-policy.missing` | No `Referrer-Policy` header | info |
+| `mixed-content` | `security.mixed-content.subresource` | An `https://` page requests a blockable subresource (`script`, `iframe`, or `link rel=stylesheet\|preload\|modulepreload`) over literal `http://` | **error** |
+| `mixed-content` | `security.mixed-content.passive-subresource` | An `https://` page requests a passive subresource (`img`, or `link rel=icon\|apple-touch-icon\|manifest\|prefetch`) over literal `http://` — browsers auto-upgrade these rather than block them | warning |
+| `https-redirect` | `security.https-redirect.missing` | The site's `http://` origin does not 3xx-redirect to `https://` | **error** |
+
+**Four of the eight ids are `info` and cost zero points — they can never fail a build.**
+They are reported as inventory facts, not graded: whether a given HSTS `max-age` or CSP is
+adequate is a judgement about your threat model that an SEO auditor has no business
+making. Only `mixed-content`'s active-subresource id and `https-redirect` are `error`,
+because only those two break something OmniRank can actually observe — browsers block
+mixed *active* content outright, and a non-redirecting `http://` origin gives every page a
+live duplicate that splits canonical signal between two URLs. The passive-subresource id
+is `warning`: browsers auto-upgrade an `img` or icon request to `https://` first and only
+fail if no `https://` version exists there, which OmniRank cannot verify from the HTML
+alone, so it is reported without claiming a rendering failure it did not observe.
+`security` enters the report's `layersRun` only when at least one page was actually
+fetched — exactly the same rule `aeo` and `perf` follow, so a zero-page audit leaves
+`security` absent from the score map rather than a fabricated `100`.
+
+CSP is parsed for exactly one thing beyond noting its total absence:
+`upgrade-insecure-requests`, which browsers use to rewrite `http://` subresources before
+requesting them, and which therefore suppresses both `mixed-content` ids — this module
+never grades a policy's contents.
+
+Only `mixed-content` and `https-redirect` can move the `security` score — the four `info`
+gates are excluded from the scoring surface for the same reason `crawl-hygiene` is: see
+[Scoring](#scoring) below.
 
 ### Site-level (cross-URL) gates — SEO layer
 
@@ -230,6 +292,44 @@ canonical or hreflang alternate pointing outside the crawled set — a different
 a URL excluded by `audit.sampleSize`, an external domain — produces no finding either
 way; OmniRank never reports on a gate it could not actually evaluate. `noindex-in-sitemap`
 similarly only fires for pages OmniRank both fetched and found listed in `sitemap.xml`.
+
+### Indexability contradictions (v0.4.0)
+
+`gates/contradictions.py` — defects provable from the site's own declarations, with no
+external truth required: a URL submitted for crawling in the sitemap and forbidden in
+`robots.txt`; a canonical pointing at a page that is noindexed, redirects, or 404s; a page
+declared as an `hreflang` alternate while forbidding its own indexing. Every finding here
+is 100% precision because both halves of the contradiction come from the site itself, and
+every one carries `layer: "seo"`.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `robots-sitemap` | `seo.robots-sitemap.disallowed` | A URL listed in `sitemap.xml` is also `Disallow`-ed to `Googlebot` in `robots.txt` | **error** |
+| `canonical-target` | `seo.canonical-target.noindexed` | A page's canonical points at a URL that carries a `noindex` directive | **error** |
+| `canonical-target` | `seo.canonical-target.not-found` | A canonical target returns `404` or `410` | **error** |
+| `canonical-target` | `seo.canonical-target.redirects` | A canonical target itself 3xx-redirects | warning |
+| `hreflang-noindex` | `seo.hreflang-noindex.alternate` | A page declares an `hreflang` alternate at a page that carries `noindex` (attached to the *declaring* page, not the noindexed target; `x-default` is exempt) | **error** |
+
+Two rules govern every check in this module:
+
+- **Never judge a URL OmniRank did not see.** `robots-sitemap` only evaluates sitemap
+  URLs on robots.txt's OWN host — `RobotFileParser.can_fetch()` discards the host and
+  matches on path alone, so a sitemap index listing other hosts' URLs (a CDN, a blog
+  subdomain) gets those reported `not-applicable` in `notEvaluated` rather than judged
+  by a robots.txt that never governed them. A canonical target already in the crawled set
+  is judged from the `PageData` already held — no second fetch. A target outside it is
+  probed once, deduplicated across every page pointing at it, up to `MAX_CANONICAL_PROBES`
+  (25 per audit); anything past that budget is `budget-exceeded` in `notEvaluated`, never
+  silently skipped. A 5xx or transport failure on a probe is `page-unreachable`, not
+  `.not-found` — a transient origin error is not a missing page, and calling it one would
+  be a guess dressed as a finding.
+- **A gate that could not run reports why, never silently.** `robots-sitemap` returns
+  `no-sitemap`, `page-unreachable`, `not-applicable`, or `matcher-unsupported` in
+  `notEvaluated` rather than a pass when it cannot reach a verdict. `matcher-unsupported`
+  is real on Python 3.11–3.13: `urllib.robotparser` only became RFC 9309 compliant in
+  Python 3.14, so on earlier interpreters OmniRank refuses to answer rather than trust a
+  matcher it knows may ignore wildcards or mis-order `Allow`/`Disallow` overlaps — see
+  `omnirank/robots.py`.
 
 ### Performance (`perf` layer)
 
@@ -272,6 +372,39 @@ therefore never choose to send either back, and OmniRank has no way to confirm a
 supports them even if it does. The `_COMPRESSED` check still matches the literal strings
 `br` and `zstd` defensively, in case a misconfigured origin ignores `Accept-Encoding` and
 sends one anyway, but the gate's real, exercised coverage is `gzip`/`deflate` only.
+
+### On-page (v0.4.0)
+
+`gates/onpage.py` — body markup that search engines and assistive technology both read.
+Kept out of `seo.py`, which owns only the `<head>`'s indexing signals: canonical, title,
+description, OpenGraph, hreflang. Every finding carries `layer: "seo"`.
+
+| Gate | Finding id | Rule | Severity |
+|---|---|---|---|
+| `image-alt` | `seo.image-alt.missing` | An `<img>` has no `alt` attribute at all | warning |
+| `heading-order` | `seo.heading-order.skipped` | The outline jumps more than one level deeper (e.g. `h1` straight to `h3`) — only the first skip on the page is reported | warning |
+| `link-text` | `seo.link-text.empty` | An `<a href>` has no accessible name (no text, `aria-label`, `title`, or `alt` on a contained `<img>`) | warning |
+| `link-text` | `seo.link-text.generic` | An `<a href>`'s accessible name is a generic phrase ("click here", "read more", …) that conveys nothing on its own | info |
+| `lang` | `seo.lang.missing` | `<html>` has no non-empty `lang` attribute | **error** |
+
+**`alt=""` is never flagged, under any circumstance.** An empty `alt` is the spec's own
+way to mark an image decorative, and a check that fires on it would tell users to make
+correct markup worse. `role="presentation"`, `role="none"` and `aria-hidden="true"` are
+honoured the same way. Only a *missing* `alt` attribute — not an empty one — is a finding.
+
+**`lang` is `error`, the strongest severity in this group, because a missing `lang` makes
+a DIFFERENT gate lie.** `page.lang` feeds `bands.resolve_band()`; with no `lang`, a page
+written in a script with no word separators (Japanese, Thai, …) is measured against the
+space-delimited English word band it structurally cannot meet, and
+`aeo.answer-block.length` reports a length problem that does not exist. A missing check
+here is not silence — it is a wrong finding somewhere else.
+
+**`link-text.generic` is `info`, and must never fail a build,** because the word list
+behind it (`GENERIC_ANCHORS` in `gates/onpage.py`) is English-only by construction: on a
+Bengali or Japanese page it matches nothing and the gate is silent by design, not because
+the page is clean. Links inside `<nav>` are exempt from both `link-text` findings —
+navigation labels are terse on purpose and take their meaning from the nav itself, and
+flagging them is the kind of noise that trains users to ignore the report.
 
 ### Sitemap `lastmod` inflation (`lastmod-inflation` — SEO layer)
 
@@ -339,17 +472,50 @@ WARNING_COST = 3
 GATE_CAP = 15
 ```
 
-**Per gate, then per layer (as of v0.2.1):** each GATE's contribution to its layer is
-capped first — `min(GATE_CAP, 10*errors + 3*warnings)` — and the layer's score is
-`max(0, 100 - sum(capped gate costs))`. `info`-severity findings cost nothing. A layer
-that ran and accumulated zero findings scores exactly `100`. This replaced a flat
-per-finding cost with no cap: measured against a real 57-URL site, one gate failing on
-every page (a missing `<h1>` on every template) cost `570` points against a `100`-point
-layer under the old model, saturating `seo` and `aeo` to `0` and leaving nothing to act
-on. One gate firing on every page of a site is one problem to fix, not fifty — repeating
-the SAME gate no longer compounds past `GATE_CAP`, but a second, DISTINCT broken gate
-still adds its own capped cost, so a site with many different problems still scores worse
-than one with a single frequently-firing one.
+**Per gate, then per layer, normalised by the layer's own surface (v0.4.0):** each
+GATE's contribution to its layer is capped first — `min(GATE_CAP, 10*errors +
+3*warnings)` — and those capped costs are **summed and divided by the layer's own
+scoring surface**, not subtracted from a flat 100. Concretely:
+
+```python
+surface = max(1, scoring_gate_count(layer), gates_actually_seen)
+denominator = GATE_CAP * surface
+penalty = (100 * capped_cost_sum + denominator // 2) // denominator  # round-half-up
+score = max(0, 100 - penalty)
+```
+
+That penalty expression is deliberately **not** Python's `round()` — `round()` is
+banker's rounding (rounds `.5` to the nearest even number), and float division would
+make the result depend on IEEE 754 detail. `(100*cost + denominator//2) // denominator`
+is integer round-half-up throughout, so it is exactly reproducible.
+
+`scoring_gate_count(layer)` (`registry.py`) is how many DISTINCT gates in that layer can
+ever move the score — `info`-severity-only gates (the four security header gates) and
+unreachable gates (`crawl-hygiene`) are excluded, because counting a gate that can never
+cost anything would put an artificial floor under the layer's score. `info`-severity
+findings themselves also cost nothing and — as of the fix below — never enlarge the
+surface either.
+
+**Why the division exists.** Before v0.4.0 the budget was a flat 100 per layer
+regardless of how many gates that layer had, so seven maxed gates zeroed a layer whether
+it had seven gates or thirty — every gate this release added made saturation *cheaper*.
+It also put an unreachable floor under small layers: `security` ships only 2 scoring
+gates, so under a flat budget its worst possible score would have been 70. Dividing by
+`surface` fixes both directions at once: one maxed gate always costs exactly `1/surface`
+of the layer, so a layer floors to `0` only when **every one of its registered gates**
+is maxed, and a small layer can still reach `0`.
+
+**Adding a finding can never raise a score — `Report.score()`'s own guarantee, and a
+real bug fixed against it (final review, B2).** `seen_gates[layer].add(gate)` used to run
+for every gate with a finding, including `info`-only ones — which re-admitted exactly the
+gates `scoring_gate_count()` deliberately excludes, and *widened* `surface` for free. A
+harmless `info` finding on a gate the layer had never seen before could therefore RAISE
+that layer's score by diluting the denominator under existing errors: verified directly
+against `https://danluu.com`, `security` scored `87` before this fix and the correct
+value, `67`, only after it — the SAME findings, same header gates present the whole time.
+`seen_gates[layer].add(gate)` now runs only when that gate's raw cost is nonzero, and a
+40,000-trial randomised property test (`tests/test_report.py`) now asserts adding any
+finding, drawn from the real registry, never raises any layer's score or `overall`.
 
 **Overall:** the integer floor-division average of every layer's score —
 `sum(scores.values()) // len(scores)`. Not a rounded mean: `//` truncates, it does not
@@ -359,29 +525,33 @@ round to nearest. With one layer at 90 and one at 91, `overall` is `90`, not `91
 **`layers_run`:** the `Report` model can omit a layer that never ran from the score map
 entirely (`tests/test_report.py::test_layer_that_did_not_run_is_absent` exercises this
 directly against a bare `Report` object), and `audit_site()` — the function the CLI
-actually calls — relies on exactly that behaviour. `seo` and `geo` are marked run
-unconditionally at the start of `audit_site()`, because `seo` covers
-`seo.page.unreachable` and the sitemap gates, and `geo.run()` probes site-level artifacts
-(`llms.txt`, `robots.txt`, ...) regardless of whether any page was fetched. `aeo` and
-`perf` are only marked run **after** `_collect()` has actually returned at least one
-page — they are per-page gates, so if zero pages were parsed, `aeo` and `perf` are
-absent from `layers_run` and therefore absent from the score map, not silently scored
-`100`. A plain `omnirank audit` against a reachable site still reports all four layers;
-a `overall` divisor of anything other than 4 is the signal that at least one layer never
-ran.
+actually calls — relies on exactly that behaviour, WITH one exception: a layer that
+produced an actual finding reaches the score map regardless of `layers_run`, since
+`Report.score()` derives `costs` from the findings themselves — `layers_run` only
+controls whether a layer with **zero** findings is reported as a clean `100` or omitted
+entirely. `seo` and `geo` are marked run unconditionally at the start of `audit_site()`,
+because `seo` covers `seo.page.unreachable` and the sitemap gates, and `geo.run()` probes
+site-level artifacts (`llms.txt`, `robots.txt`, ...) regardless of whether any page was
+fetched. `aeo`, `perf` and `security` are only marked run **after** `_collect()` has
+actually returned at least one page — they are per-page gates
+(`security.run_page(page)` included, since v0.4.0), so if zero pages were parsed all
+three are absent from `layers_run` and therefore absent from the score map, not silently
+scored `100`. Before this was fixed (final review, S5), `security` was also admitted on
+a successful `https-redirect` probe *alone*, so `mixed-content` — one of only two
+`security` scoring gates — was silently counted clean on a zero-page audit; verified
+against a real report, `rust-lang.org` showed `security: 100` with `urlsChecked: 1` and 0
+pages parsed while `aeo`/`perf` were correctly absent. A plain `omnirank audit` against a
+reachable site still reports all five layers; an `overall` divisor of anything other
+than 5 is the signal that at least one layer never ran.
 
-**The unreachable-URL edge case, reproduced directly:** if the single audited URL is
-unreachable, the per-page loop in `_collect()` records one `seo.page.unreachable` error
-and never adds that URL's page to the collection — `aeo.run()`, `perf.run()`, and the
-JSON-LD checks never run for it. Net effect: a site whose homepage is completely down
-shows **no `aeo` or `perf` key at all** in the score map, because neither ever touched
-any content — they are absent, not a fabricated `100`:
+**The unreachable-URL edge case, reproduced directly, including the `layers_run`
+exception above:**
 
 ```
 $ python3 -m omnirank.cli audit https://example.com/nope-xyz
-OmniRank 0.2.1 — https://example.com/nope-xyz
-  overall 72/100  geo 60  seo 85
-  1 URLs checked · 6 findings in 6 groups
+OmniRank 0.4.0 — https://example.com/nope-xyz
+  overall 70/100  geo 47  security 67  seo 96
+  1 URLs checked · 7 findings in 7 groups
 
   ERRORS
   [1×] seo.page.unreachable — expected: HTTP 200
@@ -390,58 +560,85 @@ OmniRank 0.2.1 — https://example.com/nope-xyz
   [1×] seo.sitemap.missing — expected: a sitemap.xml enumerating the site's URLs
         fix: Publish a sitemap.xml so OmniRank -- and search engines -- can discover every page. Without one, this audit only sees the homepage.
         e.g. https://example.com/nope-xyz/sitemap.xml
+  [1×] security.https-redirect.missing — expected: a 3xx redirect to the https:// URL
+        fix: Redirect http:// to https:// at the origin or CDN. Serving both schemes gives every page a live duplicate, splitting the canonical and link signals between two URLs that engines must reconcile themselves.
+        e.g. http://example.com/nope-xyz/
   [1×] geo.llms.missing  ...
   ...
 
-  NOT EVALUATED (4 gate(s) across 2 target(s) — see the JSON report for the reason enum)
-    site — https://example.com/nope-xyz  [no-sitemap]
-    aeo, perf, seo — https://example.com/nope-xyz/  [page-unreachable]
+  NOT EVALUATED (7 gate(s) across 2 target(s) — see the JSON report for the reason enum)
+    robots-sitemap, site — https://example.com/nope-xyz  [no-sitemap]
+    aeo, onpage, perf, security, seo — https://example.com/nope-xyz/  [page-unreachable]
 ```
 
-(`overall 72` = `(85 + 60) // 2 = 145 // 2 = 72` — only `seo` and `geo` ran, so the
-average is over **two** layers, not four. `seo` is `85`, not `90`: both
-`seo.page.unreachable` and `seo.sitemap.missing` fire under the same gate,
-`sitemap-health`, so their capped combined cost is `min(GATE_CAP, 20) = 15`.) Real
-output, captured against `https://example.com/nope-xyz` on v0.2.1. Note the `NOT
-EVALUATED` section — `nope-xyz` has no `sitemap.xml`, so the site-level gates could not
-run meaningfully either, and that is now visible instead of silent.
+Real output, captured against `https://example.com/nope-xyz` on v0.4.0. Neither `aeo`,
+`perf` nor `onpage` appears in the score map at all — zero pages were parsed, so none of
+the three ever touched any content. `security` DOES appear, at `67`, even though it too
+is listed in `NOT EVALUATED` for this URL: the per-page header/mixed-content checks
+never ran, but `check_https_redirect()` is a site-level probe that ran anyway and found
+a real problem (`security.https-redirect.missing`), and that genuine finding reaches the
+score map on its own merits regardless of `layers_run` — exactly the exception named
+above. (`security 67`: one error, `min(GATE_CAP, 10) = 10` capped cost, over a 2-gate
+surface — denominator `30`, penalty `(100*10 + 15) // 30 = 1015 // 30 = 33`, score
+`100 - 33 = 67`.) `seo 96` similarly reflects two errors on the SAME gate,
+`sitemap-health` (`seo.page.unreachable` and `seo.sitemap.missing`), capped together to
+`min(GATE_CAP, 20) = 15` over `seo`'s 24-gate surface — denominator `360`, penalty
+`(100*15 + 180) // 360 = 1680 // 360 = 4`, score `100 - 4 = 96`. `overall 70` =
+`(47 + 67 + 96) // 3 = 210 // 3 = 70` — only `geo`, `security` and `seo` reached the
+score map, so the average is over **three** layers here, not five.
 
 Read `seo.page.unreachable` as the signal that the whole run is unreliable, regardless of
 what the other layers show.
 
 ## Worked example
 
-Running the CLI against `https://example.com` with no config (full output also shown in
-[getting-started.md](getting-started.md#4-run-the-first-audit)):
+Running the CLI against `https://example.com` with no config — real output, captured on
+this machine against the live site on v0.4.0:
 
 ```
-OmniRank 0.2.0 — https://example.com
-  overall 76/100  aeo 80  geo 60  perf 100  seo 67
-  1 URLs checked, 10 findings
+OmniRank 0.4.0 — https://example.com
+  overall 74/100  aeo 71  geo 47  perf 100  security 67  seo 88
+  1 URLs checked · 17 findings in 17 groups
 ```
 
-Deriving `seo 67`: the page is missing `rel=canonical` (error), missing a meta description
-(error), and missing `og:title`/`og:image` (warning) — plus `seo.schema.absent` (error, no
-JSON-LD at all). That is 3 errors + 1 warning = `10*3 + 3*1 = 33` cost, `100 - 33 = 67`. ✓
+Deriving `seo 88`: the page is missing `rel=canonical`, a meta description,
+`seo.schema.absent` (no JSON-LD), and `seo.sitemap.missing` — four DISTINCT gates
+(`canonical`, `description-length`, `schema`, `sitemap-health`), each an error, `10*4 =
+40` raw — plus `og.missing` (warning, `3` raw) on a fifth gate. Cost `43`, `seo`'s
+surface is `24` registered scoring gates, denominator `15*24 = 360`:
+`(100*43 + 180) // 360 = 4480 // 360 = 12`, `100 - 12 = 88`. ✓ (`seo.link-text.generic`
+also fires, but it is `info`-severity and costs nothing — see [Scoring](#scoring).)
 
-Deriving `aeo 80`: missing answer block (error) and fewer than 3 FAQ pairs (error) — 2
-errors = `10*2 = 20` cost, `100 - 20 = 80`. ✓
+Deriving `aeo 71`: missing answer block (error) and fewer than 3 FAQ pairs (warning) —
+two distinct gates, `10 + 3 = 13` cost, over `aeo`'s 3-gate surface (denominator `45`):
+`(100*13 + 22) // 45 = 1322 // 45 = 29`, `100 - 29 = 71`. ✓
 
-Deriving `geo 60`: `llms.txt`, `llms-full.txt`, `facts.json`, and `robots.txt` all return
-404 — 4 errors = `10*4 = 40` cost, `100 - 40 = 60`. ✓
+Deriving `geo 47`: `llms.txt`, `llms-full.txt`, `facts.json`, and `robots.txt`
+(`ai-allowlist`) all return 404 — four distinct gates, `10*4 = 40` cost, over `geo`'s
+5-gate surface (denominator `75`): `(100*40 + 37) // 75 = 4037 // 75 = 53`,
+`100 - 53 = 47`. ✓ (`citation-licence`, `geo`'s fifth gate, never fired, so it costs
+nothing — but it still counts toward the surface, which is why this isn't `0`.)
 
-Deriving `perf 100`: `example.com` serves a small, gzip-compressed response with no
-render-blocking `<head>` scripts and a fast full-response time from wherever this audit
-ran — zero `perf` findings, `100 - 0 = 100`. ✓
+Deriving `perf 100`: `example.com` serves a small response with no render-blocking
+`<head>` scripts and a fast full-response time from wherever this audit ran — zero
+`perf` findings, `100 - 0 = 100`. ✓
 
-Deriving `overall 76`: as of 0.2.0 the average is over **four** layers, not three —
-`(67 + 80 + 60 + 100) // 4 = 307 // 4 = 76`. ✓ (Floor division truncates the remainder;
-it does not round to `77`.)
+Deriving `security 67`: one error, `security.https-redirect.missing` (`example.com`'s
+`http://` origin does not redirect to `https://`), `min(GATE_CAP, 10) = 10` cost, over
+`security`'s 2-gate surface (denominator `30`): `(100*10 + 15) // 30 = 1015 // 30 = 33`,
+`100 - 33 = 67`. ✓ The four `security.hsts.missing`/`nosniff.missing`/`csp.absent`/
+`referrer-policy.missing` findings are all `info` and change nothing.
 
-To work the list: fix every `[FAIL]` (error) before any `[WARN]` (warning) — errors carry
-10x the score weight of warnings. Quote each finding's `fix` text directly when proposing
-the change, and reference its `id` (not just `gate`) when tracking one specific
-finding across successive runs, since a gate can emit several distinct ids.
+Deriving `overall 74`: the average is over **five** layers, not four —
+`(88 + 71 + 47 + 100 + 67) // 5 = 373 // 5 = 74`. ✓ (Floor division truncates the
+remainder; it does not round to `75`.)
+
+To work the list: fix every error before any warning — errors carry roughly 3x the
+score weight of warnings per gate (`ERROR_COST` `10` vs `WARNING_COST` `3`), and a
+distinct broken gate always costs more than a repeat firing of one you have already
+fixed. Quote each finding's `fix` text directly when proposing the change, and
+reference its `id` (not just `gate`) when tracking one specific finding across
+successive runs, since a gate can emit several distinct ids.
 
 ## `--fail-on` as a CI gate
 
@@ -459,7 +656,7 @@ gates are safe to gate a build on.
 Every finding carries a `fixTier` in the JSON report — `mechanical`, `templated`,
 `drafted`, `advisory` or `infrastructure` — describing what kind of information the
 correct edit requires. It is a static property of the finding id and is declared for
-all 48 ids in `scripts/py/omnirank/registry.py`. It replaces `autoFixable`, which
+all 67 ids in `scripts/py/omnirank/registry.py`. It replaces `autoFixable`, which
 recorded which module a finding lived in rather than whether fixing it was safe.
 
 Only the four `mechanical` ids can produce a diff today: `seo.canonical.missing`,
