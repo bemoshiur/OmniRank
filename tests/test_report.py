@@ -1,10 +1,11 @@
 import json
+import random
 from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from omnirank.registry import SCORING_GATES_BY_LAYER, scoring_gate_count
+from omnirank.registry import REGISTRY, SCORING_GATES_BY_LAYER, scoring_gate_count
 from omnirank.report import Finding, NotEvaluated, Report
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -283,15 +284,29 @@ def test_info_severity_never_moves_the_score():
 
 
 def test_one_maxed_gate_costs_exactly_one_gates_worth_of_its_layer():
-    # Two gates seen -> surface 2, denominator 30. Gate `alpha` is maxed
-    # (2 errors = 20 raw, capped to 15); `beta` contributes nothing.
-    # penalty = (100*15 + 15) // 30 = 1515 // 30 = 50.
+    # B2 regression: `beta`'s finding is info-severity and therefore zero-cost, so
+    # it must NOT be admitted into the scoring surface -- only `alpha` (which
+    # actually cost something) counts. Surface stays 1, not 2: an info-only gate
+    # is exactly the kind registry.py's SCORING_GATES_BY_LAYER deliberately
+    # excludes from the denominator (its comment: counting it "would put a floor
+    # under the layer's score"), and Report.score() must honour that even for an
+    # ad-hoc gate the registry has never heard of.
+    #
+    # Gate `alpha` is maxed (2 errors = 20 raw, capped to GATE_CAP = 15) and is the
+    # only gate in the surface, so it costs the layer's ENTIRE budget, not a
+    # fraction of it: denominator = 15 * 1 = 15,
+    # penalty = (100*15 + 7) // 15 = 1507 // 15 = 100.
+    #
+    # Before the fix, `seen_gates[layer].add(gate)` ran unconditionally, so
+    # `beta` inflated the surface to 2 and the SAME findings scored 50 instead of
+    # 0 -- i.e. adding a zero-cost finding on a new gate RAISED the score, which
+    # is exactly the non-monotonicity this test now pins shut.
     r = Report(site="https://x.example", kind="audit")
     for i in range(2):
         r.add(f(layer="smm", id="smm.alpha.broken", gate="alpha",
                 url=f"https://x.example/{i}"))
     r.add(f(layer="smm", id="smm.beta.noted", gate="beta", severity="info"))
-    assert r.score()["smm"] == 50
+    assert r.score()["smm"] == 0
 
 
 def test_zeroing_a_layer_requires_every_one_of_its_registered_gates():
@@ -374,3 +389,56 @@ def test_the_new_not_evaluated_reasons_validate():
     assert errors == [], errors
     assert {e.reason for e in r.not_evaluated} == {"matcher-unsupported",
                                                    "budget-exceeded"}
+
+
+# --- B2 property test: score() must be monotone -- adding a finding can never ---
+# --- raise a score. This is the guarantee score()'s own docstring claims and, ---
+# --- before the one-line fix above, nothing actually enforced it. -------------
+
+_ALL_ENTRIES = list(REGISTRY.values())
+_ALL_LAYERS = sorted({e.layer for e in _ALL_ENTRIES})
+
+
+def _finding_for(entry, n):
+    return Finding(id=entry.id, severity=entry.severity, layer=entry.layer,
+                   url=f"https://x.example/{n}", gate=entry.gate,
+                   observed="observed", expected="expected", fix="fix")
+
+
+def _report_from(pool):
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.update(_ALL_LAYERS)
+    for n, entry in enumerate(pool):
+        r.add(_finding_for(entry, n))
+    return r
+
+
+def test_adding_any_finding_never_raises_any_layer_score_or_overall():
+    """40,000-trial randomised check, using only severities the registry actually
+    assigns: a pool of 0-12 real findings is built, one more real finding is
+    added, and every layer's score (plus `overall`) must be equal or lower
+    afterwards, never higher.
+
+    Before the report.py:192 fix this failed within the first few hundred trials
+    -- an info-severity finding on a gate not yet `seen` would enlarge that
+    layer's scoring surface, which can raise the score of a DIFFERENT gate's
+    existing findings in that same layer even though nothing about them changed.
+    """
+    rng = random.Random(20260805)  # fixed seed: deterministic, not flaky
+
+    for trial in range(40_000):
+        pool = rng.choices(_ALL_ENTRIES, k=rng.randint(0, 12))
+        r = _report_from(pool)
+        before = r.score()
+
+        extra = rng.choice(_ALL_ENTRIES)
+        r.add(_finding_for(extra, len(pool)))
+        after = r.score()
+
+        for layer in _ALL_LAYERS:
+            assert after[layer] <= before[layer], (
+                f"trial {trial}: layer {layer!r} rose from {before[layer]} to "
+                f"{after[layer]} after adding {extra.id!r} on gate {extra.gate!r}")
+        assert after["overall"] <= before["overall"], (
+            f"trial {trial}: overall rose from {before['overall']} to "
+            f"{after['overall']} after adding {extra.id!r}")

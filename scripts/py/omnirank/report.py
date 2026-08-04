@@ -189,7 +189,19 @@ class Report:
         seen_gates: dict[str, set[str]] = defaultdict(set)
         for (layer, gate), raw in raw_per_gate.items():
             costs[layer] = costs.get(layer, 0) + min(GATE_CAP, raw)
-            seen_gates[layer].add(gate)
+            # A zero-cost gate (every finding on it is info-severity) needs no room
+            # in the budget -- it never happened in raw_per_gate at all before this
+            # loop, in fact, since ERROR_COST/WARNING_COST are the only nonzero
+            # costs and info contributes 0. Guarding on `raw` here is what stops a
+            # zero-cost gate from being counted as "seen" and inflating `surface`:
+            # without it, adding an info-only finding to a previously-unseen gate
+            # RAISES the score by admitting that gate into the denominator without
+            # it ever costing anything, re-creating exactly the floor
+            # SCORING_GATES_BY_LAYER's info-only exclusion (registry.py) exists to
+            # prevent -- and contradicting this method's own guarantee that adding
+            # a finding can never raise a score.
+            if raw:
+                seen_gates[layer].add(gate)
 
         scores: dict[str, int] = {}
         for layer, cost in costs.items():
