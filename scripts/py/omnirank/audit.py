@@ -135,6 +135,12 @@ def audit_site(config: Config, client: httpx.Client | None = None,
         for entry in robots_not_evaluated:
             report.flag_not_evaluated(entry)
 
+        canonical_findings, canonical_not_evaluated = (
+            contradictions.check_canonical_targets(client, pages))
+        report.extend(canonical_findings)
+        for entry in canonical_not_evaluated:
+            report.flag_not_evaluated(entry)
+
         report.urls_checked = len(targets)
         report.extend(geo.run(client, config.site_url))
 

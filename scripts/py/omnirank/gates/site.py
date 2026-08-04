@@ -235,3 +235,13 @@ def run(pages: list[PageData], sitemap_urls: list[str] | None = None) -> list[Fi
         *_canonical_chains(pages),
         *_hreflang_reciprocity(pages),
     ]
+
+
+# Public aliases. gates/contradictions.py needs these three predicates, and
+# reimplementing them there would let the two modules disagree about what
+# "noindex" means, what counts as the same URL, or which <link> is the canonical --
+# exactly the three-way drift html.py was created to end. Aliases rather than
+# renames so this module's own call sites stay byte-identical.
+canonical_key = _canonical_key
+canonical_target = _canonical_target
+is_noindex = _is_noindex

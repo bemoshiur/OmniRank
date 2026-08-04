@@ -104,3 +104,142 @@ def test_the_finding_says_both_ways_to_resolve_the_contradiction():
     fix = findings[0].fix.lower()
     assert "sitemap" in fix and "robots" in fix, (
         "either edit resolves it, and only the owner knows which is correct")
+
+
+from omnirank.page import PageData
+
+HEAD = "<!doctype html><html lang='en'><head>{}</head><body><h1>H</h1></body></html>"
+
+
+def page(url: str, canonical: str | None = None, noindex: bool = False) -> PageData:
+    head = ""
+    if canonical is not None:
+        head += f"<link rel='canonical' href='{canonical}'>"
+    if noindex:
+        head += "<meta name='robots' content='noindex, follow'>"
+    return PageData(url=url, html=HEAD.format(head), status=200, elapsed_ms=1,
+                    headers={})
+
+
+@respx.mock
+def test_a_canonical_pointing_at_a_noindexed_page_in_the_crawled_set_is_an_error():
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/b"),
+             page(f"{SITE}/b", canonical=f"{SITE}/b", noindex=True)]
+    findings, not_evaluated = contradictions.check_canonical_targets(make_client(), pages)
+    assert not_evaluated == []
+    assert [(f.id, f.url) for f in findings] == [
+        ("seo.canonical-target.noindexed", f"{SITE}/a")]
+    assert findings[0].severity == "error"
+    assert findings[0].gate == "canonical-target"
+    assert not respx.calls, "a target already in the crawled set is never re-fetched"
+
+
+@respx.mock
+def test_a_self_canonical_on_a_noindexed_page_is_not_flagged():
+    # The page canonicalises to itself; noindex+self-canonical is a deliberate,
+    # coherent configuration and seo.noindex.in-sitemap owns the sitemap question.
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/a", noindex=True)]
+    findings, _ = contradictions.check_canonical_targets(make_client(), pages)
+    assert findings == []
+
+
+@respx.mock
+def test_a_canonical_target_that_404s_is_an_error():
+    respx.get(f"{SITE}/gone").mock(return_value=httpx.Response(404))
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/gone")]
+    findings, not_evaluated = contradictions.check_canonical_targets(make_client(), pages)
+    assert not_evaluated == []
+    assert [(f.id, f.url) for f in findings] == [
+        ("seo.canonical-target.not-found", f"{SITE}/a")]
+    assert findings[0].severity == "error"
+    assert f"{SITE}/gone" in findings[0].observed
+
+
+@respx.mock
+def test_a_canonical_target_that_redirects_is_a_warning_naming_the_destination():
+    respx.get(f"{SITE}/old").mock(return_value=httpx.Response(
+        301, headers={"location": f"{SITE}/new"}))
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/old")]
+    findings, _ = contradictions.check_canonical_targets(make_client(), pages)
+    assert [f.id for f in findings] == ["seo.canonical-target.redirects"]
+    assert findings[0].severity == "warning"
+    assert f"{SITE}/new" in findings[0].fix
+
+
+@respx.mock
+def test_a_probed_target_that_is_noindexed_is_an_error():
+    respx.get(f"{SITE}/hidden").mock(return_value=httpx.Response(
+        200, text=HEAD.format("<meta name='robots' content='noindex'>")))
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/hidden")]
+    findings, _ = contradictions.check_canonical_targets(make_client(), pages)
+    assert [f.id for f in findings] == ["seo.canonical-target.noindexed"]
+
+
+@respx.mock
+def test_a_healthy_probed_target_emits_nothing():
+    respx.get(f"{SITE}/good").mock(return_value=httpx.Response(200, text=HEAD.format("")))
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/good")]
+    findings, not_evaluated = contradictions.check_canonical_targets(make_client(), pages)
+    assert findings == []
+    assert not_evaluated == []
+
+
+@respx.mock
+def test_a_server_error_on_a_probe_is_not_evaluated_rather_than_called_missing():
+    respx.get(f"{SITE}/flaky").mock(return_value=httpx.Response(503))
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/flaky")]
+    findings, not_evaluated = contradictions.check_canonical_targets(make_client(), pages)
+    assert findings == [], "a 503 is transient; calling it not-found would be a guess"
+    assert [(e.gate, e.reason, e.url) for e in not_evaluated] == [
+        ("canonical-target", "page-unreachable", f"{SITE}/flaky")]
+
+
+@respx.mock
+def test_each_distinct_target_is_probed_exactly_once():
+    respx.get(f"{SITE}/shared").mock(return_value=httpx.Response(404))
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/shared"),
+             page(f"{SITE}/b", canonical=f"{SITE}/shared"),
+             page(f"{SITE}/c", canonical=f"{SITE}/shared")]
+    findings, _ = contradictions.check_canonical_targets(make_client(), pages)
+    assert len(respx.calls) == 1, "one probe per distinct target, not per pointing page"
+    assert sorted(f.url for f in findings) == [f"{SITE}/a", f"{SITE}/b", f"{SITE}/c"], (
+        "every page pointing at the broken target is still told about it")
+
+
+@respx.mock
+def test_probes_stop_at_the_budget_and_the_rest_are_not_evaluated():
+    over = contradictions.MAX_CANONICAL_PROBES + 3
+    for i in range(over):
+        respx.get(f"{SITE}/t{i}").mock(return_value=httpx.Response(200, text=HEAD.format("")))
+    pages = [page(f"{SITE}/p{i}", canonical=f"{SITE}/t{i}") for i in range(over)]
+    findings, not_evaluated = contradictions.check_canonical_targets(make_client(), pages)
+    assert findings == []
+    assert len(respx.calls) == contradictions.MAX_CANONICAL_PROBES
+    assert len(not_evaluated) == 3
+    assert {e.reason for e in not_evaluated} == {"budget-exceeded"}
+    assert {e.gate for e in not_evaluated} == {"canonical-target"}
+
+
+@respx.mock
+def test_a_page_with_no_canonical_is_left_to_the_per_url_gate():
+    pages = [page(f"{SITE}/a")]
+    findings, not_evaluated = contradictions.check_canonical_targets(make_client(), pages)
+    assert (findings, not_evaluated) == ([], [])
+    assert not respx.calls
+
+
+@respx.mock
+def test_a_relative_canonical_is_resolved_before_being_judged():
+    respx.get(f"{SITE}/target").mock(return_value=httpx.Response(404))
+    pages = [page(f"{SITE}/deep/a", canonical="/target")]
+    findings, _ = contradictions.check_canonical_targets(make_client(), pages)
+    assert [f.id for f in findings] == ["seo.canonical-target.not-found"]
+
+
+@respx.mock
+def test_a_trailing_slash_difference_still_counts_as_the_crawled_page():
+    pages = [page(f"{SITE}/a", canonical=f"{SITE}/b/"),
+             page(f"{SITE}/b", canonical=f"{SITE}/b", noindex=True)]
+    findings, _ = contradictions.check_canonical_targets(make_client(), pages)
+    assert [f.id for f in findings] == ["seo.canonical-target.noindexed"]
+    assert not respx.calls, "canonical_key normalises the trailing slash"
