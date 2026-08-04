@@ -19,7 +19,7 @@ from omnirank.registry import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "scripts" / "py" / "omnirank"
-LAYERS = ("seo", "aeo", "geo", "offsite", "smm", "perf")
+LAYERS = ("seo", "aeo", "geo", "offsite", "smm", "perf", "security")
 ID_LITERAL = re.compile(r'"([a-z0-9-]+\.[a-z0-9-]+\.[a-z0-9-]+)"')
 
 # gates/geo.py builds these five ids by f-string from the artifact filename

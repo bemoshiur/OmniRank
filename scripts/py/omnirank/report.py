@@ -12,7 +12,7 @@ from .applicability import Applicability
 from .registry import FixTier, scoring_gate_count, tier_for
 
 Severity = Literal["error", "warning", "info"]
-Layer = Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]
+Layer = Literal["seo", "aeo", "geo", "offsite", "smm", "perf", "security"]
 
 # Closed enum, mirrored in schemas/report.schema.json. "no-sitemap" and
 # "page-unreachable" are populated starting v0.2.1 (see audit.py). "not-applicable"
@@ -21,8 +21,19 @@ Layer = Literal["seo", "aeo", "geo", "offsite", "smm", "perf"]
 # (an SMM platform with no adapter yet, a check that only applies to some stacks)
 # has a reason to report from day one instead of staying silent until someone
 # remembers to extend the enum.
+#
+# v0.4.0 adds two, both additive -- a report written before this release contains
+# neither value and still validates:
+#   matcher-unsupported  the check needs a capability this interpreter's stdlib
+#                        does not have. urllib.robotparser only became RFC 9309
+#                        compliant (wildcards, longest-match) in Python 3.14; on
+#                        3.11-3.13 it silently gives the WRONG answer for such
+#                        rules, so gates/contradictions.py refuses to judge rather
+#                        than fabricate. See omnirank/robots.py.
+#   budget-exceeded      a bounded probe pass hit its cap before reaching this URL.
 NotEvaluatedReason = Literal[
-    "no-sitemap", "page-unreachable", "not-applicable", "adapter-absent"
+    "no-sitemap", "page-unreachable", "not-applicable", "adapter-absent",
+    "matcher-unsupported", "budget-exceeded",
 ]
 
 ERROR_COST = 10

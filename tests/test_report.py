@@ -338,3 +338,39 @@ def test_scoring_gate_count_excludes_unreachable_and_info_only_gates():
         "sit in the denominator inflating every score")
     assert scoring_gate_count("seo") == len(SCORING_GATES_BY_LAYER["seo"])
     assert scoring_gate_count("not-a-layer") == 0
+
+
+# --- v0.4.0: the security layer and the two new notEvaluated reasons ---
+
+def test_a_security_layer_finding_validates_against_the_report_schema():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.add("security")
+    r.add(Finding(id="security.mixed-content.subresource", severity="error",
+                  layer="security", url="https://x.example/", gate="mixed-content",
+                  observed="1 http:// subresource", expected="every subresource over https",
+                  fix="Serve it over https."))
+    errors = list(Draft202012Validator(
+        SCHEMA, format_checker=FormatChecker()).iter_errors(r.to_dict()))
+    assert errors == [], errors
+
+
+def test_the_security_layer_is_scored_only_when_it_ran():
+    r = Report(site="https://x.example", kind="audit")
+    r.layers_run.update({"seo"})
+    assert "security" not in r.score(), (
+        "a site that was never security-checked must not score 100 on security")
+
+
+def test_the_new_not_evaluated_reasons_validate():
+    r = Report(site="https://x.example", kind="audit")
+    r.flag_not_evaluated(NotEvaluated(gate="robots-sitemap",
+                                      url="https://x.example/robots.txt",
+                                      reason="matcher-unsupported"))
+    r.flag_not_evaluated(NotEvaluated(gate="canonical-target",
+                                      url="https://x.example/z",
+                                      reason="budget-exceeded"))
+    errors = list(Draft202012Validator(
+        SCHEMA, format_checker=FormatChecker()).iter_errors(r.to_dict()))
+    assert errors == [], errors
+    assert {e.reason for e in r.not_evaluated} == {"matcher-unsupported",
+                                                   "budget-exceeded"}
