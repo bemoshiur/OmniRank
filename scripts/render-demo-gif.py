@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """Render .github/assets/demo.gif from REAL `omnirank` CLI output.
 
-This does NOT hand-write a transcript. It shells out to the actual CLI
-(`omnirank audit` and `omnirank geo` against https://example.com), captures
-the real stdout via subprocess, and renders that text into a fake terminal
-window animation. Re-run this any time the CLI's output changes and the GIF
-will stay truthful:
+This does NOT hand-write a transcript. It spins up a local, disposable
+fixture site (scripts/fixtures/demo-site/) on 127.0.0.1 via
+`python3 -m http.server`, shells out to the actual CLI against it, and
+captures the real stdout via subprocess. The GIF tells the two-command
+story that is the product:
+
+    1. omnirank audit <url>              -- the grouped summary (v0.2.1)
+    2. omnirank fix <url> --root <repo>   -- the located diff (v0.3.0)
+
+Using a local fixture instead of a third-party site keeps this reproducible
+(no dependence on a real site staying online or its content staying stable)
+and lets `fix` point --root at real, checked-in source files so the second
+command shows a genuine located diff, not a placeholder. Re-run this any
+time the CLI's output changes and the GIF will stay truthful:
 
     .venv/bin/python scripts/render-demo-gif.py
 
@@ -16,8 +25,15 @@ monospace font (Menlo/Monaco, both ship with macOS).
 from __future__ import annotations
 
 import re
+import shutil
+import socket
 import subprocess
 import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,8 +43,12 @@ ROOT = Path(__file__).resolve().parent.parent
 PYTHON = ROOT / ".venv" / "bin" / "python"
 OUT_GIF = ROOT / ".github" / "assets" / "demo.gif"
 
-AUDIT_ARGS = ["audit", "https://example.com", "--out", "/tmp/demo-audit.json"]
-GEO_ARGS = ["geo", "https://example.com", "--out", "/tmp/demo-geo"]
+# The fixture is committed source, not a throwaway temp fixture: `fix --root`
+# points straight at it, so the diffs in the GIF are against real files a
+# reviewer can open and read, same as it would be against a user's own repo.
+FIXTURE_SRC = ROOT / "scripts" / "fixtures" / "demo-site"
+FIX_ROOT_ARG = "scripts/fixtures/demo-site"
+DEMO_AUDIT_OUT = "/tmp/demo-audit.json"
 
 # ---------------------------------------------------------------------------
 # Terminal look
@@ -42,11 +62,11 @@ TITLE_TEXT = (100, 116, 139)
 FG_DEFAULT = (226, 232, 240)  # neutral output text
 FG_COMMAND = (248, 250, 252)  # typed command text (white)
 PROMPT = (56, 189, 248)  # #38BDF8 — also the "overall NN/100" colour
-RED = (248, 113, 113)  # #F87171 — [FAIL]
-AMBER = (251, 191, 36)  # #FBBF24 — [WARN]
-CYAN = (56, 189, 248)  # #38BDF8 — overall NN/100
-GREY = (148, 163, 184)  # #94A3B8 — observed:
-GREEN = (52, 211, 153)  # #34D399 — fix:
+RED = (248, 113, 113)  # #F87171 — errors / diff "-" lines
+AMBER = (251, 191, 36)  # #FBBF24 — warnings / not-fixed
+CYAN = (56, 189, 248)  # #38BDF8 — overall NN/100 / diff "@@" hunks
+GREY = (148, 163, 184)  # #94A3B8 — "e.g." / observed:
+GREEN = (52, 211, 153)  # #34D399 — fix: / diff "+" lines
 
 FONT_CANDIDATES = ["/System/Library/Fonts/Menlo.ttc", "/System/Library/Fonts/Monaco.ttf"]
 
@@ -60,11 +80,22 @@ PAD_BOTTOM = 34
 TITLEBAR_H = 78
 CANVAS_W = 2240  # -> 1120px final, within the 1000-1200px target
 
-MAX_AUDIT_BODY_LINES = 22
+# A real line longer than this (a few diff context lines and one built-in
+# fix message run past it) is clipped with an ellipsis rather than left to
+# overrun the canvas -- clipping the tail keeps every colour-prefix check
+# below intact (they all anchor at column 0) and never invents content.
+MAX_LINE_CHARS = 112
+# Real output this small never gets near either cap; both exist as a safety
+# net against a future content change blowing the frame budget, not as the
+# primary way to keep the transcript short -- that job belongs to the CLI's
+# own `--top` flag, which is real output the CLI produces, not a rendering
+# hack layered on top of it.
+MAX_AUDIT_BODY_LINES = 40
+MAX_FIX_BODY_LINES = 45
 MAX_FRAMES = 260  # safety cap; typical session lands well under this
 PALETTE_COLOURS = 64
 
-FINDING_MARK_RE = re.compile(r"\[(FAIL|WARN)\]")
+GROUP_LINE_RE = re.compile(r"^\s*\[\d+×\]")  # "  [2×] seo.canonical.missing ..."
 OVERALL_RE = re.compile(r"overall \d+/100")
 
 
@@ -73,6 +104,76 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont:
         if Path(path).exists():
             return ImageFont.truetype(path, size)
     raise SystemExit(f"no monospace font found among {FONT_CANDIDATES}")
+
+
+# ---------------------------------------------------------------------------
+# Step 0: a local, disposable fixture site
+# ---------------------------------------------------------------------------
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _materialise_site(serve_dir: Path, base_url: str) -> None:
+    """Copy the fixture and stamp its sitemap with the real, ephemeral base URL.
+
+    Only sitemap.xml is templated -- it is the one file that must carry an
+    absolute URL matching whatever port this run happened to bind. Every page
+    itself is served byte-identical to what's committed at FIXTURE_SRC, which
+    is also what `fix --root` points at directly (see FIX_ROOT_ARG): the
+    diffs in the GIF are against the exact files in this repo, not a copy.
+    """
+    shutil.copytree(FIXTURE_SRC, serve_dir)
+    template = serve_dir / "sitemap.xml.tmpl"
+    (serve_dir / "sitemap.xml").write_text(
+        template.read_text().replace("__BASE_URL__", base_url))
+    template.unlink()
+
+
+def _wait_ready(base_url: str, proc: subprocess.Popen, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    last_error: BaseException | None = None
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise SystemExit(
+                f"fixture http.server exited early (code {proc.returncode})")
+        try:
+            with urllib.request.urlopen(f"{base_url}/", timeout=0.5) as resp:
+                if resp.status == 200:
+                    return
+        except (urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+            last_error = exc
+        time.sleep(0.05)
+    raise SystemExit(f"fixture http.server never became ready: {last_error}")
+
+
+@contextmanager
+def fixture_server():
+    """Serve scripts/fixtures/demo-site/ on 127.0.0.1 for the life of the `with` block.
+
+    A real HTTP server, not a mock: `omnirank audit` and `omnirank fix` both
+    make genuine requests against it, so what the GIF shows is what the CLI
+    actually does against a real (if small) site.
+    """
+    port = _free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    with tempfile.TemporaryDirectory(prefix="omnirank-demo-site-") as tmp:
+        serve_dir = Path(tmp) / "site"
+        _materialise_site(serve_dir, base_url)
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
+            cwd=serve_dir, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        try:
+            _wait_ready(base_url, proc)
+            yield base_url
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
 
 # ---------------------------------------------------------------------------
@@ -88,8 +189,9 @@ def run_capture(args: list[str]) -> str:
         timeout=60,
         check=False,
     )
-    # audit exits 1 when fail-on gates are tripped; that's a legitimate,
-    # non-error outcome we still want to show, not a broken capture.
+    # audit exits 1 when fail-on gates are tripped, and fix exits 1 when it
+    # has a diff ready -- both are legitimate, non-error outcomes we still
+    # want to show, not a broken capture.
     if proc.returncode not in (0, 1):
         raise SystemExit(
             f"omnirank {' '.join(args)} failed unexpectedly "
@@ -100,52 +202,21 @@ def run_capture(args: list[str]) -> str:
     return proc.stdout.rstrip("\n")
 
 
-def truncate_audit_output(stdout: str, max_body_lines: int = MAX_AUDIT_BODY_LINES) -> list[str]:
-    """Trim the real audit output to ~max_body_lines, if needed.
-
-    Findings are rendered as 3-line blocks ([FAIL]/[WARN] marker, observed,
-    fix). We keep as many whole blocks as fit the budget and append a
-    "... N more findings" line where N is computed from the ACTUAL number of
-    finding blocks in the captured output, never a hardcoded guess.
+def cap_output_lines(lines: list[str], max_lines: int) -> list[str]:
+    """Hard-cap real output so an unexpectedly large capture can never blow
+    the frame budget. Never exercised by the committed fixture (see
+    MAX_AUDIT_BODY_LINES / MAX_FIX_BODY_LINES above) -- a deliberately dumb,
+    always-correct fallback rather than a block-aware truncator. The grouped
+    summary's ERRORS/WARNINGS sections make a block-aware slice ambiguous
+    (a kept warning block with its "WARNINGS" header sliced away reads as a
+    rendering bug), and the CLI's own `--top` flag is the right tool for
+    trimming that on purpose.
     """
-    lines = stdout.splitlines()
-
-    blocks: list[list[str]] = []
-    i = 0
-    while i < len(lines):
-        if FINDING_MARK_RE.search(lines[i]) and i + 2 < len(lines):
-            blocks.append(lines[i : i + 3])
-            i += 3
-        else:
-            blocks.append([lines[i]])
-            i += 1
-
-    if sum(len(b) for b in blocks) <= max_body_lines:
+    if len(lines) <= max_lines:
         return lines
-
-    finding_idxs = [n for n, b in enumerate(blocks) if len(b) == 3]
-    if not finding_idxs:
-        return lines[:max_body_lines]
-
-    header = blocks[: finding_idxs[0]]
-    trailer = blocks[finding_idxs[-1] + 1 :]
-
-    fixed = sum(len(b) for b in header) + sum(len(b) for b in trailer) + 1  # +1: "more" line
-    budget = max(0, max_body_lines - fixed)
-    keep_n = min(len(finding_idxs), max(1, budget // 3))
-    more_count = len(finding_idxs) - keep_n
-
-    out: list[str] = []
-    for b in header:
-        out.extend(b)
-    for idx in finding_idxs[:keep_n]:
-        out.extend(blocks[idx])
-    if more_count > 0:
-        noun = "finding" if more_count == 1 else "findings"
-        out.append(f"  … {more_count} more {noun}")
-    for b in trailer:
-        out.extend(b)
-    return out
+    keep = max_lines - 1
+    hidden = len(lines) - keep
+    return [*lines[:keep], f"  … {hidden} more line(s) omitted from the demo"]
 
 
 # ---------------------------------------------------------------------------
@@ -164,37 +235,83 @@ class Session:
     items: list[tuple[str, list[str] | str]] = field(default_factory=list)
 
 
-def colour_for(line: str) -> tuple[int, int, int]:
-    if "[FAIL]" in line:
-        return RED
-    if "[WARN]" in line:
-        return AMBER
-    if OVERALL_RE.search(line):
-        return CYAN
-    stripped = line.strip()
-    if stripped.startswith("observed:"):
-        return GREY
-    if stripped.startswith("fix:"):
-        return GREEN
-    return FG_DEFAULT
+class ColourTracker:
+    """Assigns each real output line a colour, tracking ERRORS/WARNINGS state.
+
+    The grouped summary (v0.2.1) no longer prints a literal [FAIL]/[WARN] tag
+    per line the way the pre-grouping output did -- severity is instead
+    conveyed by an "  ERRORS" / "  WARNINGS" section header followed by
+    "[Nx] id" group lines. This tracks which section is currently open so
+    those group lines still land on the right colour. `fix`'s NOT FIXED
+    section reuses the identical "[Nx] ..." shape for its skip-reason groups;
+    treating "NOT FIXED" as its own section (amber, like a warning) is a
+    deliberate choice, not an oversight -- a declined mechanical fix is a
+    heads-up, not a passing result.
+
+    Diff lines (unified_diff() output) are a special case handled first and
+    unconditionally: they are emitted with NO leading indentation, whereas
+    every summary line in this CLI's output is indented by at least two
+    spaces, so a raw `+`/`-`/`@@` prefix at column 0 can never collide with
+    summary text.
+    """
+
+    def __init__(self) -> None:
+        self.section: str | None = None
+
+    def reset(self) -> None:
+        self.section = None
+
+    def colour(self, line: str) -> tuple[int, int, int]:
+        if line.startswith("@@"):
+            return CYAN
+        if line.startswith("+"):
+            return GREEN
+        if line.startswith("-"):
+            return RED
+
+        stripped = line.strip()
+        if stripped == "ERRORS":
+            self.section = "error"
+            return RED
+        if stripped == "WARNINGS":
+            self.section = "warning"
+            return AMBER
+        if stripped.startswith("NOT FIXED"):
+            self.section = "warning"
+            return AMBER
+        if GROUP_LINE_RE.match(line):
+            return {"error": RED, "warning": AMBER}.get(self.section, FG_DEFAULT)
+        if OVERALL_RE.search(line):
+            return CYAN
+        if stripped.startswith("fix:"):
+            return GREEN
+        if stripped.startswith(("e.g.", "observed:")):
+            return GREY
+        return FG_DEFAULT
 
 
-def build_session() -> Session:
-    audit_stdout = run_capture(AUDIT_ARGS)
-    geo_stdout = run_capture(GEO_ARGS)
+def _clip(line: str, limit: int = MAX_LINE_CHARS) -> str:
+    return line if len(line) <= limit else line[: limit - 1] + "…"
 
-    audit_lines = truncate_audit_output(audit_stdout)
-    geo_lines = geo_stdout.splitlines()
 
-    audit_cmd = f".venv/bin/python -m omnirank.cli {' '.join(AUDIT_ARGS)}"
-    geo_cmd = f".venv/bin/python -m omnirank.cli {' '.join(GEO_ARGS)}"
+def build_session(base_url: str) -> Session:
+    audit_args = ["audit", base_url, "--out", DEMO_AUDIT_OUT]
+    fix_args = ["fix", base_url, "--root", FIX_ROOT_ARG]
+
+    audit_lines = cap_output_lines(
+        run_capture(audit_args).splitlines(), MAX_AUDIT_BODY_LINES)
+    fix_lines = cap_output_lines(
+        run_capture(fix_args).splitlines(), MAX_FIX_BODY_LINES)
+
+    audit_cmd = f".venv/bin/python -m omnirank.cli {' '.join(audit_args)}"
+    fix_cmd = f".venv/bin/python -m omnirank.cli {' '.join(fix_args)}"
 
     session = Session()
     session.items.append(("cmd", audit_cmd))
     session.items.append(("output", audit_lines))
     session.items.append(("output", [""]))
-    session.items.append(("cmd", geo_cmd))
-    session.items.append(("output", geo_lines))
+    session.items.append(("cmd", fix_cmd))
+    session.items.append(("output", fix_lines))
     return session
 
 
@@ -215,6 +332,7 @@ FINAL_HOLD_MS = 2500
 def session_frames(session: Session) -> list[tuple[list[Line], int]]:
     frames: list[tuple[list[Line], int]] = []
     committed: list[Line] = []
+    tracker = ColourTracker()
 
     for kind, payload in session.items:
         if kind == "cmd":
@@ -227,8 +345,9 @@ def session_frames(session: Session) -> list[tuple[list[Line], int]]:
                 frames.append((committed + [held], PAUSE_FRAME_MS))
             committed = committed + [Line(text, is_command=True, cursor=False)]
         elif kind == "output":
+            tracker.reset()
             for raw_line in payload:  # type: ignore[union-attr]
-                committed = committed + [Line(raw_line, colour_for(raw_line))]
+                committed = committed + [Line(_clip(raw_line), tracker.colour(raw_line))]
                 frames.append((committed, OUTPUT_FRAME_MS))
         else:  # pragma: no cover - defensive
             raise ValueError(f"unknown session item kind: {kind}")
@@ -330,7 +449,8 @@ def _build_palette_source(reference_frame: Image.Image) -> Image.Image:
 
 def build_gif() -> tuple[int, int, int, int]:
     """Render the GIF. Returns (width, height, frame_count, byte_size)."""
-    session = build_session()
+    with fixture_server() as base_url:
+        session = build_session(base_url)
 
     canvas_w = CANVAS_W
     canvas_h = TITLEBAR_H + PAD_TOP + total_rows(session) * LINE_HEIGHT + PAD_BOTTOM
@@ -359,7 +479,9 @@ def build_gif() -> tuple[int, int, int, int]:
     # No `disposal` override: every frame is additive (drawn on top of the
     # previous one, nothing is ever erased mid-session), so Pillow's
     # optimize path can bbox-crop each frame to just the changed region
-    # instead of re-encoding the whole 1120x613 canvas every time.
+    # instead of re-encoding the whole canvas every time. `disposal=2`
+    # (restore-to-background) defeats that frame-diffing entirely and used
+    # to bloat this file to 7MB -- do not reintroduce it.
     p_frames[0].save(
         OUT_GIF,
         format="GIF",
@@ -371,7 +493,14 @@ def build_gif() -> tuple[int, int, int, int]:
     )
 
     size = OUT_GIF.stat().st_size
-    return final_w, final_h, len(p_frames), size
+    # Pillow's `optimize=True` can coalesce consecutive frames whose pixels
+    # come out identical post-quantization (folding the dropped frame's
+    # duration into the one before it), so the frame count actually stored
+    # on disk can be a little lower than `len(p_frames)`. Re-reading the
+    # saved file is what makes this number honest.
+    with Image.open(OUT_GIF) as saved:
+        frame_count = getattr(saved, "n_frames", 1)
+    return final_w, final_h, frame_count, size
 
 
 def main() -> int:
