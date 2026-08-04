@@ -126,68 +126,101 @@ def _referrer_policy(page: PageData) -> list[Finding]:
                "which policy value you should choose.")]
 
 
-# The subresource-bearing (element, attribute) pairs OmniRank reads. `link` is
-# filtered further by rel below: a <link rel="canonical" href="http://..."> is not
-# a subresource -- the browser never fetches it while rendering -- and reporting it
-# as mixed content would be a fabricated error on a judgement seo.canonical.*
-# already owns.
-_SUBRESOURCE_ATTRS: tuple[tuple[str, str], ...] = (
-    ("script", "src"), ("link", "href"), ("img", "src"), ("iframe", "src"),
-)
+# The subresource-bearing (element, attribute) pairs OmniRank reads, split the way the
+# W3C Mixed Content spec splits them. `link` is filtered further by rel below: a
+# <link rel="canonical" href="http://..."> is not a subresource -- the browser never
+# fetches it while rendering -- and reporting it as mixed content would be a fabricated
+# error on a judgement seo.canonical.* already owns.
+#
+# BLOCKABLE ("active") content: browsers refuse to load this over http:// on an https
+# page at all -- the request never happens, so the page is measurably broken as served.
+_ACTIVE_ATTRS: tuple[tuple[str, str], ...] = (("script", "src"), ("iframe", "src"))
+_ACTIVE_LINK_RELS: frozenset[str] = frozenset({"stylesheet", "preload", "modulepreload"})
 
-# rel keywords that make a <link> an actual subresource fetch. Matched one token
-# at a time through html.has_rel, so rel="shortcut icon" matches "icon".
-_SUBRESOURCE_LINK_RELS: frozenset[str] = frozenset({
-    "stylesheet", "preload", "modulepreload", "prefetch", "icon",
-    "apple-touch-icon", "manifest",
+# OPTIONALLY-BLOCKABLE ("passive") content: browsers silently rewrite the request to
+# https:// before fetching it (Chrome/Firefox both auto-upgrade images and favicons),
+# and only fail if no https:// version exists at that path -- something OmniRank
+# cannot observe from the HTML alone. Claiming these "are not loading for your
+# visitors at all" would be false for the common case where the upgrade succeeds.
+_PASSIVE_ATTRS: tuple[tuple[str, str], ...] = (("img", "src"),)
+_PASSIVE_LINK_RELS: frozenset[str] = frozenset({
+    "prefetch", "icon", "apple-touch-icon", "manifest",
 })
 
 
-def _mixed_content(page: PageData) -> list[Finding]:
-    """http:// subresources declared by an https page.
+def _insecure(bucket: list[str], tag_name: str, attr: str, tag) -> None:
+    value = (tag.get(attr) or "").strip()
+    if value.lower().startswith("http://"):
+        bucket.append(f"<{tag_name} {attr}={value}>")
 
-    An error, unlike the four header gates: browsers BLOCK mixed active content,
-    so the page is measurably broken as served rather than merely unhardened.
 
-    Suppressed when the page's CSP carries `upgrade-insecure-requests`, which makes
-    the browser rewrite these to https before requesting them -- reporting them
-    then would be a false positive, and it is the one thing SS4 of the gap analysis
-    says to parse CSP for.
+def _insecure_subresources(page: PageData) -> tuple[list[str], list[str]]:
+    """(active, passive) http:// subresource descriptions on an https:// page.
 
     Only literal `http://` values count. A protocol-relative `//host/path` inherits
     the page's own scheme and is therefore https here.
+    """
+    soup = page.soup()
+    active: list[str] = []
+    passive: list[str] = []
+
+    for tag_name, attr in _ACTIVE_ATTRS:
+        for tag in soup.find_all(tag_name):
+            _insecure(active, tag_name, attr, tag)
+    for tag_name, attr in _PASSIVE_ATTRS:
+        for tag in soup.find_all(tag_name):
+            _insecure(passive, tag_name, attr, tag)
+    for tag in soup.find_all("link"):
+        if any(has_rel(tag, rel) for rel in _ACTIVE_LINK_RELS):
+            _insecure(active, "link", "href", tag)
+        elif any(has_rel(tag, rel) for rel in _PASSIVE_LINK_RELS):
+            _insecure(passive, "link", "href", tag)
+
+    return active, passive
+
+
+def _shown(items: list[str]) -> str:
+    # Up to 5 examples -- a longer real-world list still truncates for readability.
+    return ", ".join(items[:5]) + ("…" if len(items) > 5 else "")
+
+
+def _mixed_content(page: PageData) -> list[Finding]:
+    """http:// subresources declared by an https page, split by whether browsers
+    block the request outright (active) or silently upgrade it first (passive).
+
+    Suppressed entirely when the page's CSP carries `upgrade-insecure-requests`,
+    which makes the browser rewrite ALL of these to https before requesting them --
+    reporting either then would be a false positive, and it is the one thing SS4 of
+    the gap analysis says to parse CSP for.
     """
     if not _is_https(page.url):
         return []
     if "upgrade-insecure-requests" in csp_value(page):
         return []
 
-    soup = page.soup()
-    insecure: list[str] = []
-    for tag_name, attr in _SUBRESOURCE_ATTRS:
-        for tag in soup.find_all(tag_name):
-            if tag_name == "link" and not any(
-                    has_rel(tag, rel) for rel in _SUBRESOURCE_LINK_RELS):
-                continue
-            value = (tag.get(attr) or "").strip()
-            if value.lower().startswith("http://"):
-                insecure.append(f"<{tag_name} {attr}={value}>")
-
-    if not insecure:
-        return []
-    # Show up to 5 examples -- enough to cover every subresource TYPE this module
-    # recognises (script, link, img, iframe) on a page that mixes all of them, so
-    # the finding text never silently drops a whole category of offender behind
-    # the ellipsis; a longer real-world list still truncates for readability.
-    shown = ", ".join(insecure[:5]) + ("…" if len(insecure) > 5 else "")
-    return [_f("security.mixed-content.subresource", "mixed-content", page.url,
-               "error",
-               f"{len(insecure)} http:// subresources on an https page ({shown})",
-               "every subresource requested over https",
-               "Serve these over https, or add upgrade-insecure-requests to the "
-               "page's Content-Security-Policy. Browsers block mixed active content "
-               "outright, so these resources are not loading for your visitors at "
-               "all -- this is a rendering failure, not a hardening suggestion.")]
+    active, passive = _insecure_subresources(page)
+    findings: list[Finding] = []
+    if active:
+        findings.append(_f(
+            "security.mixed-content.subresource", "mixed-content", page.url, "error",
+            f"{len(active)} http:// subresources on an https page ({_shown(active)})",
+            "every subresource requested over https",
+            "Serve these over https, or add upgrade-insecure-requests to the page's "
+            "Content-Security-Policy. Browsers block mixed active content outright, "
+            "so these resources are not loading for your visitors at all -- this is "
+            "a rendering failure, not a hardening suggestion."))
+    if passive:
+        findings.append(_f(
+            "security.mixed-content.passive-subresource", "mixed-content", page.url,
+            "warning",
+            f"{len(passive)} http:// subresources on an https page ({_shown(passive)})",
+            "every subresource requested over https",
+            "Serve these over https, or add upgrade-insecure-requests to the page's "
+            "Content-Security-Policy. Browsers rewrite these requests to https "
+            "before fetching them, so they usually still load -- but the rewrite "
+            "fails silently if no https version exists at that path, which OmniRank "
+            "cannot verify from the HTML alone."))
+    return findings
 
 
 def check_https_redirect(client: httpx.Client,

@@ -111,20 +111,43 @@ MIXED = ("<!doctype html><html lang='en'><head>"
          "</body></html>")
 
 
-def test_http_subresources_on_an_https_page_are_an_error():
+def test_active_http_subresources_on_an_https_page_are_an_error():
+    # S4: script, stylesheet and iframe are BLOCKABLE ("active") content -- browsers
+    # refuse to load them over http:// at all -- so they carry the id that says the
+    # resource is not loading. `img` is passive and is reported separately below.
     found = [f for f in security.run_page(page(html=MIXED))
              if f.id == "security.mixed-content.subresource"]
     assert len(found) == 1, "one finding per page, not one per subresource"
     assert found[0].severity == "error", "browsers block this; the page is broken"
     assert found[0].gate == "mixed-content"
-    assert "4" in found[0].observed
-    for fragment in ("script", "link", "img", "iframe"):
+    assert "3" in found[0].observed
+    for fragment in ("script", "link", "iframe"):
         assert fragment in found[0].observed, fragment
+    assert "img" not in found[0].observed
+
+
+def test_passive_http_subresources_on_an_https_page_are_a_warning():
+    # S4: `img` is OPTIONALLY-BLOCKABLE ("passive") content -- browsers rewrite the
+    # request to https before fetching it rather than blocking it outright -- so it
+    # is reported separately, at a lower severity, without claiming it failed to
+    # load (which OmniRank cannot observe from the HTML alone).
+    found = [f for f in security.run_page(page(html=MIXED))
+             if f.id == "security.mixed-content.passive-subresource"]
+    assert len(found) == 1
+    assert found[0].severity == "warning", (
+        "browsers auto-upgrade this; it is not a confirmed rendering failure")
+    assert found[0].gate == "mixed-content"
+    assert "1" in found[0].observed
+    assert "img" in found[0].observed
+    assert "not loading for your visitors at all" not in found[0].fix, (
+        "OmniRank did not observe a load failure for auto-upgraded passive content"
+    )
 
 
 def test_mixed_content_is_not_reported_on_a_plain_http_page():
     found = security.run_page(page(html=MIXED, url="http://x.example/"))
     assert "security.mixed-content.subresource" not in ids(found)
+    assert "security.mixed-content.passive-subresource" not in ids(found)
 
 
 def test_upgrade_insecure_requests_suppresses_mixed_content():
@@ -133,6 +156,7 @@ def test_upgrade_insecure_requests_suppresses_mixed_content():
     found = security.run_page(page(headers=headers, html=MIXED))
     assert "security.mixed-content.subresource" not in ids(found), (
         "the browser rewrites these to https before requesting them")
+    assert "security.mixed-content.passive-subresource" not in ids(found)
 
 
 def test_a_non_subresource_http_link_is_not_mixed_content():
@@ -144,7 +168,9 @@ def test_a_non_subresource_http_link_is_not_mixed_content():
             "<link rel='alternate' hreflang='fr' href='http://x.example/fr'>"
             "<a href='http://x.example/other'>x</a>"
             "</head><body></body></html>")
-    assert "security.mixed-content.subresource" not in ids(security.run_page(page(html=html)))
+    found = security.run_page(page(html=html))
+    assert "security.mixed-content.subresource" not in ids(found)
+    assert "security.mixed-content.passive-subresource" not in ids(found)
 
 
 def test_protocol_relative_subresources_are_not_mixed_content():
@@ -152,6 +178,18 @@ def test_protocol_relative_subresources_are_not_mixed_content():
     html = ("<!doctype html><html lang='en'><head>"
             "<script src='//cdn.example/a.js'></script></head><body></body></html>")
     assert "security.mixed-content.subresource" not in ids(security.run_page(page(html=html)))
+
+
+def test_only_passive_subresources_produce_no_active_finding():
+    html = ("<!doctype html><html lang='en'><head>"
+            "<link rel='icon' href='http://cdn.example/favicon.ico'>"
+            "</head><body><img src='http://cdn.example/a.png'></body></html>")
+    found = security.run_page(page(html=html))
+    assert "security.mixed-content.subresource" not in ids(found)
+    passive = [f for f in found if f.id == "security.mixed-content.passive-subresource"]
+    assert len(passive) == 1
+    assert "2" in passive[0].observed
+    assert "icon" in passive[0].observed and "img" in passive[0].observed
 
 
 @respx.mock

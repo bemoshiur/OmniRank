@@ -152,6 +152,12 @@ _ENTRIES: tuple[RegisteredFinding, ...] = (
     # asset is a per-INSTANCE question, and applicability.py is where that demotes.
     _r("security.mixed-content.subresource", "templated", "error", "security",
        "mixed-content"),
+    # `warning`, not `error`: browsers auto-upgrade a passive subresource (img,
+    # icon-family link) to https before fetching it rather than blocking it, so
+    # OmniRank cannot claim the resource failed to load -- only that it asked for
+    # http:// (S4, final v0.4.0 review).
+    _r("security.mixed-content.passive-subresource", "templated", "warning",
+       "security", "mixed-content"),
     # `infrastructure`: no source edit produces an origin-level redirect.
     _r("security.https-redirect.missing", "infrastructure", "error", "security",
        "https-redirect"),
