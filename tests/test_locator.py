@@ -193,3 +193,131 @@ def test_not_located_is_the_default_location():
     assert NOT_LOCATED.path is None
     assert NOT_LOCATED.line is None
     assert NOT_LOCATED.confidence == "none"
+
+
+from omnirank.locator import blast_radius   # noqa: E402  (grouped with the suite above)
+
+STATIC = Detection("static", "medium", ("index.html",))
+JEKYLL = Detection("jekyll", "high", ("_config.yml", "_layouts"))
+HUGO = Detection("hugo", "high", ("hugo.toml",))
+
+PAGE_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <title>Home</title>
+  </head>
+  <body><h1>Home</h1></body>
+</html>
+"""
+
+
+def files(tmp_path: Path, tree: dict[str, str]) -> Path:
+    for relative, body in tree.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+    return tmp_path
+
+
+def test_static_root_resolves_to_index_html(tmp_path):
+    root = files(tmp_path, {"index.html": PAGE_HTML})
+    found = locate("https://x.example/", detection=STATIC, root=root)
+    assert found.path == "index.html"
+    assert found.confidence == "inferred", "medium detection caps at inferred"
+    assert found.line == 3, "the <head> line"
+
+
+def test_static_nested_directory_index(tmp_path):
+    root = files(tmp_path, {"pricing/index.html": PAGE_HTML})
+    assert locate("https://x.example/pricing", detection=STATIC,
+                  root=root).path == "pricing/index.html"
+
+
+def test_static_flat_html_file(tmp_path):
+    root = files(tmp_path, {"pricing.html": PAGE_HTML})
+    assert locate("https://x.example/pricing/", detection=STATIC,
+                  root=root).path == "pricing.html"
+
+
+def test_static_inside_a_build_directory(tmp_path):
+    root = files(tmp_path, {"public/about/index.html": PAGE_HTML})
+    assert locate("https://x.example/about", detection=STATIC,
+                  root=root).path == "public/about/index.html"
+
+
+def test_two_static_candidates_are_an_ambiguity_not_a_choice(tmp_path):
+    root = files(tmp_path, {"pricing.html": PAGE_HTML,
+                            "pricing/index.html": PAGE_HTML})
+    assert locate("https://x.example/pricing", detection=STATIC,
+                  root=root) == NOT_LOCATED
+
+
+def test_static_with_no_candidate_is_not_located(tmp_path):
+    root = files(tmp_path, {"index.html": PAGE_HTML})
+    assert locate("https://x.example/nowhere", detection=STATIC,
+                  root=root) == NOT_LOCATED
+
+
+def test_jekyll_resolves_to_the_source_page_not_the_built_site(tmp_path):
+    root = files(tmp_path, {"pricing.md": "---\nlayout: page\n---\n# Pricing\n",
+                            "_site/pricing/index.html": PAGE_HTML})
+    found = locate("https://x.example/pricing", detection=JEKYLL, root=root)
+    assert found.path == "pricing.md"
+    assert found.line is None, "Markdown has no <head>"
+    assert found.confidence == "exact"
+
+
+def test_jekyll_root(tmp_path):
+    root = files(tmp_path, {"index.html": PAGE_HTML})
+    found = locate("https://x.example/", detection=JEKYLL, root=root)
+    assert found.path == "index.html"
+    assert found.line == 3
+
+
+def test_hugo_resolves_into_content(tmp_path):
+    root = files(tmp_path, {"content/pricing.md": "---\ntitle: Pricing\n---\n"})
+    assert locate("https://x.example/pricing", detection=HUGO,
+                  root=root).path == "content/pricing.md"
+
+
+def test_hugo_root_is_the_index_bundle(tmp_path):
+    root = files(tmp_path, {"content/_index.md": "---\ntitle: Home\n---\n"})
+    assert locate("https://x.example/", detection=HUGO,
+                  root=root).path == "content/_index.md"
+
+
+def test_hugo_page_bundle(tmp_path):
+    root = files(tmp_path, {"content/pricing/index.md": "---\ntitle: P\n---\n"})
+    assert locate("https://x.example/pricing", detection=HUGO,
+                  root=root).path == "content/pricing/index.md"
+
+
+def test_blast_radius_is_one_for_a_single_page_file(tmp_path):
+    root = files(tmp_path, {"index.html": PAGE_HTML})
+    found = locate("https://x.example/", detection=STATIC, root=root)
+    assert blast_radius(found, detection=STATIC, root=root) == 1
+
+
+def test_blast_radius_is_one_for_a_static_next_route(tmp_path):
+    root = app(tmp_path, {"pricing/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/pricing", detection=NEXT, root=root)
+    assert blast_radius(found, detection=NEXT, root=root) == 1
+
+
+def test_blast_radius_is_unknown_for_a_dynamic_next_route(tmp_path):
+    # A [slug] page serves an unknown number of routes. "Unknown" must never be
+    # optimistically read as "one" -- that is how a literal canonical lands in a
+    # file serving 10,000 routes.
+    root = app(tmp_path, {"blog/[slug]/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/blog/hello", detection=NEXT, root=root)
+    assert blast_radius(found, detection=NEXT, root=root) is None
+
+
+def test_blast_radius_is_unknown_for_an_unlocated_finding(tmp_path):
+    assert blast_radius(NOT_LOCATED, detection=NEXT, root=tmp_path) is None
+
+
+def test_blast_radius_is_unknown_for_an_unimplemented_framework(tmp_path):
+    astro = Detection("astro", "high", ("astro.config.mjs",))
+    located = Location(path="src/pages/index.astro", line=None, confidence="exact")
+    assert blast_radius(located, detection=astro, root=tmp_path) is None
