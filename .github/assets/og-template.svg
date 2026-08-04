@@ -61,7 +61,7 @@
 
   <text x="64" y="186" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="30" font-weight="600" fill="url(#accent)">One page. Every engine.</text>
 
-  <text x="64" y="222" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="19" fill="#93A1BE">Audit any site. Generate llms.txt + facts.json.</text>
+  <text x="64" y="222" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="19" fill="#93A1BE">Audit any site. Find the file. Show the diff.</text>
 
   <!-- the page: one document, four layers -->
   <rect x="58" y="252" width="296" height="332" rx="26" fill="#F472B6" opacity="0.10" filter="url(#blurCard)"/>
