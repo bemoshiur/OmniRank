@@ -37,9 +37,12 @@ it ships and gets proven before anything gains write access.
   `unknown` is a first-class outcome: a bespoke project is the common case and a
   confident wrong answer is worse than an admitted absence.
 - `scripts/py/omnirank/locator.py` — resolves a finding's URL to `{path, line,
-  confidence}`. `next-app-router` is implemented properly: route groups `(marketing)`,
-  parallel slots `@modal`, private folders `_components`, `[slug]`, `[...slug]` and
-  `[[...slug]]`, and the line of the `metadata` export. A page exporting
+  confidence}`. `next-app-router` is implemented properly: route groups `(marketing)`
+  are non-routing and dropped from the match; private folders `_components` and
+  parallel-route slots `@modal` both disqualify the path they prefix from route
+  candidacy entirely — a page nested under either is served by no URL at all, not
+  merely reachable at a shorter one. `[slug]`, `[...slug]` and `[[...slug]]` are
+  handled too, along with the line of the `metadata` export. A page exporting
   `generateMetadata` instead is named but refused — the value is computed at request
   time and this tool does not rewrite function bodies. `static`, `jekyll` and `hugo`
   resolve by path convention, to source pages rather than to built output a rebuild

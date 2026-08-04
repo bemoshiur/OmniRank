@@ -75,14 +75,17 @@ def test_route_groups_do_not_appear_in_the_url(tmp_path):
     assert found.confidence == "exact"
 
 
-def test_parallel_slots_are_not_route_segments(tmp_path):
-    # `_components/page.tsx` is a decoy here: it must not interfere with the
-    # `@modal` match. It is not itself routable -- see the private-folder
-    # tests below for that behaviour.
-    root = app(tmp_path, {"@modal/settings/page.tsx": METADATA_PAGE,
-                          "_components/page.tsx": BARE_PAGE})
-    found = locate("https://x.example/settings", detection=NEXT, root=root)
-    assert found.path == "app/@modal/settings/page.tsx"
+def test_a_slot_only_route_is_not_located(tmp_path):
+    # B5 / false positive: `app/dashboard/@analytics/page.tsx` with no sibling
+    # `app/dashboard/page.tsx` used to resolve `/dashboard` to the slot file at
+    # `exact` confidence. Per Next's own docs, the `children` prop is an
+    # implicit slot -- `app/page.js` is equivalent to `app/@children/page.js`
+    # -- and a slot with no matching sibling `page` renders `default.js` or
+    # 404s. A real deployment 404s on `/dashboard` here; the locator must
+    # agree, not confidently report the slot file.
+    root = app(tmp_path, {"dashboard/@analytics/page.tsx": METADATA_PAGE})
+    assert locate("https://x.example/dashboard", detection=NEXT,
+                  root=root) == NOT_LOCATED
 
 
 def test_a_private_folder_is_not_a_route_at_all(tmp_path):
@@ -113,11 +116,29 @@ def test_a_private_folder_removes_everything_nested_beneath_it(tmp_path):
     assert found == NOT_LOCATED
 
 
-def test_parallel_route_slots_still_resolve_after_the_private_folder_fix(tmp_path):
-    root = app(tmp_path, {"@modal/login/page.tsx": METADATA_PAGE})
-    found = locate("https://x.example/login", detection=NEXT, root=root)
-    assert found.path == "app/@modal/login/page.tsx"
+def test_the_un_prefixed_sibling_of_a_slot_resolves_the_route(tmp_path):
+    # B5 / false negative: Next's own `nextgram` example shape -- a root
+    # `app/page.tsx` alongside a parallel `app/@auth/page.tsx` slot. The
+    # `@auth` folder is invisible to the child path structure it wraps, not a
+    # segment to strip and match through; `/` is served by `app/page.tsx`
+    # (the implicit `children` slot), and `app/@auth/page.tsx` is not itself a
+    # route at all. The old code stripped `@auth` and matched it AS `/`,
+    # which is two equally "specific" matches for the same route -> NOT_LOCATED,
+    # making the homepage of the canonical example unlocatable.
+    root = app(tmp_path, {"page.tsx": METADATA_PAGE,
+                          "@auth/page.tsx": METADATA_PAGE})
+    found = locate("https://x.example/", detection=NEXT, root=root)
+    assert found.path == "app/page.tsx"
     assert found.confidence == "exact"
+
+
+def test_a_slot_folder_removes_everything_nested_beneath_it(tmp_path):
+    # Same "whole subtree, not just this segment" shape as the `_private`
+    # regression above, for `@`: a page nested under a slot is not reachable
+    # by stripping just the `@name` segment and matching what's left.
+    root = app(tmp_path, {"@modal/settings/edit/page.tsx": METADATA_PAGE})
+    assert locate("https://x.example/settings/edit", detection=NEXT,
+                  root=root) == NOT_LOCATED
 
 
 def test_route_groups_still_resolve_after_the_private_folder_fix(tmp_path):
