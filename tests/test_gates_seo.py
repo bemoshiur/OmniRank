@@ -95,3 +95,46 @@ def test_image_without_dimensions_is_a_warning():
                            '<img src="/a.png" alt="Campaign dashboard">')
     found = [f for f in seo.run(html, URL) if f.id == "seo.image.no-dims"]
     assert found and found[0].gate == "image-dims"
+
+
+# --- v0.2.1: HTML attribute VALUES are case-insensitive per spec; a differently-
+# cased but perfectly valid attribute must never be reported as missing. Each pair
+# below reproduces one confirmed false positive, then a companion proving the gate
+# still fires when the thing really is absent -- so the suite can tell "fixed" from
+# "gate silently disabled" apart. ---
+
+def test_uppercase_meta_description_name_is_not_flagged_missing():
+    html = clean().replace('<meta name="description"', '<meta name="Description"')
+    assert "seo.description.missing" not in ids(seo.run(html, URL))
+
+
+def test_meta_description_genuinely_absent_is_still_flagged():
+    html = clean().replace(
+        '<meta name="description" content="Public Pulse runs compliant political '
+        'Facebook campaigns across Bangladesh with transparent BDT reporting and '
+        'verified audience targeting.">', "")
+    found = [f for f in seo.run(html, URL) if f.id == "seo.description.missing"]
+    assert found and found[0].severity == "error"
+
+
+def test_uppercase_canonical_rel_is_not_flagged_missing():
+    html = clean().replace('<link rel="canonical"', '<link rel="Canonical"')
+    assert "seo.canonical.missing" not in ids(seo.run(html, URL))
+
+
+def test_canonical_genuinely_absent_is_still_flagged():
+    html = clean().replace(
+        '<link rel="canonical" href="https://x.example/services/political-ads">', "")
+    assert "seo.canonical.missing" in ids(seo.run(html, URL))
+
+
+def test_uppercase_x_default_hreflang_is_not_flagged():
+    html = clean().replace('hreflang="x-default"', 'hreflang="X-Default"')
+    assert "seo.hreflang.no-x-default" not in ids(seo.run(html, URL))
+
+
+def test_hreflang_without_any_x_default_is_still_flagged():
+    html = clean().replace(
+        '<link rel="alternate" hreflang="x-default" '
+        'href="https://x.example/services/political-ads">', "")
+    assert "seo.hreflang.no-x-default" in ids(seo.run(html, URL))

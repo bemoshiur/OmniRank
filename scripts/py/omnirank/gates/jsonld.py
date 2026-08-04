@@ -4,6 +4,7 @@ import json
 
 from bs4 import BeautifulSoup
 
+from ..html import find_ldjson_scripts
 from ..report import Finding
 
 
@@ -14,9 +15,13 @@ def _f(id_: str, gate: str, url: str, severity: str, observed: str,
 
 
 def _raw_scripts(html: str) -> list[str]:
+    # type="application/LD+JSON" and type="application/ld+json; charset=utf-8" are
+    # both valid JSON-LD script tags -- MIME type tokens are case-insensitive and a
+    # trailing ;charset parameter is not part of the type. find_ldjson_scripts
+    # normalises both before matching; a literal attrs={"type": "application/ld+json"}
+    # search would silently miss both and report the page as having no JSON-LD at all.
     soup = BeautifulSoup(html, "lxml")
-    return [s.string or "" for s in
-            soup.find_all("script", attrs={"type": "application/ld+json"})]
+    return [s.string or "" for s in find_ldjson_scripts(soup)]
 
 
 def extract_blocks(html: str) -> list[dict]:

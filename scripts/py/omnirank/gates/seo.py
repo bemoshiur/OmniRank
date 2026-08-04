@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from bs4 import BeautifulSoup
 
+from ..html import find_all_rel, find_meta, find_rel
 from ..report import Finding
 
 MAX_TITLE = 60
@@ -27,7 +28,10 @@ def _h1(soup: BeautifulSoup, url: str) -> list[Finding]:
 
 
 def _canonical(soup: BeautifulSoup, url: str) -> list[Finding]:
-    tag = soup.find("link", rel="canonical")
+    # rel="Canonical" is exactly as valid as rel="canonical" per the HTML spec --
+    # bs4's own rel=kwarg matching is case-sensitive, so this goes through the
+    # shared, case-insensitive helper instead of soup.find("link", rel="canonical").
+    tag = find_rel(soup, "link", "canonical")
     if not tag or not tag.get("href"):
         return [_f("seo.canonical.missing", "canonical", url, "error",
                    "no rel=canonical", "one absolute self-referencing canonical",
@@ -55,7 +59,9 @@ def _title(soup: BeautifulSoup, url: str) -> list[Finding]:
 
 
 def _description(soup: BeautifulSoup, url: str) -> list[Finding]:
-    tag = soup.find("meta", attrs={"name": "description"})
+    # <meta name="Description"> is exactly as valid as name="description" -- meta
+    # name tokens are case-insensitive, so this must not be a literal string match.
+    tag = find_meta(soup, "description")
     text = (tag.get("content") or "").strip() if tag else ""
     if not text:
         return [_f("seo.description.missing", "description-length", url, "error",
@@ -82,10 +88,12 @@ def _og(soup: BeautifulSoup, url: str) -> list[Finding]:
 
 
 def _hreflang(soup: BeautifulSoup, url: str) -> list[Finding]:
-    tags = soup.find_all("link", rel="alternate", hreflang=True)
+    tags = find_all_rel(soup, "link", "alternate", hreflang=True)
     if not tags:
         return []
-    if not any(t.get("hreflang") == "x-default" for t in tags):
+    # hreflang values are BCP-47 language tags, which compare case-insensitively --
+    # hreflang="X-Default" is exactly as valid as the lowercase form.
+    if not any((t.get("hreflang") or "").strip().lower() == "x-default" for t in tags):
         return [_f("seo.hreflang.no-x-default", "hreflang", url, "warning",
                    f"{len(tags)} hreflang tags, none x-default",
                    "an x-default alternate",

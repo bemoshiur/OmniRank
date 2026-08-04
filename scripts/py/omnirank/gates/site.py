@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from urllib.parse import urljoin
 
+from ..html import find_meta, has_rel
 from ..page import PageData
 from ..report import Finding
 
@@ -23,7 +24,7 @@ def _title_of(page: PageData) -> str:
 
 
 def _description_of(page: PageData) -> str:
-    tag = page.soup().find("meta", attrs={"name": "description"})
+    tag = find_meta(page.soup(), "description")
     return _normalise(tag.get("content") if tag else None)
 
 
@@ -118,24 +119,9 @@ def _noindex_in_sitemap(pages: list[PageData],
     return findings
 
 
-def _has_rel(tag, name: str) -> bool:
-    """True if `tag`'s rel attribute contains `name`, matched case-insensitively.
-
-    HTML rel keywords are case-insensitive (`rel="Canonical"` is exactly as valid
-    as `rel="canonical"`), and bs4 exposes `rel` as a list for <link>/<a> tags
-    since it is a space-separated token list per the HTML spec — this checks
-    membership in that list rather than string equality.
-    """
-    rel = tag.get("rel")
-    if rel is None:
-        return False
-    values = rel if isinstance(rel, list) else [rel]
-    return any(isinstance(v, str) and v.strip().lower() == name for v in values)
-
-
 def _canonical_target(page: PageData) -> str | None:
     for tag in page.soup().find_all("link", href=True):
-        if not _has_rel(tag, "canonical"):
+        if not has_rel(tag, "canonical"):
             continue
         href = tag["href"].strip()
         if href:
@@ -188,11 +174,11 @@ def _alternates(page: PageData) -> set[str]:
     page's own URL, so a relative href (`href="/en/"`) compares correctly against
     other crawled URLs instead of registering as a false non-reciprocal or a false
     "outside the crawled set". x-default is excluded — it is a fallback pointer,
-    not a language pair. rel is matched case-insensitively via `_has_rel`.
+    not a language pair. rel is matched case-insensitively via `has_rel`.
     """
     out: set[str] = set()
     for tag in page.soup().find_all("link", href=True):
-        if not _has_rel(tag, "alternate"):
+        if not has_rel(tag, "alternate"):
             continue
         lang = (tag.get("hreflang") or "").strip().lower()
         href = tag["href"].strip()
