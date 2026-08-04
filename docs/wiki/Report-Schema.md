@@ -44,9 +44,10 @@ Verified directly against `schemas/report.schema.json` and
 | `fix` | string | yes | A concrete, specific instruction for closing the gap |
 | `fixTier` | enum: `mechanical`, `templated`, `drafted`, `advisory`, `infrastructure` | **yes, as of v0.3.0** | The epistemic axis: what kind of information the correct edit requires. A static, derived property of `id` — see [[Fix-Tiers-and-Applicability]] |
 | `applicability` | enum: `safe`, `unsafe`, `display-only` | only when `omnirank fix` computed it | The safety axis, per finding-instance. **Absent from a plain `omnirank audit` file**, which does no locating |
-| `autoFixable` | boolean | **no — never emitted since v0.3.0** | Deprecated. Kept in the schema, and only in the schema, so files written before v0.3.0 still validate. Use `fixTier` |
+| `autoFixable` | boolean | **Never emitted since 0.3.0** | Deprecated. Kept in the schema, and only in the schema, so files written before v0.3.0 still validate. Use `fixTier` |
 
 `observed` and `expected` describe the current state; `fix` is the action to take.
+
 ## What is `notEvaluated`, and why was it added?
 
 **New in v0.2.1.** A top-level array of `{gate, reason, url|site}` recording a gate that
@@ -68,6 +69,7 @@ gates — `seo`, `aeo`, `perf` — are now recorded rather than silently skipped
 console prints a short "NOT EVALUATED" section so this is visible without opening the
 JSON. This closes the specific gap where an unreachable homepage could otherwise leave
 `aeo 100` in the score map, looking like a pass.
+
 ## The `<layer>.<gate>.<condition>` id convention
 
 A finding's `id` is three dot-separated, lowercase, hyphen-safe segments:
