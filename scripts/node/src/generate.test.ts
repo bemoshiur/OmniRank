@@ -15,21 +15,21 @@ import {
 const config: OmniRankConfig = {
   site: {
     name: "X Example",
-    legalName: "Public Pulse Agency",
+    legalName: "TICON System Limited",
     url: "https://x.example",
     entityType: "NewsMediaOrganization",
   },
   nap: { city: "Dhaka", country: "BD" },
   identifiers: { bin: "123456" },
   sameAs: { facebook: "https://facebook.com/x", linkedin: null, wikidata: null },
-  geo: { license: "CC-BY-4.0", attribution: "Public Pulse Agency" },
+  geo: { license: "CC-BY-4.0", attribution: "TICON System Limited" },
 };
 
 const pages: Page[] = [{
   url: "https://x.example/a",
   title: "Political Ads",
   description: "Campaigns in Bangladesh.",
-  answer: "Public Pulse runs political Facebook advertising in Bangladesh.",
+  answer: "TICON System Limited runs political Facebook advertising in Bangladesh.",
 }];
 
 describe("buildLlmsTxt", () => {
@@ -200,7 +200,7 @@ cfg = Config({
 })
 pages = [Page(url="https://x.example/a", title="Political Ads",
               description="Campaigns in Bangladesh.",
-              answer="Public Pulse runs political Facebook advertising in Bangladesh.")]
+              answer="TICON System Limited runs political Facebook advertising in Bangladesh.")]
 print(json.dumps({
     "llmsTxt": build_llms_txt(cfg, pages),
     "llmsFull": build_llms_full(cfg, pages),

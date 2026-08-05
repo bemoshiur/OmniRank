@@ -34,8 +34,8 @@ def test_topics_are_valid_slugs():
         assert re.fullmatch(r"[a-z0-9][a-z0-9-]{0,34}", topic), f"invalid topic: {topic}"
 
 
-def test_homepage_is_publicpulse():
-    assert "https://publicpulse.com.bd" in SCRIPT.read_text()
+def test_homepage_is_ticonsys():
+    assert "https://ticonsys.com" in SCRIPT.read_text()
 
 
 def test_script_documents_manual_steps():

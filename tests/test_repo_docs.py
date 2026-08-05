@@ -47,8 +47,8 @@ def test_readme_has_contact_section():
     body = (ROOT / "README.md").read_text()
     assert "## Contact" in body
     assert "S M Moshiur Rahman" in body
-    assert "moshiur@publicpulse.com.bd" in body
-    assert "https://wa.me/8801717714676" in body
+    assert "moshiur@ticonsys.com" in body
+    assert "https://www.linkedin.com/in/in-moshiur/" in body
 
 
 def test_citation_names_the_full_author_name():
@@ -61,7 +61,7 @@ def test_plugin_manifest_author_matches_citation():
     import json
     manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["author"]["name"] == "S M Moshiur Rahman"
-    assert manifest["author"]["email"] == "moshiur@publicpulse.com.bd"
+    assert manifest["author"]["email"] == "moshiur@ticonsys.com"
 
 
 def test_readme_links_the_skill_zip_download():
