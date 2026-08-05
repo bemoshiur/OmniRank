@@ -24,6 +24,6 @@ adapters and CI recipes.
 
 ## Commercial support
 
-OmniRank is built at [Public Pulse Agency](https://publicpulse.com.bd), Dhaka. For
-engagements, contact moshiur@publicpulse.com.bd or WhatsApp
-[+880 1717 714676](https://wa.me/8801717714676).
+OmniRank is built at [TICON System Limited](https://ticonsys.com), Dhaka. For
+engagements, contact moshiur@ticonsys.com or connect on
+[LinkedIn](https://www.linkedin.com/in/in-moshiur/).

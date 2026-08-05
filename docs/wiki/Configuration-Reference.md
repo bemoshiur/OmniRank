@@ -272,15 +272,15 @@ This is `templates/omnirank.config.example.json`, verified to pass schema valida
 {
   "$schema": "https://raw.githubusercontent.com/bemoshiur/OmniRank/main/schemas/omnirank.config.schema.json",
   "site": {
-    "name": "The Pulse Today",
-    "legalName": "Public Pulse Agency",
-    "url": "https://pulsetoday.com.bd",
-    "entityType": "NewsMediaOrganization",
+    "name": "TICON System Limited",
+    "legalName": "TICON System Limited",
+    "url": "https://ticonsys.com",
+    "entityType": "ProfessionalService",
     "locales": [{ "code": "bn-BD", "path": "/bn", "default": true }]
   },
   "geo": {
     "license": "CC-BY-4.0",
-    "attribution": "Public Pulse Agency",
+    "attribution": "TICON System Limited",
     "answerBlockSelector": ".answer-block"
   },
   "audit": {

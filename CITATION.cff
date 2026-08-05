@@ -5,12 +5,12 @@ type: software
 authors:
   - family-names: Rahman
     given-names: S M Moshiur
-    email: moshiur@publicpulse.com.bd
-    affiliation: Public Pulse Agency
+    email: moshiur@ticonsys.com
+    affiliation: TICON System Limited
     city: Dhaka
     country: BD
 repository-code: "https://github.com/bemoshiur/OmniRank"
-url: "https://publicpulse.com.bd"
+url: "https://ticonsys.com"
 abstract: >-
   OmniRank audits websites across search-engine, answer-engine and
   generative-engine criteria, and generates machine-ingestible ground truth

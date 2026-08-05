@@ -10,7 +10,7 @@
 
 Please do **not** open a public issue for a security problem.
 
-Email **moshiur@publicpulse.com.bd** with a description, reproduction steps, and the impact
+Email **moshiur@ticonsys.com** with a description, reproduction steps, and the impact
 you have assessed. You can expect an acknowledgement within 72 hours and an assessment
 within seven days.
 
