@@ -10,7 +10,7 @@
 set -euo pipefail
 
 REPO="bemoshiur/OmniRank"
-HOMEPAGE="https://publicpulse.com.bd"
+HOMEPAGE="https://ticonsys.com"
 DESCRIPTION="OmniRank -- SEO / AEO / GEO / SMM growth engine for Claude Code and Cursor. v0.1.0 ships two skills: audit (score SEO, AEO, GEO and crawl-hygiene gates) and geo-artifacts (generate llms.txt, llms-full.txt and facts.json for AI crawlers). More on the roadmap."
 
 TOPICS=(
