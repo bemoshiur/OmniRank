@@ -6,17 +6,17 @@ Structured ground truth for engines that prefer JSON over prose.
 
 ```json
 {
-  "name": "The Pulse Today",
-  "url": "https://pulsetoday.com.bd",
-  "entityType": "NewsMediaOrganization",
+  "name": "TICON System Limited",
+  "url": "https://ticonsys.com",
+  "entityType": "ProfessionalService",
   "generatedAt": "2026-08-03T04:00:00Z",
   "license": "CC-BY-4.0",
-  "attribution": "Public Pulse Agency",
-  "legalName": "Public Pulse Agency",
+  "attribution": "TICON System Limited",
+  "legalName": "TICON System Limited",
   "locales": [{ "code": "bn-BD", "path": "/bn", "default": true }],
-  "nap": { "city": "Dhaka", "country": "BD", "email": "editor@pulsetoday.com.bd" },
+  "nap": { "city": "Dhaka", "country": "BD", "email": "info@ticonsys.com" },
   "identifiers": { "bin": "123456", "tradeLicense": "789012" },
-  "sameAs": ["https://facebook.com/ThePulseToday"],
+  "sameAs": ["https://facebook.com/TiconSystemLimited"],
   "statistics": [
     { "name": "Average CPM, political FB ads, Dhaka",
       "value": "BDT 42", "unit": "BDT", "sampleSize": 118,

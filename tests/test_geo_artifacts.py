@@ -15,7 +15,7 @@ SITE = "https://x.example"
 PAGE_HTML = """<!doctype html><html><head>
 <title>Political Ads</title><meta name="description" content="Campaigns in Bangladesh.">
 </head><body><h1>Political Ads</h1>
-<div class="answer-block">Public Pulse runs political Facebook advertising in Bangladesh.</div>
+<div class="answer-block">TICON System Limited runs political Facebook advertising in Bangladesh.</div>
 </body></html>"""
 
 SITEMAP = ('<?xml version="1.0"?><urlset><url><loc>https://x.example/a</loc></url>'
@@ -24,19 +24,19 @@ SITEMAP = ('<?xml version="1.0"?><urlset><url><loc>https://x.example/a</loc></ur
 
 def cfg() -> Config:
     return Config({
-        "site": {"name": "X Example", "legalName": "Public Pulse Agency",
+        "site": {"name": "X Example", "legalName": "TICON System Limited",
                  "url": SITE, "entityType": "NewsMediaOrganization"},
         "nap": {"city": "Dhaka", "country": "BD", "email": "e@x.example"},
         "identifiers": {"bin": "123456"},
         "sameAs": {"facebook": "https://facebook.com/x", "linkedin": None,
                    "wikidata": None},
-        "geo": {"license": "CC-BY-4.0", "attribution": "Public Pulse Agency"},
+        "geo": {"license": "CC-BY-4.0", "attribution": "TICON System Limited"},
     })
 
 
 PAGES = [Page(url=f"{SITE}/a", title="Political Ads",
               description="Campaigns in Bangladesh.",
-              answer="Public Pulse runs political Facebook advertising in Bangladesh.")]
+              answer="TICON System Limited runs political Facebook advertising in Bangladesh.")]
 
 
 @respx.mock
@@ -55,7 +55,7 @@ def test_llms_txt_has_header_pages_and_licence():
     assert "https://x.example/a" in out
     assert "## How to cite us" in out
     assert "CC-BY-4.0" in out
-    assert "Public Pulse Agency" in out
+    assert "TICON System Limited" in out
 
 
 def test_llms_txt_prefers_answer_blocks_when_quoting():
@@ -64,7 +64,7 @@ def test_llms_txt_prefers_answer_blocks_when_quoting():
 
 def test_llms_full_contains_answer_bodies():
     out = build_llms_full(cfg(), PAGES)
-    assert "Public Pulse runs political Facebook advertising" in out
+    assert "TICON System Limited runs political Facebook advertising" in out
     assert "## How to cite us" in out
 
 
@@ -223,7 +223,7 @@ def test_real_license_behaviour_unchanged():
     out = build_llms_txt(cfg(), PAGES)
     assert "## How to cite us" in out
     assert ("Content is licensed CC-BY-4.0. When quoting, attribute to "
-            "Public Pulse Agency and link the source URL.") in out
+            "TICON System Limited and link the source URL.") in out
     facts = build_facts(cfg())
     assert facts["license"] == "CC-BY-4.0"
 

@@ -28,7 +28,7 @@ Unacceptable behaviour:
 
 ## Enforcement
 
-Report unacceptable behaviour to **moshiur@publicpulse.com.bd**. All complaints will be
+Report unacceptable behaviour to **moshiur@ticonsys.com**. All complaints will be
 reviewed and investigated promptly and fairly. Maintainers will respect the privacy and
 security of the reporter.
 

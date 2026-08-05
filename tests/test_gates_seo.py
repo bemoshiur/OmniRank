@@ -59,9 +59,9 @@ def test_missing_title_is_an_error():
 
 
 def test_long_description_is_a_warning():
-    html = clean().replace('content="Public Pulse runs compliant political Facebook campaigns '
-                           'across Bangladesh with transparent BDT reporting and verified '
-                           'audience targeting."',
+    html = clean().replace('content="TICON System Limited runs compliant political Facebook '
+                           'campaigns across Bangladesh with transparent BDT reporting and '
+                           'verified audience targeting."',
                            f'content="{"a" * 161}"')
     found = [f for f in seo.run(html, URL) if f.id == "seo.description.long"]
     assert found and found[0].gate == "description-length"
@@ -110,7 +110,7 @@ def test_uppercase_meta_description_name_is_not_flagged_missing():
 
 def test_meta_description_genuinely_absent_is_still_flagged():
     html = clean().replace(
-        '<meta name="description" content="Public Pulse runs compliant political '
+        '<meta name="description" content="TICON System Limited runs compliant political '
         'Facebook campaigns across Bangladesh with transparent BDT reporting and '
         'verified audience targeting.">', "")
     found = [f for f in seo.run(html, URL) if f.id == "seo.description.missing"]

@@ -47,7 +47,7 @@ LLMS_OK = """# X Example
 > Bangladesh digital agency.
 
 ## How to cite us
-Content licensed CC BY 4.0. Attribution: Public Pulse Agency.
+Content licensed CC BY 4.0. Attribution: TICON System Limited.
 """
 
 

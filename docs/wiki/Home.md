@@ -136,5 +136,5 @@ answered directly.
 | Source repository | [github.com/bemoshiur/OmniRank](https://github.com/bemoshiur/OmniRank) |
 | Documentation (in-repo) | [docs/](https://github.com/bemoshiur/OmniRank/tree/main/docs) |
 | Issues | [github.com/bemoshiur/OmniRank/issues](https://github.com/bemoshiur/OmniRank/issues/new/choose) |
-| Maintainer | [S M Moshiur Rahman](https://github.com/bemoshiur), Public Pulse Agency, Dhaka |
+| Maintainer | [S M Moshiur Rahman](https://github.com/bemoshiur), TICON System Limited, Dhaka |
 | Licence | Code [MIT](https://github.com/bemoshiur/OmniRank/blob/main/LICENSE) · Content [CC BY 4.0](https://github.com/bemoshiur/OmniRank/blob/main/LICENSE-CONTENT) |

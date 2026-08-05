@@ -2,7 +2,7 @@
   "name": "omnirank",
   "version": "0.4.0",
   "description": "Audit any website across SEO, answer-engine and generative-engine criteria, and generate llms.txt, llms-full.txt and facts.json so AI engines can ingest it as ground truth.",
-  "author": { "name": "S M Moshiur Rahman", "email": "moshiur@publicpulse.com.bd" },
+  "author": { "name": "S M Moshiur Rahman", "email": "moshiur@ticonsys.com" },
   "homepage": "https://github.com/bemoshiur/OmniRank",
   "license": "MIT",
   "keywords": ["seo", "aeo", "geo", "smm", "llms-txt", "schema-org", "json-ld", "indexnow", "ai-search"],
@@ -11,8 +11,8 @@
     "displayName": "OmniRank",
     "shortDescription": "One page. Every engine.",
     "longDescription": "Score a site's SEO, AEO and GEO gates against its real HTML, then generate the machine-ingestible ground truth that generative engines read. Ships two skills: audit and geo-artifacts.",
-    "developerName": "Public Pulse Agency",
+    "developerName": "TICON System Limited",
     "capabilities": ["Read", "Write"],
-    "websiteURL": "https://publicpulse.com.bd"
+    "websiteURL": "https://ticonsys.com"
   }
 }

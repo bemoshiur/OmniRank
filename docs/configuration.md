@@ -324,11 +324,10 @@ This is `templates/omnirank.config.example.json`, verified to pass schema valida
 {
   "$schema": "https://raw.githubusercontent.com/bemoshiur/OmniRank/main/schemas/omnirank.config.schema.json",
   "site": {
-    "name": "The Pulse Today",
-    "legalName": "Public Pulse Agency",
-    "url": "https://pulsetoday.com.bd",
-    "entityType": "NewsMediaOrganization",
-    "parentOrganization": "Pulse Group",
+    "name": "TICON System Limited",
+    "legalName": "TICON System Limited",
+    "url": "https://ticonsys.com",
+    "entityType": "ProfessionalService",
     "locales": [
       { "code": "bn-BD", "path": "/bn", "default": true },
       { "code": "en", "path": "/en" }
@@ -337,11 +336,11 @@ This is `templates/omnirank.config.example.json`, verified to pass schema valida
   "nap": {
     "city": "Dhaka",
     "country": "BD",
-    "email": "editor@pulsetoday.com.bd",
+    "email": "info@ticonsys.com",
     "geo": { "lat": 23.8103, "lng": 90.4125 }
   },
   "sameAs": {
-    "facebook": "https://facebook.com/ThePulseToday",
+    "facebook": "https://facebook.com/TiconSystemLimited",
     "x": null,
     "linkedin": null,
     "youtube": null,
@@ -357,14 +356,14 @@ This is `templates/omnirank.config.example.json`, verified to pass schema valida
   "crawlers": { "allowAI": true, "disallow": ["/manage", "/api/auth"] },
   "geo": {
     "license": "CC-BY-4.0",
-    "attribution": "Public Pulse Agency",
+    "attribution": "TICON System Limited",
     "answerBlockSelector": ".answer-block"
   },
   "audit": {
     "sampleSize": 200,
     "failOn": ["h1", "canonical", "schema"]
   },
-  "competitors": ["prothomalo.com", "thedailystar.net", "bdnews24.com"],
+  "competitors": ["rivalsystems.example", "peertech.example"],
   "secrets": {
     "serpapi": "env:SERPAPI_KEY",
     "perplexity": "env:PERPLEXITY_API_KEY"

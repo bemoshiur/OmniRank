@@ -11,7 +11,7 @@ routes. A dynamic route at that path is never reached; S3 answers for a key that
 exist, and returns 403 rather than 404.
 
 **Why it goes unnoticed:** local `next dev` has no CDN, so the dynamic route serves fine.
-The failure exists only in production. On publicpulse.com.bd this left `/llms-full.txt`
+The failure exists only in production. On ticonsys.com this left `/llms-full.txt`
 dead for weeks while every local check passed.
 
 **Fix:** write the file physically into `publicDir` at build time so S3 has a real object

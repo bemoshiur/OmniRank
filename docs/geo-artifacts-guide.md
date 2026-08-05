@@ -136,7 +136,7 @@ a missing key under this setup.
 dynamic route serves the file correctly in local development every time. The failure
 exists only once the CDN is in the request path — i.e. only in production, and only after
 a deploy. This is a real production incident this project's own maintainer hit: on
-publicpulse.com.bd, `/llms-full.txt` was dead for weeks while every local check passed
+ticonsys.com, `/llms-full.txt` was dead for weeks while every local check passed
 (recorded in `skills/geo-artifacts/references/serving-gotchas.md`).
 
 **The fix: write physical files, always.** Generate `llms.txt`, `llms-full.txt`, and

@@ -509,23 +509,21 @@ Correlations from that research are observational, drawn largely from English-la
 datasets, and are treated as directional. Validate empirically per site.
 
 Built and maintained by [S M Moshiur Rahman](https://github.com/bemoshiur) at
-[Public Pulse Agency](https://publicpulse.com.bd), Dhaka — across publicpulse.com.bd,
-tenderpulse.com.bd and pulsetoday.com.bd.
+[TICON System Limited](https://ticonsys.com), Dhaka.
 
 ## Contact
 
-**S M Moshiur Rahman** — Director of Business & Operations, Public Pulse Agency
+**S M Moshiur Rahman** — Director, Business & Operations, TICON System Limited
 
 | | |
 |---|---|
-| 💬 WhatsApp | **[+880 1717 714676](https://wa.me/8801717714676)** — fastest for project discussion |
-| ✉️ Email | [moshiur@publicpulse.com.bd](mailto:moshiur@publicpulse.com.bd) |
-| 🌐 Web | [publicpulse.com.bd](https://publicpulse.com.bd) |
+| 💼 LinkedIn | [in/in-moshiur](https://www.linkedin.com/in/in-moshiur/) |
+| ✉️ Email | [moshiur@ticonsys.com](mailto:moshiur@ticonsys.com) |
+| 🌐 Web | [ticonsys.com](https://ticonsys.com) |
 | 💻 GitHub | [@bemoshiur](https://github.com/bemoshiur) |
 
 For bugs and feature requests, use [Issues](https://github.com/bemoshiur/OmniRank/issues/new/choose)
-rather than direct message — it keeps the answer searchable for the next person. For
-consulting, partnerships, or anything project-specific, WhatsApp gets the quickest reply.
+rather than direct message — it keeps the answer searchable for the next person.
 
 ## Licence
 

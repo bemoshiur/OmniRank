@@ -29,7 +29,7 @@ def test_issue_templates_are_valid_yaml():
 
 
 def test_security_policy_names_a_contact():
-    assert "publicpulse.com.bd" in (GH / "SECURITY.md").read_text()
+    assert "ticonsys.com" in (GH / "SECURITY.md").read_text()
 
 
 def test_contributing_forbids_fabricated_data():
